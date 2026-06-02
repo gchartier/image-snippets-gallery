@@ -1,0 +1,12 @@
+/**
+ * Editor-only styles. The preview is rendered by ServerSideRender, so it
+ * inherits the front-end styles; this just keeps the placeholder tidy.
+ */
+.wp-block-imagesnippets-gallery {
+	.isg-message {
+		padding: 1rem;
+		border: 1px dashed currentColor;
+		border-radius: 4px;
+		text-align: center;
+	}
+}

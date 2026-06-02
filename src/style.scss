@@ -1,0 +1,59 @@
+/**
+ * Front-end + shared styles for the ImageSnippets Gallery block.
+ */
+.wp-block-imagesnippets-gallery {
+	.isg-title {
+		font-weight: 600;
+		margin: 0 0 0.5em;
+	}
+
+	.isg-grid {
+		display: grid;
+		gap: 0.75rem;
+		grid-template-columns: repeat( auto-fill, minmax( var( --isg-col, 200px ), 1fr ) );
+	}
+
+	.isg-item {
+		margin: 0;
+
+		img {
+			display: block;
+			width: 100%;
+			height: auto;
+			object-fit: cover;
+			border-radius: 4px;
+		}
+	}
+
+	.isg-caption {
+		font-size: 0.85em;
+		margin-top: 0.35em;
+	}
+
+	.isg-footer,
+	.isg-message {
+		font-size: 0.85em;
+		opacity: 0.8;
+	}
+
+	.isg-error {
+		color: #b32d2e;
+	}
+
+	// Thumbnail sizes set the grid column min-width.
+	&.isg-size-small .isg-grid { --isg-col: 120px; }
+	&.isg-size-medium .isg-grid { --isg-col: 200px; }
+	&.isg-size-large .isg-grid { --isg-col: 320px; }
+
+	// Masonry: CSS columns instead of grid.
+	&.isg-layout-masonry .isg-grid {
+		display: block;
+		column-width: var( --isg-col, 200px );
+		column-gap: 0.75rem;
+
+		.isg-item {
+			break-inside: avoid;
+			margin-bottom: 0.75rem;
+		}
+	}
+}
