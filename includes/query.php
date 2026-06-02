@@ -113,7 +113,6 @@ WHERE { graph ?page {
   optional { ?image plus:LicensorURL ?licurl. }
   optional { ?image lio:hasSceneLocation ?location. }
   optional { ?image schema:about ?about. }
-}
 {$creator}}} GROUP BY ?image ?page ORDER BY {$order}({$orderby}) LIMIT {$limit}
 SPARQL;
 }
