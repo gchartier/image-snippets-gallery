@@ -25,6 +25,13 @@
 		}
 	}
 
+	// Uniform crop ratios reserve space and eliminate layout shift (CLS).
+	&.isg-ratio-1-1 .isg-item img { aspect-ratio: 1 / 1; height: 100%; }
+	&.isg-ratio-4-3 .isg-item img { aspect-ratio: 4 / 3; height: 100%; }
+	&.isg-ratio-3-2 .isg-item img { aspect-ratio: 3 / 2; height: 100%; }
+	&.isg-ratio-16-9 .isg-item img { aspect-ratio: 16 / 9; height: 100%; }
+	// isg-ratio-original intentionally sets no aspect-ratio.
+
 	.isg-caption {
 		font-size: 0.85em;
 		margin-top: 0.35em;

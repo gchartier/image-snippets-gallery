@@ -29,6 +29,8 @@ export default function Edit( { attributes, setAttributes } ) {
 		orderBy,
 		limit,
 		thumbSize,
+		aspectRatio,
+		useFilename,
 	} = attributes;
 
 	const blockProps = useBlockProps();
@@ -77,6 +79,30 @@ export default function Edit( { attributes, setAttributes } ) {
 							{ label: 'Large', value: 'large' },
 						] }
 						onChange={ ( v ) => setAttributes( { thumbSize: v } ) }
+					/>
+					<SelectControl
+						label={ __( 'Crop ratio', 'image-snippets-gallery' ) }
+						help={ __(
+							'Uniform ratio prevents layout shift. Ignored for the masonry layout.',
+							'image-snippets-gallery'
+						) }
+						value={ aspectRatio }
+						options={ [
+							{ label: 'Original (no crop)', value: 'original' },
+							{ label: 'Square (1:1)', value: '1-1' },
+							{ label: 'Landscape (4:3)', value: '4-3' },
+							{ label: 'Photo (3:2)', value: '3-2' },
+							{ label: 'Wide (16:9)', value: '16-9' },
+						] }
+						onChange={ ( v ) => setAttributes( { aspectRatio: v } ) }
+					/>
+					<ToggleControl
+						label={ __(
+							'Use filename when title is missing',
+							'image-snippets-gallery'
+						) }
+						checked={ useFilename }
+						onChange={ ( v ) => setAttributes( { useFilename: v } ) }
 					/>
 				</PanelBody>
 				<PanelBody
