@@ -51,6 +51,76 @@ function isg_first( array $candidates ) {
 }
 
 /**
+ * Decompose a Flickr static-photo URL into base + extension, with any existing
+ * size suffix stripped — or null when it isn't a Flickr photo URL. Flickr encodes
+ * the rendition size in the filename suffix (`…_{secret}_{size}.jpg`), and the
+ * secret is >=6 chars, so a trailing `_{single-known-letter}` is unambiguously a
+ * size code (never the secret).
+ *
+ * @param string $url Image URL.
+ * @return array{base:string,ext:string}|null
+ */
+function isg_flickr_base( $url ) {
+	$parts = wp_parse_url( (string) $url );
+	if ( empty( $parts['host'] ) || ! preg_match( '/(^|\.)staticflickr\.com$/i', $parts['host'] ) ) {
+		return null;
+	}
+	$path = isset( $parts['path'] ) ? $parts['path'] : '';
+	if ( ! preg_match( '/\.\w+$/', $path, $em ) ) {
+		return null;
+	}
+	$ext  = $em[0];
+	$stem = substr( $path, 0, -strlen( $ext ) );
+	$stem = preg_replace( '/_([sqtmnwzcbhko])$/i', '', $stem ); // drop existing size code
+	if ( ! preg_match( '#/\d+_[0-9a-z]+$#i', $stem ) ) {
+		return null;
+	}
+	$scheme = isset( $parts['scheme'] ) ? $parts['scheme'] : 'https';
+	return array( 'base' => $scheme . '://' . $parts['host'] . $stem, 'ext' => $ext );
+}
+
+/**
+ * Return a Flickr URL at the requested size code ('' = 500px medium). Non-Flickr
+ * URLs are returned unchanged (already full-resolution).
+ *
+ * @param string $url  Image URL.
+ * @param string $code Flickr size code (e.g. n=320, z=640, c=800, b=1024).
+ * @return string
+ */
+function isg_flickr_sized( $url, $code ) {
+	$f = isg_flickr_base( $url );
+	if ( null === $f ) {
+		return $url;
+	}
+	return $f['base'] . ( '' !== $code ? '_' . $code : '' ) . $f['ext'];
+}
+
+/**
+ * Build a srcset of real Flickr renditions with true pixel-width descriptors, or
+ * '' for non-Flickr URLs. Replaces the old `thumb 500w, content 2000w` pair whose
+ * "thumb" was actually the 128px IS thumbnail — the source of the gallery's blur.
+ *
+ * @param string $url Image URL (the full-res source / contentUrl).
+ * @return string
+ */
+function isg_flickr_srcset( $url ) {
+	if ( null === isg_flickr_base( $url ) ) {
+		return '';
+	}
+	$widths = array(
+		'n' => 320,
+		'z' => 640,
+		'c' => 800,
+		'b' => 1024,
+	);
+	$out = array();
+	foreach ( $widths as $code => $w ) {
+		$out[] = esc_url( isg_flickr_sized( $url, $code ) ) . ' ' . $w . 'w';
+	}
+	return implode( ', ', $out );
+}
+
+/**
  * Build the SPARQL query string from sanitized attributes.
  *
  * Uses GROUP BY + SAMPLE so each image is one row even when it has multiple
@@ -415,8 +485,39 @@ function isg_render_gallery( array $attributes ) {
 					?>
 					<figure class="isg-item" vocab="https://schema.org/" typeof="ImageObject">
 						<a href="<?php echo esc_url( $row['page'] ? $row['page'] : '#' ); ?>" aria-label="<?php echo esc_attr( $label ); ?>">
+							<?php
+							// The source URL (contentUrl) is the full-res original; for Flickr it
+							// carries the size in its filename suffix, so we request a rendition
+							// matched to the column instead of the legacy 128px IS thumbnail (which
+							// the old srcset mislabeled as 500w → blur). The thumbnail survives only
+							// as an onerror fallback for link-rotted 2013-era source URLs.
+							// Prefer the explicit contentUrl, else the image IRI (itself the full-res
+							// source URL), and only fall back to the 128px thumbnail as a last resort.
+							$isg_source = $row['content'];
+							if ( '' === $isg_source && preg_match( '#^https?://#i', $row['image'] ) ) {
+								$isg_source = $row['image'];
+							}
+							if ( '' === $isg_source ) {
+								$isg_source = $row['thumb'];
+							}
+							$isg_src_map = array( 'small' => 'n', 'medium' => 'z', 'large' => 'c' );
+							$isg_code    = isset( $isg_src_map[ $size ] ) ? $isg_src_map[ $size ] : 'z';
+							$isg_src     = isg_flickr_sized( $isg_source, $isg_code );
+							$isg_srcset  = isg_flickr_srcset( $isg_source );
+							// Column min-widths from style.scss (small 120 / medium 200 / large 320),
+							// with headroom since columns stretch to fill (auto-fill, 1fr).
+							$isg_sizes_map = array( 'small' => '160px', 'medium' => '260px', 'large' => '420px' );
+							$isg_sizes     = isset( $isg_sizes_map[ $size ] ) ? $isg_sizes_map[ $size ] : '260px';
+							?>
 							<img
-								src="<?php echo esc_url( $row['thumb'] ); ?>"
+								src="<?php echo esc_url( $isg_src ); ?>"
+								<?php if ( '' !== $isg_srcset ) : ?>
+								srcset="<?php echo $isg_srcset; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- each URL escaped in isg_flickr_srcset() ?>"
+								sizes="<?php echo esc_attr( $isg_sizes ); ?>"
+								<?php endif; ?>
+								<?php if ( $row['thumb'] && $row['thumb'] !== $isg_src ) : ?>
+								onerror='this.onerror=null;this.removeAttribute("srcset");this.src="<?php echo esc_url( $row['thumb'] ); ?>";'
+								<?php endif; ?>
 								alt="<?php echo esc_attr( $alt ); ?>"
 								loading="lazy"
 								decoding="async"
