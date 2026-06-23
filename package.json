@@ -1,6 +1,6 @@
 {
 	"name": "image-snippets-gallery",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"description": "Responsive, server-rendered WordPress gallery block for ImageSnippets, with embedded provenance metadata (JSON-LD).",
 	"author": "GnoSys Labs",
 	"license": "GPL-2.0-or-later",

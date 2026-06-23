@@ -4,7 +4,7 @@ Tags: gallery, block, media, provenance, rdf
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 0.2.0
+Stable tag: 0.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -47,6 +47,9 @@ Ten minutes by default. Developers can change this with the `isg_cache_ttl` filt
 
 == Changelog ==
 
+= 0.2.1 =
+* Fix blurry thumbnails: serve real Flickr renditions with proper srcset/sizes derived from the full-resolution source, instead of upscaling the 128px ImageSnippets thumbnail. The thumbnail is kept only as an onerror fallback for link-rotted source URLs.
+
 = 0.2.0 =
 * Query the richer ImageSnippets graph: extended descriptions, depicted entities (schema:about), scene location, and full-resolution contentUrl.
 * JSON-LD now emits an ImageGallery of ImageObjects, each linked to its canonical entity (about) and location for richer discoverability.
@@ -57,6 +60,9 @@ Ten minutes by default. Developers can change this with the `isg_cache_ttl` filt
 * Initial release of the fork: server-side rendering, transient caching, JSON-LD output, grid/masonry/justified layouts, configurable endpoint.
 
 == Upgrade Notice ==
+
+= 0.2.1 =
+Sharper gallery thumbnails.
 
 = 0.1.0 =
 Initial release.
