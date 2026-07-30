@@ -25,7 +25,8 @@
 		"limit": { "type": "number", "default": 40 },
 		"thumbSize": { "type": "string", "default": "medium" },
 		"aspectRatio": { "type": "string", "default": "4-3" },
-		"useFilename": { "type": "boolean", "default": false }
+		"useFilename": { "type": "boolean", "default": false },
+		"cacheTtl": { "type": "number", "default": 10 }
 	},
 	"example": {
 		"attributes": {

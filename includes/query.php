@@ -188,23 +188,211 @@ SPARQL;
 }
 
 /**
- * Run the SPARQL query against the endpoint, with transient caching.
+ * Whether the current request is a block-editor preview.
+ *
+ * The editor previews dynamic blocks through the block-renderer REST route, so
+ * REST_REQUEST alone would also match public REST consumers. The capability
+ * check narrows it to someone actually editing.
+ *
+ * @return bool
+ */
+function isg_is_editor_preview() {
+	return defined( 'REST_REQUEST' ) && REST_REQUEST && current_user_can( 'edit_posts' );
+}
+
+/**
+ * Transient key for a query result. The context is part of the hash so the
+ * editor's short-lived entry never masks the public one (and vice versa).
+ *
+ * @param string $endpoint SPARQL endpoint URL.
+ * @param string $query    SPARQL query.
+ * @param string $context  'public' or 'editor'.
+ * @return string
+ */
+function isg_cache_key( $endpoint, $query, $context = 'public' ) {
+	// The isg2_ prefix marks the stale-while-revalidate payload shape. Entries
+	// written by <=0.2.1 used isg_ and are simply never read; they self-expire.
+	return 'isg2_' . md5( $context . '|' . $endpoint . '|' . $query );
+}
+
+/**
+ * Lock key that keeps a burst of traffic from scheduling N background refreshes.
+ *
+ * @param string $endpoint SPARQL endpoint URL.
+ * @param string $query    SPARQL query.
+ * @return string
+ */
+function isg_lock_key( $endpoint, $query ) {
+	return 'isg2lock_' . md5( $endpoint . '|' . $query );
+}
+
+/**
+ * Resolve the cache lifetime, in seconds, for a set of resolved attributes.
+ *
+ * A cacheTtl of 0 disables caching entirely — the "always live" mode. Editor
+ * previews are capped at a few seconds: ServerSideRender re-renders on every
+ * attribute change, so a true bypass would fire one SPARQL query per tick of
+ * the "Maximum images" slider.
+ *
+ * @param array $a Resolved attributes.
+ * @return int Seconds.
+ */
+function isg_resolve_ttl( array $a ) {
+	$minutes = isset( $a['cacheTtl'] ) ? (int) $a['cacheTtl'] : 10;
+	$ttl     = max( 0, min( 1440, $minutes ) ) * MINUTE_IN_SECONDS;
+
+	if ( isg_is_editor_preview() ) {
+		$ttl = min( $ttl, ISG_EDITOR_TTL );
+	}
+
+	/**
+	 * Filter the cache lifetime in seconds. Return 0 to disable caching.
+	 *
+	 * @param int   $ttl Resolved lifetime in seconds.
+	 * @param array $a   Resolved block attributes.
+	 */
+	return max( 0, (int) apply_filters( 'isg_cache_ttl', $ttl, $a ) );
+}
+
+/**
+ * Store rows with a soft expiry. The transient itself lives until soft + grace,
+ * so a lapsed entry is still readable and can be served stale while a background
+ * job refreshes it. Grace also keeps galleries on screen when the endpoint is down.
+ *
+ * @param string $key       Transient key.
+ * @param array  $rows      Normalized rows.
+ * @param int    $cache_ttl Soft lifetime in seconds.
+ * @param int    $grace     Extra seconds the stale copy stays readable.
+ * @return void
+ */
+function isg_store_rows( $key, array $rows, $cache_ttl, $grace ) {
+	$grace = max( 0, (int) $grace );
+	set_transient(
+		$key,
+		array(
+			'rows' => $rows,
+			'soft' => time() + (int) $cache_ttl,
+		),
+		(int) $cache_ttl + $grace
+	);
+}
+
+/**
+ * Queue a background refresh for an entry that is past its soft expiry.
+ *
+ * @param string $endpoint  SPARQL endpoint URL.
+ * @param string $query     SPARQL query.
+ * @param int    $cache_ttl Soft lifetime in seconds.
+ * @return void
+ */
+function isg_schedule_refresh( $endpoint, $query, $cache_ttl ) {
+	$lock = isg_lock_key( $endpoint, $query );
+	if ( false !== get_transient( $lock ) ) {
+		return;
+	}
+	// Held for 5 minutes and cleared on success. A failed refresh keeps the lock
+	// until it expires, which rate-limits retries against a struggling endpoint.
+	set_transient( $lock, 1, 5 * MINUTE_IN_SECONDS );
+
+	wp_schedule_single_event( time(), 'isg_refresh_cache', array( $endpoint, $query, (int) $cache_ttl ) );
+
+	if ( ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) ) {
+		spawn_cron();
+	}
+}
+
+/**
+ * Cron callback: refetch and rewrite the public cache entry.
+ *
+ * @param string $endpoint  SPARQL endpoint URL.
+ * @param string $query     SPARQL query.
+ * @param int    $cache_ttl Soft lifetime in seconds.
+ * @return void
+ */
+function isg_do_refresh_cache( $endpoint, $query, $cache_ttl ) {
+	$rows = isg_fetch_rows( $endpoint, $query );
+	if ( is_wp_error( $rows ) ) {
+		return; // Leave the lock in place; it expires and the retry happens then.
+	}
+
+	$grace = max( 0, (int) apply_filters( 'isg_cache_grace', HOUR_IN_SECONDS ) );
+	isg_store_rows( isg_cache_key( $endpoint, $query ), $rows, (int) $cache_ttl, $grace );
+	delete_transient( isg_lock_key( $endpoint, $query ) );
+}
+add_action( 'isg_refresh_cache', 'isg_do_refresh_cache', 10, 3 );
+
+/**
+ * Drop the cached rows for a query, in both editor and public contexts.
+ *
+ * @param string $endpoint SPARQL endpoint URL.
+ * @param string $query    SPARQL query.
+ * @return void
+ */
+function isg_purge_cache( $endpoint, $query ) {
+	delete_transient( isg_cache_key( $endpoint, $query, 'public' ) );
+	delete_transient( isg_cache_key( $endpoint, $query, 'editor' ) );
+	delete_transient( isg_lock_key( $endpoint, $query ) );
+
+	/**
+	 * Fires after a gallery's cached rows are dropped. Page-cache plugins can
+	 * hook this to flush their own copy of the rendered page.
+	 *
+	 * @param string $endpoint SPARQL endpoint URL.
+	 * @param string $query    SPARQL query.
+	 */
+	do_action( 'isg_cache_purged', $endpoint, $query );
+}
+
+/**
+ * Run the SPARQL query, reading through the cache.
+ *
+ * @param string $endpoint  SPARQL endpoint URL.
+ * @param string $query     SPARQL query.
+ * @param int    $cache_ttl Soft lifetime in seconds. 0 disables caching.
+ * @param string $context   'public' or 'editor'.
+ * @return array|WP_Error   Normalized rows, or WP_Error.
+ */
+function isg_run_query( $endpoint, $query, $cache_ttl = 600, $context = 'public' ) {
+	$cache_ttl = max( 0, (int) $cache_ttl );
+	if ( 0 === $cache_ttl ) {
+		return isg_fetch_rows( $endpoint, $query );
+	}
+
+	// Editor entries are short-lived and never served stale — freshness is the
+	// whole point there — so they get no grace window.
+	$grace = ( 'editor' === $context )
+		? 0
+		: max( 0, (int) apply_filters( 'isg_cache_grace', HOUR_IN_SECONDS ) );
+
+	$key    = isg_cache_key( $endpoint, $query, $context );
+	$cached = get_transient( $key );
+
+	if ( is_array( $cached ) && isset( $cached['rows'], $cached['soft'] ) && is_array( $cached['rows'] ) ) {
+		if ( time() < (int) $cached['soft'] ) {
+			return $cached['rows'];
+		}
+		// Past soft expiry but inside grace: serve stale, refresh behind the scenes.
+		isg_schedule_refresh( $endpoint, $query, $cache_ttl );
+		return $cached['rows'];
+	}
+
+	$rows = isg_fetch_rows( $endpoint, $query );
+	if ( is_wp_error( $rows ) ) {
+		return $rows;
+	}
+
+	isg_store_rows( $key, $rows, $cache_ttl, $grace );
+	return $rows;
+}
+
+/**
+ * Fetch and normalize rows from the SPARQL endpoint. No caching.
  *
  * @param string $endpoint SPARQL endpoint URL.
  * @param string $query    SPARQL query.
  * @return array|WP_Error  Normalized rows, or WP_Error.
  */
-function isg_run_query( $endpoint, $query ) {
-	$cache_ttl = (int) apply_filters( 'isg_cache_ttl', 10 * MINUTE_IN_SECONDS );
-	$cache_key = 'isg_' . md5( $endpoint . '|' . $query );
-
-	if ( $cache_ttl > 0 ) {
-		$cached = get_transient( $cache_key );
-		if ( false !== $cached ) {
-			return $cached;
-		}
-	}
-
+function isg_fetch_rows( $endpoint, $query ) {
 	// add_query_arg does NOT url-encode values, so encode the query ourselves.
 	$url = add_query_arg( 'query', rawurlencode( $query ), $endpoint );
 
@@ -253,10 +441,6 @@ function isg_run_query( $endpoint, $query ) {
 			'location' => $g( 'location_' ),
 			'abouts'   => array_values( $abouts ),
 		);
-	}
-
-	if ( $cache_ttl > 0 ) {
-		set_transient( $cache_key, $rows, $cache_ttl );
 	}
 
 	return $rows;
@@ -366,7 +550,7 @@ function isg_jsonld( array $rows, $gallery, $use_filename ) {
  * @return string
  */
 function isg_editor_notice( array $rows ) {
-	if ( ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || empty( $rows ) ) {
+	if ( ! isg_is_editor_preview() || empty( $rows ) ) {
 		return '';
 	}
 
@@ -399,13 +583,12 @@ function isg_editor_notice( array $rows ) {
 }
 
 /**
- * Render the gallery HTML for a set of block attributes. Called from render.php.
+ * Attribute defaults. Must mirror block.json.
  *
- * @param array $attributes Block attributes.
- * @return string HTML.
+ * @return array
  */
-function isg_render_gallery( array $attributes ) {
-	$defaults = array(
+function isg_defaults() {
+	return array(
 		'gallery'        => '',
 		'userId'         => '',
 		'endpoint'       => '',
@@ -418,10 +601,41 @@ function isg_render_gallery( array $attributes ) {
 		'thumbSize'      => 'medium',
 		'aspectRatio'    => '4-3',
 		'useFilename'    => false,
+		'cacheTtl'       => 10,
 	);
-	$a = wp_parse_args( $attributes, $defaults );
+}
 
-	$endpoint = $a['endpoint'] ? esc_url_raw( $a['endpoint'] ) : ISG_DEFAULT_ENDPOINT;
+/**
+ * Fill in attribute defaults. Shared by the renderer and the refresh route so
+ * both derive the same SPARQL query, and therefore the same cache key.
+ *
+ * @param array $attributes Raw block attributes.
+ * @return array
+ */
+function isg_resolve_attributes( array $attributes ) {
+	return wp_parse_args( $attributes, isg_defaults() );
+}
+
+/**
+ * Resolve the SPARQL endpoint for a set of resolved attributes.
+ *
+ * @param array $a Resolved attributes.
+ * @return string
+ */
+function isg_resolve_endpoint( array $a ) {
+	return $a['endpoint'] ? esc_url_raw( $a['endpoint'] ) : ISG_DEFAULT_ENDPOINT;
+}
+
+/**
+ * Render the gallery HTML for a set of block attributes. Called from render.php.
+ *
+ * @param array $attributes Block attributes.
+ * @return string HTML.
+ */
+function isg_render_gallery( array $attributes ) {
+	$a = isg_resolve_attributes( $attributes );
+
+	$endpoint = isg_resolve_endpoint( $a );
 
 	$layout = in_array( $a['layout'], array( 'grid', 'masonry', 'justified' ), true ) ? $a['layout'] : 'grid';
 	$size   = in_array( $a['thumbSize'], array( 'small', 'medium', 'large' ), true ) ? $a['thumbSize'] : 'medium';
@@ -442,8 +656,9 @@ function isg_render_gallery( array $attributes ) {
 		);
 	}
 
-	$query = isg_build_sparql( $a );
-	$rows  = isg_run_query( $endpoint, $query );
+	$context = isg_is_editor_preview() ? 'editor' : 'public';
+	$query   = isg_build_sparql( $a );
+	$rows    = isg_run_query( $endpoint, $query, isg_resolve_ttl( $a ), $context );
 
 	if ( is_wp_error( $rows ) ) {
 		return sprintf(

@@ -10,8 +10,12 @@ import {
 	ToggleControl,
 	SelectControl,
 	RangeControl,
+	Button,
+	Notice,
 } from '@wordpress/components';
 import ServerSideRender from '@wordpress/server-side-render';
+import apiFetch from '@wordpress/api-fetch';
+import { useState } from '@wordpress/element';
 
 import './editor.scss';
 
@@ -31,9 +35,34 @@ export default function Edit( { attributes, setAttributes } ) {
 		thumbSize,
 		aspectRatio,
 		useFilename,
+		cacheTtl,
 	} = attributes;
 
 	const blockProps = useBlockProps();
+
+	// Bumping this remounts ServerSideRender, forcing a re-fetch once the server
+	// has dropped the cached rows.
+	const [ refreshKey, setRefreshKey ] = useState( 0 );
+	const [ refreshing, setRefreshing ] = useState( false );
+	const [ refreshError, setRefreshError ] = useState( '' );
+
+	const refresh = () => {
+		setRefreshing( true );
+		setRefreshError( '' );
+		apiFetch( {
+			path: '/imagesnippets/v1/refresh',
+			method: 'POST',
+			data: { attributes },
+		} )
+			.then( () => setRefreshKey( ( k ) => k + 1 ) )
+			.catch( ( err ) =>
+				setRefreshError(
+					err?.message ||
+						__( 'Could not refresh.', 'image-snippets-gallery' )
+				)
+			)
+			.finally( () => setRefreshing( false ) );
+	};
 
 	return (
 		<>
@@ -104,6 +133,35 @@ export default function Edit( { attributes, setAttributes } ) {
 						checked={ useFilename }
 						onChange={ ( v ) => setAttributes( { useFilename: v } ) }
 					/>
+					<Button
+						variant="secondary"
+						onClick={ refresh }
+						isBusy={ refreshing }
+						disabled={ refreshing || ! gallery }
+						__next40pxDefaultSize
+					>
+						{ __(
+							'Refresh from ImageSnippets',
+							'image-snippets-gallery'
+						) }
+					</Button>
+					<p
+						style={ {
+							marginTop: '.5em',
+							fontSize: '.85em',
+							fontStyle: 'italic',
+						} }
+					>
+						{ __(
+							'Pulls the gallery again and clears the cached copy the public page serves.',
+							'image-snippets-gallery'
+						) }
+					</p>
+					{ refreshError && (
+						<Notice status="error" isDismissible={ false }>
+							{ refreshError }
+						</Notice>
+					) }
 				</PanelBody>
 				<PanelBody
 					title={ __( 'Sorting', 'image-snippets-gallery' ) }
@@ -158,12 +216,30 @@ export default function Edit( { attributes, setAttributes } ) {
 					value={ endpoint }
 					onChange={ ( v ) => setAttributes( { endpoint: v } ) }
 				/>
+				<RangeControl
+					label={ __(
+						'Cache for (minutes)',
+						'image-snippets-gallery'
+					) }
+					help={ __(
+						'How long the public page reuses one pull from ImageSnippets. Set to 0 for always-live, which queries on every page view — good for demos, heavier on the endpoint. This editor preview is always live regardless.',
+						'image-snippets-gallery'
+					) }
+					value={ cacheTtl }
+					min={ 0 }
+					max={ 120 }
+					onChange={ ( v ) =>
+						setAttributes( { cacheTtl: undefined === v ? 10 : v } )
+					}
+				/>
 			</InspectorAdvancedControls>
 
 			<div { ...blockProps }>
 				<ServerSideRender
+					key={ refreshKey }
 					block="imagesnippets/gallery"
 					attributes={ attributes }
+					urlQueryArgs={ { isg_refresh: String( refreshKey ) } }
 				/>
 			</div>
 		</>

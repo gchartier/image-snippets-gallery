@@ -25,8 +25,12 @@ define( 'ISG_VERSION', '0.2.1' );
 define( 'ISG_DEFAULT_ENDPOINT', 'https://imagesnippets.com/sparql/dbpedia' );
 define( 'ISG_DATASET_BASE', 'https://imagesnippets.com/imgtag/datasets/Imagesnippets/' );
 define( 'ISG_USER_BASE', 'https://imagesnippets.com/imgtag/users/' );
+// Cap for block-editor previews, in seconds. Short enough to read as live while
+// still absorbing the burst of re-renders ServerSideRender fires as you drag a slider.
+define( 'ISG_EDITOR_TTL', 15 );
 
 require_once __DIR__ . '/includes/query.php';
+require_once __DIR__ . '/includes/rest.php';
 
 /**
  * Register the block from build/block.json. The block is dynamic; its server
