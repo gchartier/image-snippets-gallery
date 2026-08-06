@@ -44,7 +44,12 @@ function isg_rest_can_refresh() {
 }
 
 /**
- * Drop the cached rows for one block's query.
+ * Pull one block's gallery again and invalidate the pages that show it.
+ *
+ * Deliberately a refresh, not just a purge. Dropping the cache and leaving the
+ * refetch to whoever visits next would leave a page cache holding the old HTML
+ * with nothing scheduled to replace it, so the button would appear to do
+ * nothing. Fetch first, store, then invalidate.
  *
  * @param WP_REST_Request $request Request.
  * @return WP_REST_Response|WP_Error
@@ -60,7 +65,36 @@ function isg_rest_refresh( WP_REST_Request $request ) {
 		);
 	}
 
-	isg_purge_cache( isg_resolve_endpoint( $a ), isg_build_sparql( $a ) );
+	$endpoint = isg_resolve_endpoint( $a );
+	$query    = isg_build_sparql( $a );
 
-	return rest_ensure_response( array( 'purged' => true ) );
+	// Clear the editor's own short-lived copy so the preview re-renders from the
+	// new rows, and the lock so this refresh is never skipped. The public entry
+	// stays put: isg_do_refresh_cache compares against it to decide whether
+	// anything actually changed.
+	delete_transient( isg_cache_key( $endpoint, $query, 'editor' ) );
+	delete_transient( isg_lock_key( $endpoint, $query ) );
+
+	// The configured lifetime, not the editor-capped one — this writes the entry
+	// the public page will read.
+	$rows = isg_do_refresh_cache( $endpoint, $query, isg_configured_ttl( $a ), $a['gallery'] );
+
+	if ( is_wp_error( $rows ) ) {
+		return new WP_Error(
+			'isg_refresh_failed',
+			sprintf(
+				/* translators: %s: error message from the SPARQL endpoint */
+				__( 'ImageSnippets did not respond: %s', 'image-snippets-gallery' ),
+				$rows->get_error_message()
+			),
+			array( 'status' => 502 )
+		);
+	}
+
+	return rest_ensure_response(
+		array(
+			'refreshed' => true,
+			'images'    => count( $rows ),
+		)
+	);
 }

@@ -1,0 +1,185 @@
+<?php
+/**
+ * Gallery-to-post index.
+ *
+ * Purging a page cache precisely means knowing which posts display which
+ * gallery. Blocks store that in post content, which is not queryable, so this
+ * mirrors it into postmeta on save: one _isg_gallery row per gallery a post
+ * references. The reverse lookup is then an ordinary meta query.
+ *
+ * The same index tells the admin screen which galleries exist without asking
+ * ImageSnippets, and gives "refresh all" something to iterate.
+ *
+ * @package ImageSnippetsGallery
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+const ISG_GALLERY_META = '_isg_gallery';
+
+/**
+ * Collect gallery names from a parsed block tree, including nested blocks —
+ * galleries inside columns, groups, or synced patterns must still be found.
+ *
+ * @param array $blocks Parsed blocks.
+ * @return array Unique gallery names.
+ */
+function isg_collect_galleries( array $blocks ) {
+	$found = array();
+
+	foreach ( $blocks as $block ) {
+		if ( isset( $block['blockName'] ) && 'imagesnippets/gallery' === $block['blockName'] ) {
+			$gallery = isset( $block['attrs']['gallery'] ) ? trim( (string) $block['attrs']['gallery'] ) : '';
+			if ( '' !== $gallery ) {
+				$found[] = $gallery;
+			}
+		}
+		if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+			$found = array_merge( $found, isg_collect_galleries( $block['innerBlocks'] ) );
+		}
+	}
+
+	return array_values( array_unique( $found ) );
+}
+
+/**
+ * Rewrite one post's index entries.
+ *
+ * @param int          $post_id Post ID.
+ * @param WP_Post|null $post    Post object.
+ * @return array Gallery names now indexed for this post.
+ */
+function isg_index_post( $post_id, $post = null ) {
+	$post_id = absint( $post_id );
+	if ( ! $post_id || wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) {
+		return array();
+	}
+
+	if ( ! $post instanceof WP_Post ) {
+		$post = get_post( $post_id );
+	}
+	if ( ! $post instanceof WP_Post ) {
+		return array();
+	}
+
+	delete_post_meta( $post_id, ISG_GALLERY_META );
+
+	// Skip the parse for the overwhelming majority of posts that contain no blocks.
+	if ( ! has_blocks( $post->post_content ) ) {
+		return array();
+	}
+
+	$galleries = isg_collect_galleries( parse_blocks( $post->post_content ) );
+	foreach ( $galleries as $gallery ) {
+		add_post_meta( $post_id, ISG_GALLERY_META, $gallery );
+	}
+
+	return $galleries;
+}
+add_action( 'save_post', 'isg_index_post', 10, 2 );
+
+/**
+ * Drop a deleted post's entries so purges never target a post that is gone.
+ *
+ * @param int $post_id Post ID.
+ * @return void
+ */
+function isg_deindex_post( $post_id ) {
+	delete_post_meta( absint( $post_id ), ISG_GALLERY_META );
+}
+add_action( 'deleted_post', 'isg_deindex_post' );
+
+/**
+ * Published posts displaying a gallery.
+ *
+ * Deliberately a direct query rather than WP_Query with a meta_query. WP_Query
+ * caches result sets against the 'posts' last-changed marker, and changing
+ * postmeta does not bump it — so immediately after a reindex the cached result
+ * is wrong. That is invisible on a site with no persistent object cache and
+ * reproducible on one that has it, which is the worst way for a bug to behave.
+ * Purging the wrong pages is the one mistake this whole index exists to avoid.
+ *
+ * @param string $gallery Gallery name.
+ * @return array Post IDs.
+ */
+function isg_posts_for_gallery( $gallery ) {
+	global $wpdb;
+
+	$gallery = trim( (string) $gallery );
+	if ( '' === $gallery ) {
+		return array();
+	}
+
+	$ids = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT pm.post_id
+			   FROM {$wpdb->postmeta} pm
+			   INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+			  WHERE pm.meta_key = %s
+			    AND pm.meta_value = %s
+			    AND p.post_status = 'publish'
+			  LIMIT 200",
+			ISG_GALLERY_META,
+			$gallery
+		)
+	);
+
+	return array_map( 'absint', is_array( $ids ) ? $ids : array() );
+}
+
+/**
+ * Every gallery name currently used anywhere on the site.
+ *
+ * @return array
+ */
+function isg_indexed_galleries() {
+	global $wpdb;
+
+	$names = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT DISTINCT meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s ORDER BY meta_value ASC",
+			ISG_GALLERY_META
+		)
+	);
+
+	return is_array( $names ) ? $names : array();
+}
+
+/**
+ * Rebuild the whole index. Needed once on activation, since posts saved before
+ * the plugin existed never fired save_post, and available from the admin screen
+ * if the index is ever suspected of drifting.
+ *
+ * @return int Number of posts indexed.
+ */
+function isg_rebuild_index() {
+	$paged   = 1;
+	$indexed = 0;
+
+	do {
+		$query = new WP_Query(
+			array(
+				'post_type'              => 'any',
+				'post_status'            => array( 'publish', 'draft', 'pending', 'private', 'future' ),
+				'posts_per_page'         => 100,
+				'paged'                  => $paged,
+				'no_found_rows'          => true,
+				'ignore_sticky_posts'    => true,
+				'update_post_term_cache' => false,
+				'update_post_meta_cache' => false,
+			)
+		);
+
+		foreach ( $query->posts as $post ) {
+			if ( isg_index_post( $post->ID, $post ) ) {
+				++$indexed;
+			}
+		}
+
+		++$paged;
+	} while ( ! empty( $query->posts ) );
+
+	return $indexed;
+}

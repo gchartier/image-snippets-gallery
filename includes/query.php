@@ -237,9 +237,19 @@ function isg_lock_key( $endpoint, $query ) {
  * @param array $a Resolved attributes.
  * @return int Seconds.
  */
-function isg_resolve_ttl( array $a ) {
+function isg_configured_ttl( array $a ) {
 	$minutes = isset( $a['cacheTtl'] ) ? (int) $a['cacheTtl'] : 10;
-	$ttl     = max( 0, min( 1440, $minutes ) ) * MINUTE_IN_SECONDS;
+	return max( 0, min( 1440, $minutes ) ) * MINUTE_IN_SECONDS;
+}
+
+/**
+ * Resolve the cache lifetime for the current request, applying the editor cap.
+ *
+ * @param array $a Resolved attributes.
+ * @return int Seconds.
+ */
+function isg_resolve_ttl( array $a ) {
+	$ttl = isg_configured_ttl( $a );
 
 	if ( isg_is_editor_preview() ) {
 		$ttl = min( $ttl, ISG_EDITOR_TTL );
@@ -278,23 +288,44 @@ function isg_store_rows( $key, array $rows, $cache_ttl, $grace ) {
 }
 
 /**
+ * Fingerprint of a result set, for deciding whether anything actually changed.
+ *
+ * A refresh that returns identical rows must not purge page caches: on a busy
+ * site that would throw away a perfectly good cache every few minutes.
+ *
+ * @param array $rows Normalized rows.
+ * @return string
+ */
+function isg_rows_signature( array $rows ) {
+	return md5( wp_json_encode( $rows ) );
+}
+
+/**
  * Queue a background refresh for an entry that is past its soft expiry.
+ *
+ * The lock stores the time it was taken, not a flag, so a later read can tell
+ * whether the scheduled job ever ran. See isg_cron_stalled().
  *
  * @param string $endpoint  SPARQL endpoint URL.
  * @param string $query     SPARQL query.
  * @param int    $cache_ttl Soft lifetime in seconds.
+ * @param string $gallery   Gallery name, for targeting the page-cache purge.
  * @return void
  */
-function isg_schedule_refresh( $endpoint, $query, $cache_ttl ) {
+function isg_schedule_refresh( $endpoint, $query, $cache_ttl, $gallery = '' ) {
 	$lock = isg_lock_key( $endpoint, $query );
 	if ( false !== get_transient( $lock ) ) {
 		return;
 	}
 	// Held for 5 minutes and cleared on success. A failed refresh keeps the lock
 	// until it expires, which rate-limits retries against a struggling endpoint.
-	set_transient( $lock, 1, 5 * MINUTE_IN_SECONDS );
+	set_transient( $lock, time(), 5 * MINUTE_IN_SECONDS );
 
-	wp_schedule_single_event( time(), 'isg_refresh_cache', array( $endpoint, $query, (int) $cache_ttl ) );
+	wp_schedule_single_event(
+		time(),
+		'isg_refresh_cache',
+		array( $endpoint, $query, (int) $cache_ttl, (string) $gallery )
+	);
 
 	if ( ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) ) {
 		spawn_cron();
@@ -302,45 +333,173 @@ function isg_schedule_refresh( $endpoint, $query, $cache_ttl ) {
 }
 
 /**
- * Cron callback: refetch and rewrite the public cache entry.
+ * Whether a scheduled refresh looks like it is never going to run.
+ *
+ * WP-Cron only fires on traffic, and plenty of hosts disable it outright. When
+ * that happens the background refresh never lands, and serving stale rows would
+ * let a page cache freeze them indefinitely. Detect it by age: the lock records
+ * when the job was queued, so a lock older than the margin means nothing picked
+ * it up.
+ *
+ * @param string $endpoint SPARQL endpoint URL.
+ * @param string $query    SPARQL query.
+ * @return bool
+ */
+function isg_cron_stalled( $endpoint, $query ) {
+	$queued_at = get_transient( isg_lock_key( $endpoint, $query ) );
+	if ( ! $queued_at ) {
+		return false; // Nothing queued yet, so nothing has failed to run.
+	}
+
+	$margin = max( 30, (int) apply_filters( 'isg_cron_stall_margin', ISG_CRON_STALL_MARGIN ) );
+	return ( time() - (int) $queued_at ) > $margin;
+}
+
+/**
+ * Record the outcome of a sync so the admin screen and Site Health can report it.
+ *
+ * @param string $gallery Gallery name.
+ * @param array  $fields  Fields to merge into that gallery's status.
+ * @return void
+ */
+function isg_record_sync( $gallery, array $fields ) {
+	$gallery = trim( (string) $gallery );
+	if ( '' === $gallery ) {
+		return;
+	}
+
+	$status = get_option( 'isg_sync_status', array() );
+	if ( ! is_array( $status ) ) {
+		$status = array();
+	}
+
+	$existing            = isset( $status[ $gallery ] ) && is_array( $status[ $gallery ] ) ? $status[ $gallery ] : array();
+	$status[ $gallery ]  = array_merge( $existing, $fields );
+	$status[ $gallery ]['last_attempt'] = time();
+
+	update_option( 'isg_sync_status', $status, false );
+}
+
+/**
+ * Recorded sync status, for one gallery or all of them.
+ *
+ * @param string $gallery Gallery name, or '' for the whole map.
+ * @return array
+ */
+function isg_sync_status( $gallery = '' ) {
+	$status = get_option( 'isg_sync_status', array() );
+	if ( ! is_array( $status ) ) {
+		$status = array();
+	}
+	if ( '' === $gallery ) {
+		return $status;
+	}
+	return isset( $status[ $gallery ] ) && is_array( $status[ $gallery ] ) ? $status[ $gallery ] : array();
+}
+
+/**
+ * Refetch, rewrite the cache entry, and invalidate page caches if the data moved.
+ *
+ * Ordering matters: fresh rows are stored *before* anything is purged. Purging
+ * first would let the next visitor repopulate the page cache with the stale copy
+ * we were trying to get rid of.
  *
  * @param string $endpoint  SPARQL endpoint URL.
  * @param string $query     SPARQL query.
  * @param int    $cache_ttl Soft lifetime in seconds.
- * @return void
+ * @param string $gallery   Gallery name, for targeting the page-cache purge.
+ * @return array|WP_Error   The fresh rows, or WP_Error.
  */
-function isg_do_refresh_cache( $endpoint, $query, $cache_ttl ) {
+function isg_do_refresh_cache( $endpoint, $query, $cache_ttl, $gallery = '' ) {
 	$rows = isg_fetch_rows( $endpoint, $query );
 	if ( is_wp_error( $rows ) ) {
-		return; // Leave the lock in place; it expires and the retry happens then.
+		// Leave the lock in place; it expires and the retry happens then.
+		isg_record_sync( $gallery, array( 'error' => $rows->get_error_message() ) );
+		return $rows;
 	}
 
-	$grace = max( 0, (int) apply_filters( 'isg_cache_grace', HOUR_IN_SECONDS ) );
-	isg_store_rows( isg_cache_key( $endpoint, $query ), $rows, (int) $cache_ttl, $grace );
+	$key      = isg_cache_key( $endpoint, $query );
+	$previous = get_transient( $key );
+	$had_rows = is_array( $previous ) && isset( $previous['rows'] ) && is_array( $previous['rows'] );
+	$changed  = ! $had_rows || isg_rows_signature( $previous['rows'] ) !== isg_rows_signature( $rows );
+
+	// A zero TTL is "always live" — storing rows there would quietly reintroduce
+	// the caching the setting exists to switch off.
+	if ( $cache_ttl > 0 ) {
+		$grace = max( 0, (int) apply_filters( 'isg_cache_grace', HOUR_IN_SECONDS ) );
+		isg_store_rows( $key, $rows, (int) $cache_ttl, $grace );
+	}
 	delete_transient( isg_lock_key( $endpoint, $query ) );
+
+	isg_record_sync(
+		$gallery,
+		array(
+			'last_sync' => time(),
+			'rows'      => count( $rows ),
+			'error'     => '',
+			'changed'   => $changed,
+		)
+	);
+
+	if ( $changed ) {
+		isg_purge_page_cache( isg_posts_for_gallery( $gallery ) );
+	}
+
+	return $rows;
 }
-add_action( 'isg_refresh_cache', 'isg_do_refresh_cache', 10, 3 );
+add_action( 'isg_refresh_cache', 'isg_do_refresh_cache', 10, 4 );
 
 /**
- * Drop the cached rows for a query, in both editor and public contexts.
+ * Refresh every gallery used anywhere on the site.
+ *
+ * Lives here rather than in the admin screen so cron, WP-CLI, and anything else
+ * running outside wp-admin can reach it.
+ *
+ * @return array Map of gallery name to fresh rows, or WP_Error per gallery.
+ */
+function isg_refresh_all_galleries() {
+	$results = array();
+
+	foreach ( isg_indexed_galleries() as $gallery ) {
+		$a = isg_resolve_attributes( array( 'gallery' => $gallery ) );
+
+		$results[ $gallery ] = isg_do_refresh_cache(
+			isg_resolve_endpoint( $a ),
+			isg_build_sparql( $a ),
+			isg_configured_ttl( $a ),
+			$gallery
+		);
+	}
+
+	return $results;
+}
+
+/**
+ * Drop the cached rows for a query, in both editor and public contexts, and
+ * invalidate any page cache holding the pages that display it.
  *
  * @param string $endpoint SPARQL endpoint URL.
  * @param string $query    SPARQL query.
+ * @param string $gallery  Gallery name, for targeting the page-cache purge.
  * @return void
  */
-function isg_purge_cache( $endpoint, $query ) {
+function isg_purge_cache( $endpoint, $query, $gallery = '' ) {
 	delete_transient( isg_cache_key( $endpoint, $query, 'public' ) );
 	delete_transient( isg_cache_key( $endpoint, $query, 'editor' ) );
 	delete_transient( isg_lock_key( $endpoint, $query ) );
 
+	if ( '' !== trim( (string) $gallery ) ) {
+		isg_purge_page_cache( isg_posts_for_gallery( $gallery ) );
+	}
+
 	/**
-	 * Fires after a gallery's cached rows are dropped. Page-cache plugins can
-	 * hook this to flush their own copy of the rendered page.
+	 * Fires after a gallery's cached rows are dropped.
 	 *
 	 * @param string $endpoint SPARQL endpoint URL.
 	 * @param string $query    SPARQL query.
+	 * @param string $gallery  Gallery name.
 	 */
-	do_action( 'isg_cache_purged', $endpoint, $query );
+	do_action( 'isg_cache_purged', $endpoint, $query, $gallery );
 }
 
 /**
@@ -350,9 +509,10 @@ function isg_purge_cache( $endpoint, $query ) {
  * @param string $query     SPARQL query.
  * @param int    $cache_ttl Soft lifetime in seconds. 0 disables caching.
  * @param string $context   'public' or 'editor'.
+ * @param string $gallery   Gallery name, for targeting the page-cache purge.
  * @return array|WP_Error   Normalized rows, or WP_Error.
  */
-function isg_run_query( $endpoint, $query, $cache_ttl = 600, $context = 'public' ) {
+function isg_run_query( $endpoint, $query, $cache_ttl = 600, $context = 'public', $gallery = '' ) {
 	$cache_ttl = max( 0, (int) $cache_ttl );
 	if ( 0 === $cache_ttl ) {
 		return isg_fetch_rows( $endpoint, $query );
@@ -371,17 +531,35 @@ function isg_run_query( $endpoint, $query, $cache_ttl = 600, $context = 'public'
 		if ( time() < (int) $cached['soft'] ) {
 			return $cached['rows'];
 		}
-		// Past soft expiry but inside grace: serve stale, refresh behind the scenes.
-		isg_schedule_refresh( $endpoint, $query, $cache_ttl );
+
+		// Past soft expiry. Normally the queued job refreshes and purges, and
+		// this reader gets the stale copy without waiting. But if cron is not
+		// dispatching, nothing will ever refresh or purge, and a page cache
+		// would freeze this response for its own full lifetime. Pay the fetch
+		// here instead — the slow read is bounded, the frozen page is not.
+		// Editor entries carry no grace window, so this branch only ever runs for
+		// the public context; the check keeps the refresh writing to the key it
+		// was read from.
+		if ( 'public' === $context && isg_cron_stalled( $endpoint, $query ) ) {
+			$fresh = isg_do_refresh_cache( $endpoint, $query, $cache_ttl, $gallery );
+			if ( ! is_wp_error( $fresh ) ) {
+				return $fresh;
+			}
+			return $cached['rows']; // Endpoint down: last known good beats an empty gallery.
+		}
+
+		isg_schedule_refresh( $endpoint, $query, $cache_ttl, $gallery );
 		return $cached['rows'];
 	}
 
 	$rows = isg_fetch_rows( $endpoint, $query );
 	if ( is_wp_error( $rows ) ) {
+		isg_record_sync( $gallery, array( 'error' => $rows->get_error_message() ) );
 		return $rows;
 	}
 
 	isg_store_rows( $key, $rows, $cache_ttl, $grace );
+	isg_record_sync( $gallery, array( 'last_sync' => time(), 'rows' => count( $rows ), 'error' => '' ) );
 	return $rows;
 }
 
@@ -658,7 +836,7 @@ function isg_render_gallery( array $attributes ) {
 
 	$context = isg_is_editor_preview() ? 'editor' : 'public';
 	$query   = isg_build_sparql( $a );
-	$rows    = isg_run_query( $endpoint, $query, isg_resolve_ttl( $a ), $context );
+	$rows    = isg_run_query( $endpoint, $query, isg_resolve_ttl( $a ), $context, $a['gallery'] );
 
 	if ( is_wp_error( $rows ) ) {
 		return sprintf(

@@ -1,4 +1,4 @@
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import {
 	InspectorControls,
 	InspectorAdvancedControls,
@@ -45,16 +45,32 @@ export default function Edit( { attributes, setAttributes } ) {
 	const [ refreshKey, setRefreshKey ] = useState( 0 );
 	const [ refreshing, setRefreshing ] = useState( false );
 	const [ refreshError, setRefreshError ] = useState( '' );
+	const [ refreshNotice, setRefreshNotice ] = useState( '' );
 
 	const refresh = () => {
 		setRefreshing( true );
 		setRefreshError( '' );
+		setRefreshNotice( '' );
 		apiFetch( {
 			path: '/imagesnippets/v1/refresh',
 			method: 'POST',
 			data: { attributes },
 		} )
-			.then( () => setRefreshKey( ( k ) => k + 1 ) )
+			.then( ( result ) => {
+				setRefreshKey( ( k ) => k + 1 );
+				setRefreshNotice(
+					sprintf(
+						/* translators: %d: number of images pulled */
+						_n(
+							'Updated — %d image.',
+							'Updated — %d images.',
+							result?.images ?? 0,
+							'image-snippets-gallery'
+						),
+						result?.images ?? 0
+					)
+				);
+			} )
 			.catch( ( err ) =>
 				setRefreshError(
 					err?.message ||
@@ -160,6 +176,11 @@ export default function Edit( { attributes, setAttributes } ) {
 					{ refreshError && (
 						<Notice status="error" isDismissible={ false }>
 							{ refreshError }
+						</Notice>
+					) }
+					{ ! refreshError && refreshNotice && (
+						<Notice status="success" isDismissible={ false }>
+							{ refreshNotice }
 						</Notice>
 					) }
 				</PanelBody>
