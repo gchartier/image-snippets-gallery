@@ -35,6 +35,7 @@ define( 'ISG_CRON_STALL_MARGIN', 120 );
 require_once __DIR__ . '/includes/cache-purge.php';
 require_once __DIR__ . '/includes/index.php';
 require_once __DIR__ . '/includes/query.php';
+require_once __DIR__ . '/includes/graph.php';
 require_once __DIR__ . '/includes/rest.php';
 
 if ( is_admin() ) {

@@ -36,6 +36,7 @@ export default function Edit( { attributes, setAttributes } ) {
 		aspectRatio,
 		useFilename,
 		cacheTtl,
+		jsonldProfile,
 	} = attributes;
 
 	const blockProps = useBlockProps();
@@ -212,6 +213,48 @@ export default function Edit( { attributes, setAttributes } ) {
 						min={ 1 }
 						max={ 200 }
 						onChange={ ( v ) => setAttributes( { limit: v } ) }
+					/>
+				</PanelBody>
+				<PanelBody
+					title={ __( 'Structured data', 'image-snippets-gallery' ) }
+					initialOpen={ false }
+				>
+					<SelectControl
+						label={ __(
+							'Metadata detail',
+							'image-snippets-gallery'
+						) }
+						help={ __(
+							'How much of each image’s ImageSnippets metadata to embed in the page for search engines and semantic-web tools.',
+							'image-snippets-gallery'
+						) }
+						value={ jsonldProfile }
+						options={ [
+							{
+								label: __(
+									'schema.org only — smallest',
+									'image-snippets-gallery'
+								),
+								value: 'schema',
+							},
+							{
+								label: __(
+									'Provenance — recommended',
+									'image-snippets-gallery'
+								),
+								value: 'provenance',
+							},
+							{
+								label: __(
+									'Full graph — largest',
+									'image-snippets-gallery'
+								),
+								value: 'full',
+							},
+						] }
+						onChange={ ( v ) =>
+							setAttributes( { jsonldProfile: v } )
+						}
 					/>
 				</PanelBody>
 			</InspectorControls>

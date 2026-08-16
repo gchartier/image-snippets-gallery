@@ -1,0 +1,640 @@
+<?php
+/**
+ * Whole-named-graph retrieval, and the JSON-LD built from it.
+ *
+ * ImageSnippets stores one named graph per image, and that graph already
+ * contains a schema.org projection, the LIO statements schema.org cannot
+ * express, and an rdfs:label for every entity it references. The previous
+ * query asked for a fixed list of columns and hand-mapped them into
+ * schema.org, which threw away the LIO statements — the part that makes this
+ * ImageSnippets rather than any other gallery — and left schema:about as an
+ * opaque IRI a crawler can do nothing with.
+ *
+ * So: ask for the graph, pass it through, and derive the display fields from
+ * it rather than querying for them separately.
+ *
+ * The emitted payload has two audiences in one document:
+ *
+ *   - The default graph holds flat schema.org nodes. This is what Google reads.
+ *   - Named graph objects hold each image's triples verbatim, keeping the
+ *     attribution intact, because who asserted what is the entire point of a
+ *     named graph. Consumers that do not understand them skip them.
+ *
+ * @package ImageSnippetsGallery
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+/**
+ * Prefixes emitted in the JSON-LD @context and used to compact IRIs.
+ *
+ * Note that the corpus uses http://schema.org/, not https. Compacting against
+ * the wrong one would silently produce terms Google does not recognize.
+ *
+ * @return array Prefix to namespace IRI.
+ */
+function isg_jsonld_prefixes() {
+	return array(
+		// schema.org is the default vocabulary so its terms can be emitted bare —
+		// "name", "ImageObject" — rather than as CURIEs. Both are correct JSON-LD
+		// and mean the same thing, but bare terms are what every structured-data
+		// validator and SEO tool expects to see, and this payload exists to be
+		// read by those. Terms carrying an explicit prefix are unaffected, so the
+		// named graphs below keep their exact vocabularies.
+		'@vocab'       => 'http://schema.org/',
+		'schema'       => 'http://schema.org/',
+		'lio'          => 'https://w3id.org/lio/v1#',
+		'dc'           => 'http://purl.org/dc/elements/1.1/',
+		'dcterms'      => 'http://purl.org/dc/terms/',
+		'rdf'          => 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+		'rdfs'         => 'http://www.w3.org/2000/01/rdf-schema#',
+		'foaf'         => 'http://xmlns.com/foaf/0.1/',
+		'photoshop'    => 'http://ns.adobe.com/photoshop/1.0/',
+		'Iptc4xmpCore' => 'http://www.iptc.org/std/Iptc4xmpCore/1.0/xmlns/',
+		'xmpRights'    => 'http://ns.adobe.com/xap/1.0/rights/',
+		'plus'         => 'http://ns.useplus.org/ldf/xmp/1.0/',
+		'exif'         => 'http://ns.adobe.com/exif/1.0/',
+		'wdt'          => 'http://www.wikidata.org/prop/direct/',
+		'dbr'          => 'http://dbpedia.org/resource/',
+		'aat'          => 'http://vocab.getty.edu/aat/',
+	);
+}
+
+/**
+ * Predicate namespaces dropped from the 'provenance' profile.
+ *
+ * All of it describes the ImageSnippets HTML page — its Open Graph chrome, its
+ * stylesheet — or the camera sensor. None of it is provenance about the image's
+ * meaning, and together it is a large fraction of every graph.
+ *
+ * 'twitter:' has no trailing separator because the predicate in the corpus is
+ * the literal string "twitter:card", which is not an absolute IRI at all.
+ *
+ * @return array
+ */
+function isg_graph_dropped_prefixes() {
+	return array(
+		'http://ogp.me/ns#',
+		'https://ogp.me/ns#',
+		'twitter:',
+		'http://www.w3.org/1999/xhtml/vocab#',
+		'http://ns.adobe.com/exif/1.0/',
+	);
+}
+
+/**
+ * Predicates whose object identifies something the image depicts or is about.
+ *
+ * The corpus is not uniform: some galleries carry schema:about and lio:depicts
+ * pointing at DBpedia entities, others carry only lio:hasTag with a plain
+ * string. Both have to work, so collect from all of them and sort out IRIs from
+ * literals afterwards.
+ *
+ * @return array
+ */
+function isg_graph_about_predicates() {
+	return array(
+		'http://schema.org/about',
+		'http://schema.org/mentions',
+		'https://w3id.org/lio/v1#depicts',
+		'https://w3id.org/lio/v1#hasTag',
+		'https://w3id.org/lio/v1#shows',
+		'http://xmlns.com/foaf/0.1/depiction',
+		'http://www.wikidata.org/prop/direct/P180',
+	);
+}
+
+/**
+ * Valid JSON-LD payload profiles.
+ *
+ * @return array
+ */
+function isg_jsonld_profiles() {
+	return array( 'schema', 'provenance', 'full' );
+}
+
+/**
+ * Normalize a requested profile.
+ *
+ * @param string $profile Requested profile.
+ * @return string
+ */
+function isg_resolve_profile( $profile ) {
+	$profile = strtolower( trim( (string) $profile ) );
+	return in_array( $profile, isg_jsonld_profiles(), true ) ? $profile : 'provenance';
+}
+
+/**
+ * Build the SPARQL query: whole named graphs for the images in a gallery.
+ *
+ * The inner SELECT picks and orders the images, so LIMIT bounds images rather
+ * than triples — a plain LIMIT on the outer query would truncate mid-graph and
+ * emit half an image's provenance.
+ *
+ * @param array $a Resolved block attributes.
+ * @return string
+ */
+function isg_build_sparql( array $a ) {
+	$gallery = isg_sanitize_iri_segment( $a['gallery'] );
+	$user_id = isg_sanitize_iri_segment( $a['userId'] );
+	$limit   = max( 1, min( 200, (int) $a['limit'] ) );
+	$dataset = ISG_DATASET_BASE . $gallery;
+
+	$order   = ( 'asc' === strtolower( (string) $a['order'] ) ) ? 'ASC' : 'DESC';
+	$orderby = ( 'title' === strtolower( (string) $a['orderBy'] ) ) ? '?title_' : '?date_';
+
+	// Optional filter: images whose named graph is created by a given user.
+	$creator = '';
+	if ( '' !== $user_id ) {
+		$creator = '    ?page dcterms:creator <' . ISG_USER_BASE . $user_id . ">.\n";
+	}
+
+	// The 'full' profile is verbatim by definition, so it skips the filter.
+	$filter = '';
+	if ( 'full' !== isg_resolve_profile( $a['jsonldProfile'] ) ) {
+		$clauses = array();
+		foreach ( isg_graph_dropped_prefixes() as $prefix ) {
+			$clauses[] = '! STRSTARTS( STR(?p), "' . $prefix . '" )';
+		}
+		$filter = "\n    FILTER( " . implode( ' && ', $clauses ) . ' )';
+	}
+
+	return <<<SPARQL
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX lio: <https://w3id.org/lio/v1#>
+PREFIX schema: <http://schema.org/>
+PREFIX photoshop: <http://ns.adobe.com/photoshop/1.0/>
+
+SELECT ?page ?image ?date_ ?title_ ?s ?p ?o WHERE {
+  {
+    SELECT ?page ?image
+      (SAMPLE(?d) AS ?date_)
+      (SAMPLE(?t) AS ?title_)
+    WHERE { GRAPH ?page {
+      ?image lio:isIn <{$dataset}>.
+      ?image schema:thumbnail ?thumb.
+      optional { ?image photoshop:DateCreated ?d. }
+      optional { ?image dc:title ?t. }
+{$creator}    }}
+    GROUP BY ?page ?image
+    ORDER BY {$order}({$orderby})
+    LIMIT {$limit}
+  }
+  GRAPH ?page {
+    ?s ?p ?o.{$filter}
+  }
+}
+SPARQL;
+}
+
+/**
+ * Compact an IRI against the emitted @context.
+ *
+ * Longest namespace first, so http://schema.org/ does not shadow a longer
+ * namespace that happens to share its opening characters.
+ *
+ * @param string $iri IRI.
+ * @return string Compacted term, or the IRI unchanged.
+ */
+function isg_compact_iri( $iri ) {
+	static $sorted = null;
+
+	if ( null === $sorted ) {
+		// '@vocab' is a keyword, not a prefix: compacting against it would produce
+		// "@vocab:name", which is not a term at all.
+		$sorted = array_filter(
+			isg_jsonld_prefixes(),
+			static function ( $prefix ) {
+				return '@' !== $prefix[0];
+			},
+			ARRAY_FILTER_USE_KEY
+		);
+		uasort(
+			$sorted,
+			static function ( $a, $b ) {
+				return strlen( $b ) - strlen( $a );
+			}
+		);
+	}
+
+	foreach ( $sorted as $prefix => $namespace ) {
+		if ( 0 === strpos( $iri, $namespace ) ) {
+			$local = substr( $iri, strlen( $namespace ) );
+			// A local name containing a slash would not round-trip as a CURIE.
+			if ( '' !== $local && false === strpos( $local, '/' ) ) {
+				return $prefix . ':' . $local;
+			}
+		}
+	}
+
+	return $iri;
+}
+
+/**
+ * Convert one SPARQL result term into its JSON-LD form.
+ *
+ * @param array $term SPARQL JSON term ('type', 'value', maybe 'xml:lang'/'datatype').
+ * @return mixed
+ */
+function isg_term_to_jsonld( array $term ) {
+	$type  = isset( $term['type'] ) ? $term['type'] : 'literal';
+	$value = isset( $term['value'] ) ? $term['value'] : '';
+
+	if ( 'uri' === $type ) {
+		return array( '@id' => isg_compact_iri( $value ) );
+	}
+
+	if ( 'bnode' === $type ) {
+		return array( '@id' => '_:' . $value );
+	}
+
+	if ( ! empty( $term['xml:lang'] ) ) {
+		return array(
+			'@value'    => $value,
+			'@language' => $term['xml:lang'],
+		);
+	}
+
+	// xsd:string is the default for a plain literal; saying so adds noise.
+	if ( ! empty( $term['datatype'] ) && 'http://www.w3.org/2001/XMLSchema#string' !== $term['datatype'] ) {
+		return array(
+			'@value' => $value,
+			'@type'  => isg_compact_iri( $term['datatype'] ),
+		);
+	}
+
+	return $value;
+}
+
+/**
+ * Group flat ?s ?p ?o bindings into rows, one per image.
+ *
+ * Returns the same display keys the renderer already expects, so the render
+ * path is unchanged, plus the graph itself and a label lookup built from the
+ * rdfs:label statements that were sitting in the graph all along.
+ *
+ * @param array $bindings SPARQL JSON bindings.
+ * @return array
+ */
+function isg_parse_graph_bindings( array $bindings ) {
+	$graphs = array();
+
+	foreach ( $bindings as $binding ) {
+		if ( ! isset( $binding['page']['value'], $binding['s']['value'], $binding['p']['value'], $binding['o'] ) ) {
+			continue;
+		}
+
+		$page = $binding['page']['value'];
+
+		if ( ! isset( $graphs[ $page ] ) ) {
+			$graphs[ $page ] = array(
+				'image'   => isset( $binding['image']['value'] ) ? $binding['image']['value'] : '',
+				'date'    => isset( $binding['date_']['value'] ) ? $binding['date_']['value'] : '',
+				'title'   => isset( $binding['title_']['value'] ) ? $binding['title_']['value'] : '',
+				'triples' => array(),
+				'labels'  => array(),
+			);
+		}
+
+		$subject   = $binding['s']['value'];
+		$predicate = $binding['p']['value'];
+
+		$graphs[ $page ]['triples'][] = array( $subject, $predicate, $binding['o'] );
+
+		if ( 'http://www.w3.org/2000/01/rdf-schema#label' === $predicate && 'literal' === $binding['o']['type'] ) {
+			$graphs[ $page ]['labels'][ $subject ] = $binding['o']['value'];
+		}
+	}
+
+	$rows = array();
+	foreach ( $graphs as $page => $graph ) {
+		$rows[] = isg_graph_to_row( $page, $graph );
+	}
+
+	// Canonical order, not display order. Rows are cached and fingerprinted to
+	// decide whether a refresh changed anything, so an unstable order would look
+	// like a change every time and purge page caches for nothing. Display order
+	// is applied at render, which also means changing it needs no refetch.
+	usort(
+		$rows,
+		static function ( $x, $y ) {
+			$by_date = strcmp( (string) $y['date'], (string) $x['date'] );
+			return ( 0 !== $by_date ) ? $by_date : strcmp( (string) $x['image'], (string) $y['image'] );
+		}
+	);
+
+	return $rows;
+}
+
+/**
+ * Collapse one named graph into a display row.
+ *
+ * @param string $page  Named graph IRI.
+ * @param array  $graph Parsed graph.
+ * @return array
+ */
+function isg_graph_to_row( $page, array $graph ) {
+	$image = $graph['image'];
+
+	// Only statements whose subject is the image itself describe the image. The
+	// rest of the graph describes the ImageSnippets page, the creator, or the
+	// entities depicted.
+	$props = array();
+	foreach ( $graph['triples'] as $triple ) {
+		list( $subject, $predicate, $object ) = $triple;
+		if ( $subject === $image ) {
+			$props[ $predicate ][] = $object;
+		}
+	}
+
+	$first = static function ( $predicate ) use ( $props ) {
+		return isset( $props[ $predicate ][0]['value'] ) ? $props[ $predicate ][0]['value'] : '';
+	};
+
+	// Resolve any object that is a skolem or entity IRI to its label, so nothing
+	// reaches the page as a bare identifier.
+	$labelled = static function ( $predicate ) use ( $props, $graph ) {
+		if ( ! isset( $props[ $predicate ][0] ) ) {
+			return '';
+		}
+		$term  = $props[ $predicate ][0];
+		$value = isset( $term['value'] ) ? $term['value'] : '';
+		if ( 'uri' === $term['type'] && isset( $graph['labels'][ $value ] ) ) {
+			return $graph['labels'][ $value ];
+		}
+		return $value;
+	};
+
+	// Subjects and objects across every "is about" predicate. IRIs become
+	// entities with a resolved name; plain literals become keywords.
+	$abouts   = array();
+	$keywords = array();
+	foreach ( isg_graph_about_predicates() as $predicate ) {
+		if ( empty( $props[ $predicate ] ) ) {
+			continue;
+		}
+		foreach ( $props[ $predicate ] as $term ) {
+			$value = isset( $term['value'] ) ? $term['value'] : '';
+			if ( '' === $value ) {
+				continue;
+			}
+			if ( 'uri' === $term['type'] ) {
+				$abouts[ $value ] = isset( $graph['labels'][ $value ] ) ? $graph['labels'][ $value ] : '';
+			} else {
+				$keywords[ $value ] = true;
+			}
+		}
+	}
+
+	$about_list = array();
+	foreach ( $abouts as $id => $label ) {
+		$about_list[] = array(
+			'id'    => $id,
+			'label' => $label,
+		);
+	}
+
+	return array(
+		'image'    => $image,
+		'page'     => $page,
+		'thumb'    => $first( 'http://schema.org/thumbnail' ),
+		'content'  => $first( 'http://schema.org/contentUrl' ),
+		'title'    => $first( 'http://purl.org/dc/elements/1.1/title' ),
+		'name'     => $first( 'http://schema.org/name' ),
+		'desc'     => $first( 'http://www.iptc.org/std/Iptc4xmpCore/1.0/xmlns/ExtDescrAccessibility' ),
+		'alt'      => $first( 'http://www.iptc.org/std/Iptc4xmpCore/1.0/xmlns/AltTextAccessibility' ),
+		'date'     => $first( 'http://ns.adobe.com/photoshop/1.0/DateCreated' ),
+		'rights'   => $labelled( 'http://purl.org/dc/elements/1.1/rights' ),
+		'web'      => $first( 'http://ns.adobe.com/xap/1.0/rights/WebStatement' ),
+		'licurl'   => $first( 'http://ns.useplus.org/ldf/xmp/1.0/LicensorURL' ),
+		'location' => $first( 'https://w3id.org/lio/v1#hasSceneLocation' ),
+		'creator'  => $labelled( 'http://purl.org/dc/elements/1.1/creator' ),
+		'abouts'   => $about_list,
+		'keywords' => array_keys( $keywords ),
+		'triples'  => $graph['triples'],
+		'labels'   => $graph['labels'],
+	);
+}
+
+/**
+ * Order rows.
+ *
+ * The inner SELECT orders the images it picks, but a SPARQL engine is under no
+ * obligation to preserve that order through the outer join, so the sort is
+ * redone here rather than trusted.
+ *
+ * @param array $rows Rows.
+ * @param array $a    Resolved block attributes.
+ * @return array
+ */
+function isg_sort_rows( array $rows, array $a ) {
+	$by_title = ( 'title' === strtolower( (string) $a['orderBy'] ) );
+	$ascending = ( 'asc' === strtolower( (string) $a['order'] ) );
+
+	usort(
+		$rows,
+		static function ( $x, $y ) use ( $by_title ) {
+			if ( $by_title ) {
+				return strcasecmp( (string) $x['title'], (string) $y['title'] );
+			}
+			return strcmp( (string) $x['date'], (string) $y['date'] );
+		}
+	);
+
+	return $ascending ? $rows : array_reverse( $rows );
+}
+
+/**
+ * The flat schema.org node for one image. This is the part Google reads.
+ *
+ * @param array $row          Row.
+ * @param bool  $use_filename Filename fallback for names.
+ * @return array
+ */
+function isg_schema_node( array $row, $use_filename ) {
+	$node = array(
+		'@id'          => $row['image'],
+		'@type'        => 'ImageObject',
+		'contentUrl'   => $row['content'] ? $row['content'] : $row['thumb'],
+		'thumbnailUrl' => $row['thumb'],
+	);
+
+	$name = isg_row_title( $row, $use_filename );
+	if ( '' !== $name ) {
+		$node['name'] = $name;
+	}
+
+	$scalars = array(
+		'description'        => 'desc',
+		'dateCreated'        => 'date',
+		'license'            => 'web',
+		'acquireLicensePage' => 'licurl',
+		'copyrightNotice'    => 'rights',
+	);
+	foreach ( $scalars as $term => $key ) {
+		if ( '' !== $row[ $key ] ) {
+			$node[ $term ] = $row[ $key ];
+		}
+	}
+
+	if ( '' !== $row['creator'] ) {
+		$node['creator'] = array(
+			'@type' => 'Person',
+			'name'  => $row['creator'],
+		);
+	}
+
+	// The ImageSnippets page is the canonical description of this image.
+	if ( '' !== $row['page'] ) {
+		$node['subjectOf'] = array( '@id' => $row['page'] );
+	}
+
+	if ( '' !== $row['location'] ) {
+		$node['contentLocation'] = array( '@id' => isg_compact_iri( $row['location'] ) );
+	}
+
+	// Every entity carries the name resolved from its own graph, so none of this
+	// reaches a crawler as a bare identifier.
+	if ( ! empty( $row['abouts'] ) ) {
+		$about = array();
+		foreach ( $row['abouts'] as $entity ) {
+			$item = array( '@id' => isg_compact_iri( $entity['id'] ) );
+			if ( '' !== $entity['label'] ) {
+				$item['name'] = $entity['label'];
+			}
+			$about[] = $item;
+		}
+		$node['about'] = $about;
+	}
+
+	if ( ! empty( $row['keywords'] ) ) {
+		$node['keywords'] = $row['keywords'];
+	}
+
+	return $node;
+}
+
+/**
+ * The named-graph object for one image: its triples, verbatim, still attributed
+ * to the graph that asserted them.
+ *
+ * @param array $row Row.
+ * @return array
+ */
+function isg_named_graph_node( array $row ) {
+	$subjects = array();
+
+	foreach ( $row['triples'] as $triple ) {
+		list( $subject, $predicate, $object ) = $triple;
+
+		if ( ! isset( $subjects[ $subject ] ) ) {
+			$subjects[ $subject ] = array( '@id' => isg_compact_iri( $subject ) );
+		}
+
+		$term  = isg_compact_iri( $predicate );
+		$value = isg_term_to_jsonld( $object );
+
+		// rdf:type is @type in JSON-LD, and its object is always an identifier.
+		if ( 'rdf:type' === $term ) {
+			$term  = '@type';
+			$value = isset( $value['@id'] ) ? $value['@id'] : $value;
+		}
+
+		if ( ! isset( $subjects[ $subject ][ $term ] ) ) {
+			$subjects[ $subject ][ $term ] = $value;
+		} elseif ( is_array( $subjects[ $subject ][ $term ] ) && isset( $subjects[ $subject ][ $term ][0] ) ) {
+			$subjects[ $subject ][ $term ][] = $value;
+		} else {
+			$subjects[ $subject ][ $term ] = array( $subjects[ $subject ][ $term ], $value );
+		}
+	}
+
+	return array(
+		'@id'    => $row['page'],
+		'@graph' => array_values( $subjects ),
+	);
+}
+
+/**
+ * The URL of the page being rendered, for hanging the gallery node on.
+ *
+ * Empty inside the block-editor preview, where there is no front-end URL yet.
+ * An anonymous gallery node is still valid JSON-LD, so this degrades quietly.
+ *
+ * @return string
+ */
+function isg_current_permalink() {
+	if ( is_singular() ) {
+		$permalink = get_permalink();
+		return $permalink ? $permalink : '';
+	}
+	return '';
+}
+
+/**
+ * Build the gallery's JSON-LD.
+ *
+ * @param array  $rows         Rows.
+ * @param string $gallery      Gallery name.
+ * @param bool   $use_filename Filename fallback for names.
+ * @param string $profile      Payload profile.
+ * @param string $base_id      IRI to hang the gallery node on.
+ * @return string <script> tag, or empty string.
+ */
+function isg_jsonld( array $rows, $gallery, $use_filename, $profile = 'provenance', $base_id = '' ) {
+	if ( empty( $rows ) ) {
+		return '';
+	}
+
+	$profile = isg_resolve_profile( $profile );
+
+	$gallery_node = array(
+		'@type' => 'ImageGallery',
+		'name'  => $gallery,
+	);
+	if ( '' !== $base_id ) {
+		$gallery_node['@id'] = $base_id . '#gallery';
+	}
+
+	$images = array();
+	$nodes  = array();
+	$named  = array();
+
+	foreach ( $rows as $row ) {
+		if ( '' === $row['image'] ) {
+			continue;
+		}
+		$images[] = array( '@id' => $row['image'] );
+		$nodes[]  = isg_schema_node( $row, $use_filename );
+
+		if ( 'schema' !== $profile ) {
+			$named[] = isg_named_graph_node( $row );
+		}
+	}
+
+	$gallery_node['image'] = $images;
+
+	// One default graph holding the schema.org projection, then the named graphs
+	// beside it. A consumer that only knows schema.org reads the first part and
+	// ignores the rest; an RDF consumer gets both, with attribution intact.
+	$payload = array(
+		'@context' => isg_jsonld_prefixes(),
+		'@graph'   => array_merge( array( $gallery_node ), $nodes, $named ),
+	);
+
+	/**
+	 * Filters the JSON-LD payload before it is encoded.
+	 *
+	 * @param array  $payload Payload.
+	 * @param array  $rows    Rows it was built from.
+	 * @param string $profile Resolved profile.
+	 */
+	$payload = apply_filters( 'isg_jsonld_payload', $payload, $rows, $profile );
+
+	return '<script type="application/ld+json">'
+		. wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE )
+		. '</script>';
+}

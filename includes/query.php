@@ -121,73 +121,6 @@ function isg_flickr_srcset( $url ) {
 }
 
 /**
- * Build the SPARQL query string from sanitized attributes.
- *
- * Uses GROUP BY + SAMPLE so each image is one row even when it has multiple
- * values for a predicate; multivalued `about` is collapsed with GROUP_CONCAT.
- *
- * @param array $a Sanitized attributes.
- * @return string SPARQL query.
- */
-function isg_build_sparql( array $a ) {
-	$gallery = isg_sanitize_iri_segment( $a['gallery'] );
-	$user_id = isg_sanitize_iri_segment( $a['userId'] );
-
-	$order   = ( 'asc' === strtolower( $a['order'] ) ) ? 'ASC' : 'DESC';
-	$orderby = ( 'title' === strtolower( $a['orderBy'] ) ) ? '?title_' : '?date_';
-	$limit   = max( 1, min( 200, (int) $a['limit'] ) );
-
-	$dataset = ISG_DATASET_BASE . $gallery;
-
-	// Optional filter: images whose named graph is created by a given user.
-	// Best-effort; named-graph creator metadata may not be present for all stores.
-	$creator = '';
-	if ( '' !== $user_id ) {
-		$creator = '  ?page <http://purl.org/dc/terms/creator> <' . ISG_USER_BASE . $user_id . ">.\n";
-	}
-
-	return <<<SPARQL
-PREFIX dc: <http://purl.org/dc/elements/1.1/>
-PREFIX dcterms: <http://purl.org/dc/terms/>
-PREFIX lio: <https://w3id.org/lio/v1#>
-PREFIX schema: <http://schema.org/>
-PREFIX photoshop: <http://ns.adobe.com/photoshop/1.0/>
-PREFIX Iptc4xmpCore: <http://www.iptc.org/std/Iptc4xmpCore/1.0/xmlns/>
-PREFIX xmpRights: <http://ns.adobe.com/xap/1.0/rights/>
-PREFIX plus: <http://ns.useplus.org/ldf/xmp/1.0/>
-
-SELECT ?image ?page
-  (SAMPLE(?thumb)    AS ?thumb_)
-  (SAMPLE(?content)  AS ?content_)
-  (SAMPLE(?title)    AS ?title_)
-  (SAMPLE(?name)     AS ?name_)
-  (SAMPLE(?desc)     AS ?desc_)
-  (SAMPLE(?alt)      AS ?alt_)
-  (SAMPLE(?date)     AS ?date_)
-  (SAMPLE(?rights)   AS ?rights_)
-  (SAMPLE(?web)      AS ?web_)
-  (SAMPLE(?licurl)   AS ?licurl_)
-  (SAMPLE(?location) AS ?location_)
-  (GROUP_CONCAT(DISTINCT ?about; separator="|") AS ?abouts_)
-WHERE { graph ?page {
-  ?image lio:isIn <{$dataset}>.
-  ?image schema:thumbnail ?thumb.
-  optional { ?image schema:contentUrl ?content. }
-  optional { ?image dc:title ?title. }
-  optional { ?image schema:name ?name. }
-  optional { ?image Iptc4xmpCore:ExtDescrAccessibility ?desc. }
-  optional { ?image Iptc4xmpCore:AltTextAccessibility ?alt. }
-  optional { ?image photoshop:DateCreated ?date. }
-  optional { ?image dc:rights ?rights. }
-  optional { ?image xmpRights:WebStatement ?web. }
-  optional { ?image plus:LicensorURL ?licurl. }
-  optional { ?image lio:hasSceneLocation ?location. }
-  optional { ?image schema:about ?about. }
-{$creator}}} GROUP BY ?image ?page ORDER BY {$order}({$orderby}) LIMIT {$limit}
-SPARQL;
-}
-
-/**
  * Whether the current request is a block-editor preview.
  *
  * The editor previews dynamic blocks through the block-renderer REST route, so
@@ -588,7 +521,11 @@ function isg_fetch_rows( $endpoint, $query ) {
 	$response = wp_remote_get(
 		$url,
 		array(
-			'timeout' => 10,
+			// Whole graphs are a much larger response than the old column list —
+			// measured at ~1.4s for 40 images, and the block allows up to 200.
+			// This only ever runs from cron or an explicit refresh, never in a
+			// reader's request path, so a longer ceiling costs nobody anything.
+			'timeout' => 20,
 			'headers' => array( 'Accept' => 'application/sparql-results+json' ),
 		)
 	);
@@ -607,32 +544,7 @@ function isg_fetch_rows( $endpoint, $query ) {
 		return new WP_Error( 'isg_parse', 'Unexpected SPARQL response format.' );
 	}
 
-	$rows = array();
-	foreach ( $json['results']['bindings'] as $binding ) {
-		$g = static function ( $key ) use ( $binding ) {
-			return isset( $binding[ $key ]['value'] ) ? $binding[ $key ]['value'] : '';
-		};
-		$abouts = array_filter( array_map( 'trim', explode( '|', $g( 'abouts_' ) ) ) );
-
-		$rows[] = array(
-			'image'    => $g( 'image' ),
-			'page'     => $g( 'page' ),
-			'thumb'    => $g( 'thumb_' ),
-			'content'  => $g( 'content_' ),
-			'title'    => $g( 'title_' ),
-			'name'     => $g( 'name_' ),
-			'desc'     => $g( 'desc_' ),
-			'alt'      => $g( 'alt_' ),
-			'date'     => $g( 'date_' ),
-			'rights'   => $g( 'rights_' ),
-			'web'      => $g( 'web_' ),
-			'licurl'   => $g( 'licurl_' ),
-			'location' => $g( 'location_' ),
-			'abouts'   => array_values( $abouts ),
-		);
-	}
-
-	return $rows;
+	return isg_parse_graph_bindings( $json['results']['bindings'] );
 }
 
 /**
@@ -658,77 +570,6 @@ function isg_row_title( array $row, $use_filename ) {
  */
 function isg_row_alt( array $row ) {
 	return isg_first( array( $row['alt'], $row['desc'], $row['title'], $row['name'] ) );
-}
-
-/**
- * Build schema.org JSON-LD for the gallery as an ImageGallery of ImageObjects.
- *
- * @param array  $rows         Rows.
- * @param string $gallery      Gallery name.
- * @param bool   $use_filename Filename fallback for names.
- * @return string <script> tag, or empty string.
- */
-function isg_jsonld( array $rows, $gallery, $use_filename ) {
-	if ( empty( $rows ) ) {
-		return '';
-	}
-
-	$images   = array();
-	$position = 0;
-	foreach ( $rows as $row ) {
-		++$position;
-		$item = array(
-			'@type'        => 'ImageObject',
-			'position'     => $position,
-			'contentUrl'   => $row['content'] ? $row['content'] : $row['thumb'],
-			'thumbnailUrl' => $row['thumb'],
-		);
-
-		$name = isg_row_title( $row, $use_filename );
-		if ( '' !== $name ) {
-			$item['name'] = $name;
-		}
-		if ( '' !== $row['desc'] ) {
-			$item['description'] = $row['desc'];
-		}
-		if ( '' !== $row['date'] ) {
-			$item['dateCreated'] = $row['date'];
-		}
-		if ( '' !== $row['web'] ) {
-			$item['license'] = $row['web'];
-		}
-		if ( '' !== $row['licurl'] ) {
-			$item['acquireLicensePage'] = $row['licurl'];
-		}
-		if ( '' !== $row['page'] ) {
-			$item['url'] = $row['page'];
-		}
-		if ( '' !== $row['location'] ) {
-			$item['contentLocation'] = array( '@id' => $row['location'] );
-		}
-		if ( ! empty( $row['abouts'] ) ) {
-			$about = array_map(
-				static function ( $id ) {
-					return array( '@id' => $id );
-				},
-				$row['abouts']
-			);
-			$item['about'] = ( 1 === count( $about ) ) ? $about[0] : $about;
-		}
-
-		$images[] = $item;
-	}
-
-	$payload = array(
-		'@context' => 'https://schema.org',
-		'@type'    => 'ImageGallery',
-		'name'     => $gallery,
-		'image'    => $images,
-	);
-
-	return '<script type="application/ld+json">'
-		. wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE )
-		. '</script>';
 }
 
 /**
@@ -791,6 +632,7 @@ function isg_defaults() {
 		'aspectRatio'    => '4-3',
 		'useFilename'    => false,
 		'cacheTtl'       => 10,
+		'jsonldProfile'  => 'provenance',
 	);
 }
 
@@ -856,6 +698,10 @@ function isg_render_gallery( array $attributes ) {
 			esc_html__( 'Unable to load gallery right now.', 'image-snippets-gallery' )
 		);
 	}
+
+	// Cached rows are held in a canonical order so their fingerprint is stable;
+	// the block's own ordering is a display concern, applied here.
+	$rows = isg_sort_rows( $rows, $a );
 
 	$use_filename = (bool) $a['useFilename'];
 	$position     = 0;
@@ -945,7 +791,7 @@ function isg_render_gallery( array $attributes ) {
 				?>
 				<p class="isg-footer"><?php echo esc_html( sprintf( /* translators: %s: rights statement */ __( 'Images %s', 'image-snippets-gallery' ), $rows[0]['rights'] ) ); ?></p>
 			<?php endif; ?>
-			<?php echo isg_jsonld( $rows, $a['gallery'], $use_filename ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php echo isg_jsonld( $rows, $a['gallery'], $use_filename, $a['jsonldProfile'], isg_current_permalink() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 		<?php endif; ?>
 	</div>
 	<?php

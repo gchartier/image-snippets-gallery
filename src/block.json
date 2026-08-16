@@ -7,26 +7,79 @@
 	"category": "media",
 	"icon": "format-gallery",
 	"description": "Responsive, server-rendered gallery of images from ImageSnippets, with embedded provenance metadata (JSON-LD).",
-	"keywords": [ "gallery", "imagesnippets", "rdf", "provenance", "sparql", "media" ],
+	"keywords": [
+		"gallery",
+		"imagesnippets",
+		"rdf",
+		"provenance",
+		"sparql",
+		"media"
+	],
 	"textdomain": "image-snippets-gallery",
 	"supports": {
 		"html": false,
-		"align": [ "wide", "full" ]
+		"align": [
+			"wide",
+			"full"
+		]
 	},
 	"attributes": {
-		"gallery": { "type": "string", "default": "" },
-		"userId": { "type": "string", "default": "" },
-		"endpoint": { "type": "string", "default": "" },
-		"displayCaption": { "type": "boolean", "default": false },
-		"displayTitle": { "type": "boolean", "default": false },
-		"layout": { "type": "string", "default": "grid" },
-		"order": { "type": "string", "default": "desc" },
-		"orderBy": { "type": "string", "default": "date" },
-		"limit": { "type": "number", "default": 40 },
-		"thumbSize": { "type": "string", "default": "medium" },
-		"aspectRatio": { "type": "string", "default": "4-3" },
-		"useFilename": { "type": "boolean", "default": false },
-		"cacheTtl": { "type": "number", "default": 10 }
+		"gallery": {
+			"type": "string",
+			"default": ""
+		},
+		"userId": {
+			"type": "string",
+			"default": ""
+		},
+		"endpoint": {
+			"type": "string",
+			"default": ""
+		},
+		"displayCaption": {
+			"type": "boolean",
+			"default": false
+		},
+		"displayTitle": {
+			"type": "boolean",
+			"default": false
+		},
+		"layout": {
+			"type": "string",
+			"default": "grid"
+		},
+		"order": {
+			"type": "string",
+			"default": "desc"
+		},
+		"orderBy": {
+			"type": "string",
+			"default": "date"
+		},
+		"limit": {
+			"type": "number",
+			"default": 40
+		},
+		"thumbSize": {
+			"type": "string",
+			"default": "medium"
+		},
+		"aspectRatio": {
+			"type": "string",
+			"default": "4-3"
+		},
+		"useFilename": {
+			"type": "boolean",
+			"default": false
+		},
+		"cacheTtl": {
+			"type": "number",
+			"default": 10
+		},
+		"jsonldProfile": {
+			"type": "string",
+			"default": "provenance"
+		}
 	},
 	"example": {
 		"attributes": {
