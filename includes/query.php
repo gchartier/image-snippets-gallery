@@ -410,7 +410,7 @@ function isg_sync_status( $gallery = '' ) {
  * @param string $gallery   Gallery name, for targeting the page-cache purge.
  * @return array|WP_Error   The fresh rows, or WP_Error.
  */
-function isg_do_refresh_cache( $endpoint, $query, $cache_ttl, $gallery = '' ) {
+function isg_do_refresh_cache( $endpoint, $query, $cache_ttl, $gallery = '', $force_purge = false ) {
 	$rows = isg_fetch_rows( $endpoint, $query );
 	if ( is_wp_error( $rows ) ) {
 		// Leave the lock in place; it expires and the retry happens then.
@@ -441,7 +441,16 @@ function isg_do_refresh_cache( $endpoint, $query, $cache_ttl, $gallery = '' ) {
 		)
 	);
 
-	if ( $changed ) {
+	// Scheduled refreshes purge only when something actually changed, so a busy
+	// site is not flushing pages every interval for nothing.
+	//
+	// A person who clicked Refresh purges either way. Their question is "does the
+	// public page match ImageSnippets now?", and the stored rows matching is not
+	// the same as the cached HTML matching — an earlier purge may have failed, or
+	// the page may have been cached from an older state. Reporting success while
+	// leaving stale HTML in place is precisely the failure that made the galleries
+	// look broken in the first place.
+	if ( $changed || $force_purge ) {
 		isg_purge_page_cache( isg_posts_for_gallery( $gallery ) );
 	}
 
@@ -453,7 +462,8 @@ add_action( 'isg_refresh_cache', 'isg_do_refresh_cache', 10, 4 );
  * Refresh every gallery used anywhere on the site.
  *
  * Lives here rather than in the admin screen so cron, WP-CLI, and anything else
- * running outside wp-admin can reach it.
+ * running outside wp-admin can reach it. Always a manual action, so it purges
+ * whether or not the data moved.
  *
  * @return array Map of gallery name to fresh rows, or WP_Error per gallery.
  */
@@ -467,7 +477,8 @@ function isg_refresh_all_galleries() {
 			isg_resolve_endpoint( $a ),
 			isg_build_sparql( $a ),
 			isg_configured_ttl( $a ),
-			$gallery
+			$gallery,
+			true
 		);
 	}
 

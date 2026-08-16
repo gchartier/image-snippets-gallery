@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# One-off WP-CLI against the dev environment.  Usage:  ./devenv/wp plugin list
+set -euo pipefail
+cd "$(dirname "$0")"
+exec docker compose run --rm -T cli wp --path=/var/www/html "$@"

@@ -26,7 +26,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * flushing an entire cache to update one gallery is rude on a busy site.
  *
  * Each entry is array( label, kind, callable-or-action ). 'url' adapters take a
- * permalink instead of an ID.
+ * permalink instead of an ID. A callable may be a plain function name or a
+ * 'Class::method' string — Cache Enabler exposes only static methods, with no
+ * global function wrappers at all.
  *
  * @return array
  */
@@ -34,10 +36,10 @@ function isg_page_cache_adapters_post() {
 	return array(
 		array( 'WP Rocket', 'fn', 'rocket_clean_post' ),
 		array( 'W3 Total Cache', 'fn', 'w3tc_flush_post' ),
-		array( 'Cache Enabler', 'fn', 'cache_enabler_clear_page_cache_by_post_id' ),
+		array( 'Cache Enabler', 'fn', 'Cache_Enabler::clear_page_cache_by_post_id' ),
 		array( 'WP Super Cache', 'fn', 'wp_cache_post_change' ),
 		array( 'LiteSpeed Cache', 'action', 'litespeed_purge_post' ),
-		array( 'Cache Enabler (by URL)', 'url', 'cache_enabler_clear_page_cache_by_url' ),
+		array( 'Cache Enabler (by URL)', 'url', 'Cache_Enabler::clear_page_cache_by_url' ),
 	);
 }
 
@@ -51,7 +53,7 @@ function isg_page_cache_adapters_site() {
 		array( 'WP Super Cache', 'fn', 'wp_cache_clear_cache' ),
 		array( 'W3 Total Cache', 'fn', 'w3tc_flush_all' ),
 		array( 'WP Rocket', 'fn', 'rocket_clean_domain' ),
-		array( 'Cache Enabler', 'fn', 'cache_enabler_clear_complete_cache' ),
+		array( 'Cache Enabler', 'fn', 'Cache_Enabler::clear_complete_cache' ),
 		array( 'LiteSpeed Cache', 'action', 'litespeed_purge_all' ),
 		array( 'Cachify', 'action', 'cachify_flush_cache' ),
 		array( 'SG Optimizer', 'action', 'sg_cachepress_purge_cache' ),
@@ -82,7 +84,10 @@ function isg_run_page_cache_adapter( array $adapter, $arg = null ) {
 		return $label;
 	}
 
-	if ( ! function_exists( $target ) ) {
+	// is_callable() rather than function_exists() so a 'Class::method' target
+	// resolves too. Several caches — Cache Enabler among them — publish their
+	// purge API only as static methods.
+	if ( ! is_callable( $target ) ) {
 		return '';
 	}
 	if ( null === $arg ) {

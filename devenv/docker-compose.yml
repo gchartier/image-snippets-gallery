@@ -1,0 +1,120 @@
+name: isg-devenv
+
+# The official image writes a wp-config.php that resolves all of this at
+# *runtime* — DB credentials through getenv_docker(), and CONFIG_EXTRA through
+# an eval() of the environment variable. Nothing is baked into the file. So
+# every container that loads wp-config needs the whole set, WP-CLI included;
+# give it only to the web container and CLI looks for a database host called
+# "mysql" and a Redis server on localhost.
+x-wp-env: &wp-env
+  # Lets application passwords work over plain http, so the editor's refresh
+  # route can be exercised from a script instead of only by hand in a browser.
+  # WordPress otherwise requires SSL for them.
+  WP_ENVIRONMENT_TYPE: local
+  WORDPRESS_DB_HOST: db
+  WORDPRESS_DB_USER: wordpress
+  WORDPRESS_DB_PASSWORD: wordpress
+  WORDPRESS_DB_NAME: wordpress
+  WORDPRESS_CONFIG_EXTRA: |
+    /* --- managed-host simulation; see devenv/README.md --- */
+
+    /* Tells WordPress a page-cache drop-in is in play. Cache Enabler
+       installs advanced-cache.php on activation; without this constant
+       WordPress never loads it. */
+    define( 'WP_CACHE', true );
+
+    /* Managed hosts almost always disable cron-on-page-load and run it
+       from system cron instead. That is what the `cron` service below
+       imitates, and it is why the plugin needs its overdue fallback. */
+    define( 'DISABLE_WP_CRON', true );
+
+    /* Stand-in for Object Cache Pro. Same wp_cache_* semantics. phpredis is
+       named explicitly because the plugin otherwise prefers the bundled
+       Predis, and Object Cache Pro uses the C extension. */
+    define( 'WP_REDIS_HOST', 'redis' );
+    define( 'WP_REDIS_PREFIX', 'isg' );
+    if ( extension_loaded( 'redis' ) ) { define( 'WP_REDIS_CLIENT', 'phpredis' ); }
+
+    /* Guarded: WP-CLI defines WP_DEBUG before wp-config is evaluated. */
+    if ( ! defined( 'WP_DEBUG' ) )         { define( 'WP_DEBUG', true ); }
+    if ( ! defined( 'WP_DEBUG_LOG' ) )     { define( 'WP_DEBUG_LOG', true ); }
+    if ( ! defined( 'WP_DEBUG_DISPLAY' ) ) { define( 'WP_DEBUG_DISPLAY', false ); }
+
+# A local WordPress that behaves like Margaret's managed host, not like a
+# clean dev box. Three things make it a simulation rather than just "WordPress
+# in Docker", and all three are the defaults on Nexcess Managed WordPress:
+#
+#   1. A real full-page cache (Cache Enabler — the plugin Nexcess forked),
+#      which serves stored HTML to anonymous visitors and bypasses for logins.
+#   2. A persistent Redis object cache, so transients leave wp_options.
+#   3. Page-load cron disabled, with cron driven from outside on an interval —
+#      which is how managed hosts actually run it.
+#
+# Anything that works here and fails on her site is a difference we can name.
+
+services:
+  db:
+    image: mariadb:10.11
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: wordpress
+      MARIADB_ROOT_PASSWORD: root
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "healthcheck.sh", "--connect", "--innodb_initialized" ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: [ "redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru" ]
+
+  wordpress:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${ISG_PORT:-8080}:80"
+    environment: *wp-env
+    volumes:
+      - wp:/var/www/html
+      - ..:/var/www/html/wp-content/plugins/image-snippets-gallery
+
+  # Stands in for the host's system cron. ISG_CRON_INTERVAL defaults to 900s
+  # because 15 minutes is the common managed-host granularity — the floor on
+  # how fast a gallery can refresh by itself. Drop it to 60 when you want to
+  # watch the cron path without waiting.
+  cron:
+    image: wordpress:cli
+    user: "33:33"
+    environment:
+      <<: *wp-env
+      HOME: /tmp
+    depends_on:
+      - wordpress
+    volumes:
+      - wp:/var/www/html
+      - ..:/var/www/html/wp-content/plugins/image-snippets-gallery
+    entrypoint: [ "/bin/sh", "-c" ]
+    command:
+      - 'while true; do sleep ${ISG_CRON_INTERVAL:-900}; wp --path=/var/www/html cron event run --due-now 2>&1 | sed "s/^/[cron] /" || true; done'
+
+  # Not started by default. Used by ./wp for one-off WP-CLI commands.
+  cli:
+    image: wordpress:cli
+    user: "33:33"
+    environment:
+      <<: *wp-env
+      HOME: /tmp
+    profiles: [ "tools" ]
+    volumes:
+      - wp:/var/www/html
+      - ..:/var/www/html/wp-content/plugins/image-snippets-gallery
+
+volumes:
+  db:
+  wp:

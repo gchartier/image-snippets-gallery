@@ -77,7 +77,7 @@ function isg_rest_refresh( WP_REST_Request $request ) {
 
 	// The configured lifetime, not the editor-capped one — this writes the entry
 	// the public page will read.
-	$rows = isg_do_refresh_cache( $endpoint, $query, isg_configured_ttl( $a ), $a['gallery'] );
+	$rows = isg_do_refresh_cache( $endpoint, $query, isg_configured_ttl( $a ), $a['gallery'], true );
 
 	if ( is_wp_error( $rows ) ) {
 		return new WP_Error(
