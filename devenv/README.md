@@ -16,9 +16,16 @@ Requires Docker. No PHP or WP-CLI on the host.
 
 ```bash
 ./devenv/setup.sh              # first run pulls images and builds; a few minutes
+./devenv/verify.sh             # every check that does not need a browser
 ```
 
 Then: <http://localhost:8080/gallery/> · admin at `/wp-admin/` (`admin` / `admin`).
+
+`verify.sh` exercises the real endpoint, the real page cache and the real REST
+routes — nothing is mocked, so a pass means the behaviour happened rather than
+that a test agreed with itself. It exits non-zero if anything fails, and it
+covers everything except the editor's Refresh button as a button: the route
+behind it is checked, the React that calls it is not. That is Test A.
 
 Teardown, including the database:
 
@@ -63,35 +70,41 @@ so anything stale is stale because a purge did not happen.
 
 This is the path that has never been exercised in a browser.
 
-You need a gallery you can add images to. `hs_gallery02` (Henry Sautter's, the
-default) is fine for reading but you cannot add to it — for the round trip you
-need an ImageSnippets collection of your own, or one Margaret gives you write
-access to. Pass it to setup: `./devenv/setup.sh my_gallery`.
+The honest version is "add an image on ImageSnippets, watch the site pick it
+up", and it needs a collection you can write to — `hs_gallery02` (Henry
+Sautter's, the default) can be read but not added to. If you have one, pass it
+to setup: `./devenv/setup.sh my_gallery`, and use it below.
 
-1. Open <http://localhost:8080/gallery/> **in a private window**. Note the images.
-2. In a normal window, open `/wp-admin/`, edit the *Gallery* page, and confirm
-   the block preview shows the same images.
-3. In another tab, add an image to that collection on imagesnippets.com.
-4. Reload the private window. **It should not change** — the visitor is being
-   served stored HTML, and nothing has told the cache otherwise. This is the bug
-   as Margaret experienced it, reproduced on demand.
-5. Back in the editor, select the block and click **Refresh from ImageSnippets**
-   in the sidebar. The preview should pick up the new image.
-6. Reload the private window. **It should now show the new image.**
-
-Step 6 is the assertion. Step 4 is the control — without it you cannot tell a
-working purge from a cache that was never populated.
-
-Scripted equivalent, for regression:
+If you do not, `simulate-change.sh` gives you the same test from the other end.
+It drops one image from what the *site* has stored, so a refresh has something
+real to correct. The purge path exercised is identical, and it does not depend
+on anyone's account:
 
 ```bash
-APP=$(./devenv/wp user application-password create admin t --porcelain | tail -1)
-./devenv/visitor.sh >/dev/null && ./devenv/visitor.sh | grep 'page cache'   # HIT
-curl -sS -u "admin:$APP" -X POST localhost:8080/wp-json/imagesnippets/v1/refresh \
-  -H 'Content-Type: application/json' \
-  -d '{"attributes":{"gallery":"hs_gallery02","limit":12}}'
-./devenv/visitor.sh | grep 'page cache'                                     # MISS
+./devenv/simulate-change.sh          # site now believes the gallery is smaller
 ```
+
+Then:
+
+1. Open <http://localhost:8080/gallery/> **in a private window**. Count the
+   images — one fewer than the collection really has. Reload once more so the
+   page cache stores that.
+2. In a normal window, open `/wp-admin/` and edit the *Gallery* page.
+3. Reload the private window. **It should not change.** The visitor is being
+   served stored HTML and nothing has told the cache otherwise. This is the bug
+   as Margaret experienced it, reproduced on demand.
+4. In the editor, select the block and click **Refresh from ImageSnippets** in
+   the sidebar. It should report how many images it pulled, and the preview
+   should show the restored image.
+5. Reload the private window. **It should now show the restored image.**
+
+Step 5 is the assertion. Step 3 is the control — without it you cannot tell a
+working purge from a cache that was never populated.
+
+The server side of steps 4 and 5 is covered by `verify.sh`. What only a browser
+can tell you is whether the button itself wires up: that clicking it calls the
+route, that the preview remounts afterwards, and that the success and error
+notices render.
 
 The button purges whether or not the data moved. A scheduled refresh purges only
 on change — a busy site should not flush pages every interval for nothing — but
@@ -160,6 +173,8 @@ gallery still eventually updates for a visitor.
 | `ISG_CRON_INTERVAL` | `900` | Seconds between cron runs |
 
 ```bash
+./devenv/verify.sh                       # all automated checks
+./devenv/simulate-change.sh              # make stored data disagree with source
 ./devenv/wp <any wp-cli command>
 ./devenv/wp cache-enabler clear          # empty the page cache by hand
 ./devenv/wp redis status                 # object cache health
