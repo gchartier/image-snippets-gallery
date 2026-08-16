@@ -20,6 +20,8 @@ PASS=0
 FAIL=0
 
 wp() { docker compose run --rm -T cli wp --path=/var/www/html "$@" 2>/dev/null; }
+fixture() { docker compose run --rm -T -v "$(pwd)/fixture.php:/fixture.php:ro" \
+    cli wp --path=/var/www/html eval-file /fixture.php "$@" 2>/dev/null; }
 
 ok()   { printf '  \033[32mPASS\033[0m  %s\n' "$1"; PASS=$((PASS+1)); }
 bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; FAIL=$((FAIL+1)); }
@@ -102,7 +104,7 @@ head_ "Refresh all targets the queries actually in use"
 # a refresh that reports success while the site stays stale. So this drops an
 # image from the stored copy and checks that Refresh all actually puts it back.
 TRUE_COUNT="$(fetch | grep -c '<figure class="isg-item"')"
-./simulate-change.sh >/dev/null 2>&1
+fixture drop gallery >/dev/null
 DEGRADED="$(fetch | grep -c '<figure class="isg-item"')"
 
 assert "fixture removed one image" "$((TRUE_COUNT - 1))" "$DEGRADED"
@@ -143,10 +145,32 @@ tally "$( printf '%s' "$PROFILES" | sed 's/PASS/\o033[32mPASS\o033[0m/; s/FAIL/\
 
 head_ "Freshness plumbing"
 
-SCHEDULED="$(wp cron event list --fields=hook --format=csv | grep -c isg || true)"
-if [ "$SCHEDULED" -gt 0 ]; then ok "a refresh is scheduled (${SCHEDULED} event(s))"
-else bad "nothing scheduled — cron path is not armed"; fi
+# WP-Cron only fires on traffic and this environment disables it on page loads,
+# as managed hosts do. So the question is not "is something scheduled right
+# now" — right after a refresh nothing is due, and asserting otherwise just
+# tests leftovers. The question is whether a stale entry arms the machinery.
 
+fixture age gallery >/dev/null
+BEFORE="$(wp cron event list --fields=hook --format=csv | grep -c isg_refresh_cache)"
+fetch >/dev/null   # a render past soft expiry should queue the refresh
+AFTER="$(wp cron event list --fields=hook --format=csv | grep -c isg_refresh_cache)"
+
+if [ "$AFTER" -gt "$BEFORE" ]; then ok "a stale gallery queues a background refresh"
+else bad "a stale gallery queued nothing — cron path is not armed"; fi
+
+wp cron event run --due-now >/dev/null
+FRESH="$(fixture status gallery | awk '/^soft expiry/{print $3}')"
+assert "running cron makes it fresh again" "fresh" "$FRESH"
+
+# The rung that matters most: a host where cron never runs at all. The reader
+# must fetch rather than serve stale, because a page cache would otherwise
+# freeze that stale response for its own full lifetime.
+fixture stall gallery >/dev/null
+fetch >/dev/null
+STALLED="$(fixture status gallery | awk '/^soft expiry/{print $3}')"
+assert "stalled cron falls back to a synchronous refresh" "fresh" "$STALLED"
+
+head_ "Sync status"
 wp eval 'print_r( isg_sync_status() );' | sed 's/^/       /'
 
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
