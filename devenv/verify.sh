@@ -94,6 +94,22 @@ else bad "refresh route failed: ${REFRESH}"; fi
 
 assert "refresh purged the page cache" "MISS" "$(cached)"
 
+head_ "Refresh all targets the queries actually in use"
+
+# A gallery name alone does not determine the query — the limit, sort, user
+# filter, endpoint and payload profile all feed the cache key. Rebuilding
+# attributes from defaults refreshes an entry no page reads, and the symptom is
+# a refresh that reports success while the site stays stale. So this drops an
+# image from the stored copy and checks that Refresh all actually puts it back.
+TRUE_COUNT="$(fetch | grep -c '<figure class="isg-item"')"
+./simulate-change.sh >/dev/null 2>&1
+DEGRADED="$(fetch | grep -c '<figure class="isg-item"')"
+
+assert "fixture removed one image" "$((TRUE_COUNT - 1))" "$DEGRADED"
+
+wp eval 'isg_refresh_all_galleries();' >/dev/null
+assert "refresh all restored the gallery" "$TRUE_COUNT" "$(fetch | grep -c '<figure class="isg-item"')"
+
 head_ "Editor preview renders server-side"
 
 SSR="$(curl -sS -u "admin:${APP}" -G \

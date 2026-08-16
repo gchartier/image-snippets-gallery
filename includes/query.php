@@ -402,17 +402,33 @@ add_action( 'isg_refresh_cache', 'isg_do_refresh_cache', 10, 4 );
  */
 function isg_refresh_all_galleries() {
 	$results = array();
+	$done    = array();
 
-	foreach ( isg_indexed_galleries() as $gallery ) {
-		$a = isg_resolve_attributes( array( 'gallery' => $gallery ) );
+	// Driven by the blocks in use, not by gallery names. Two blocks can show the
+	// same gallery with different limits or sorting, which are different queries
+	// and therefore different cache entries; refreshing a name would refresh
+	// whichever entry the defaults happen to produce and leave the rest stale.
+	foreach ( isg_indexed_gallery_blocks() as $block ) {
+		$a        = isg_resolve_attributes( $block['attrs'] );
+		$gallery  = $block['gallery'];
+		$endpoint = isg_resolve_endpoint( $a );
+		$query    = isg_build_sparql( $a );
 
-		$results[ $gallery ] = isg_do_refresh_cache(
-			isg_resolve_endpoint( $a ),
-			isg_build_sparql( $a ),
-			isg_configured_ttl( $a ),
-			$gallery,
-			true
-		);
+		// Several posts may embed identical blocks; one refresh serves them all.
+		$key = isg_cache_key( $endpoint, $query );
+		if ( isset( $done[ $key ] ) ) {
+			continue;
+		}
+		$done[ $key ] = true;
+
+		$rows = isg_do_refresh_cache( $endpoint, $query, isg_configured_ttl( $a ), $gallery, true );
+
+		// Keyed by gallery for display, but a gallery can appear more than once
+		// with different settings, so later results must not silently replace
+		// an error reported by an earlier one.
+		if ( ! isset( $results[ $gallery ] ) || is_wp_error( $rows ) ) {
+			$results[ $gallery ] = $rows;
+		}
 	}
 
 	return $results;

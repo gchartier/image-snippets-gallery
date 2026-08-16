@@ -46,9 +46,17 @@ $before  = count( $entry["rows"] );
 $dropped = array_shift( $entry["rows"] );
 set_transient( $key, $entry, HOUR_IN_SECONDS );
 
+// Purge the page cache too, or the fixture does not take: a warm cache keeps
+// serving the render from before this ran, so the smaller gallery never
+// reaches a visitor and the test appears to have done nothing. What is being
+// staged is a site whose stored data is out of date, not a site whose page
+// cache is out of date — that is the part the refresh is supposed to fix.
+$purged = isg_purge_page_cache( isg_posts_for_gallery( $a["gallery"] ) );
+
 printf( "gallery      %s\n", $a["gallery"] );
 printf( "stored rows  %d -> %d\n", $before, count( $entry["rows"] ) );
 printf( "removed      %s\n", $dropped["title"] ?: $dropped["image"] );
+printf( "page cache   purged via %s\n", $purged ? implode( ", ", $purged ) : "nothing matched" );
 echo "\nThe site now believes this gallery has one fewer image than it does.\n";
 echo "Reload the public page (private window) to see the smaller gallery,\n";
 echo "then click Refresh from ImageSnippets and reload again.\n";
