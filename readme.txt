@@ -2,7 +2,7 @@
 Contributors: gnosyslabs
 Tags: gallery, block, media, provenance, rdf
 Requires at least: 6.4
-Tested up to: 6.7
+Tested up to: 7.0
 Requires PHP: 7.4
 Stable tag: 0.3.0
 License: GPLv2 or later
@@ -16,8 +16,22 @@ ImageSnippets Gallery adds a Block Editor block that displays images curated on 
 
 Unlike a purely client-side gallery, this plugin renders on the server and caches results, so:
 
-* The gallery's images and their provenance/license metadata are present in the page HTML — visible to search engines, social cards, and crawlers (emitted as schema.org JSON-LD).
+* The gallery's images and their provenance and licensing are present in the page HTML — visible to search engines, social cards, and crawlers, with no JavaScript required to see them.
 * Pages load faster and the ImageSnippets endpoint is queried far less often (results are cached in a transient).
+
+= What ends up in the page =
+
+Each image on ImageSnippets is described by its own named graph, and this plugin passes that graph through rather than reducing it to a handful of fields.
+
+The result is a single JSON-LD block serving two readers at once. Search engines find ordinary schema.org — an ImageGallery of ImageObjects with names, descriptions, creators, licences and the entities each image is about, every one carrying a readable name rather than a bare identifier. Semantic-web tools additionally find each image's full graph, still attributed to the graph that asserted it, including the statements schema.org has no vocabulary for: what an image depicts, what is in its background, where its scene is set.
+
+How much to embed is a per-block setting (Structured data &rarr; Metadata detail):
+
+* **schema.org only** — smallest; just what search engines read.
+* **Provenance** — the default. Adds the full provenance graph, with page furniture and camera fields stripped.
+* **Full graph** — everything, verbatim.
+
+For a forty-image gallery the default profile is roughly five kilobytes once compressed.
 
 Options:
 
@@ -58,14 +72,32 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 == Changelog ==
 
 = 0.3.0 =
-* Galleries now clear the page cache when their contents change, so updates reach visitors instead of sitting behind stored HTML. Works with the common caching plugins by detection, and exposes an `isg_gallery_changed` action for anything else.
+
+Galleries now update on their own, and the metadata embedded in the page is far richer.
+
+Freshness:
+
+* Galleries clear the page cache when their contents change, so updates reach visitors instead of sitting behind stored HTML. Works with the common caching plugins by detection, and exposes an `isg_gallery_changed` action for anything else.
 * Added a "Refresh from ImageSnippets" button to the block settings, which pulls the gallery again and reports how many images it found.
 * Added Tools &rarr; ImageSnippets: every gallery, when it last updated, how many images, which pages show it, and any error. Includes "Refresh all galleries".
 * Added Site Health reporting for gallery freshness, cron status, and page-cache detection.
 * Cache lifetime is now a per-block setting (Advanced &rarr; "Cache for (minutes)"). Set it to 0 for always-live.
 * Editor previews are now always live, so what you see while editing matches what you just changed on ImageSnippets.
-* Fixed: on sites where WP-Cron does not run, a stale gallery could stay stale indefinitely. The refresh now happens during the page view instead.
-* Fixed: the editor-only data-quality notice could appear to other REST consumers.
+
+Structured data:
+
+* Each image's whole named graph is now retrieved and passed through, rather than a fixed list of fields reassembled into schema.org by hand. Statements schema.org cannot express — what an image depicts, what is in its background, where its scene is set — survive into the page instead of being discarded.
+* Entities are emitted with the names already recorded alongside them, so nothing reaches a search engine as an unreadable identifier.
+* Named graphs keep their attribution, so a consumer can tell who asserted what.
+* New per-block setting (Structured data &rarr; Metadata detail) chooses how much to embed: schema.org only, provenance, or the full graph.
+
+Fixes:
+
+* **Page-cache clearing never worked on Cache Enabler.** The plugin called functions that do not exist in it, so every attempt silently did nothing and galleries stayed stale for visitors on any site using it.
+* **"Refresh all galleries" refreshed the wrong thing.** It rebuilt each gallery's query from default settings, so any block using a custom limit or sort order was left untouched while the screen reported success.
+* **The refresh button could report success without changing the public page.** It skipped clearing the page cache whenever the newly fetched data matched what was already stored, even though the stored HTML might not have.
+* On sites where WP-Cron does not run, a stale gallery could stay stale indefinitely. The refresh now happens during the page view instead.
+* The editor-only data-quality notice could appear to other REST consumers.
 
 = 0.2.1 =
 * Fix blurry thumbnails: serve real Flickr renditions with proper srcset/sizes derived from the full-resolution source, instead of upscaling the 128px ImageSnippets thumbnail. The thumbnail is kept only as an onerror fallback for link-rotted source URLs.
@@ -82,7 +114,7 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 == Upgrade Notice ==
 
 = 0.3.0 =
-Galleries now update on their own and clear your page cache when they change. Adds a refresh button and a Tools screen showing when each gallery last updated.
+Important fix: clearing the page cache never worked on some hosts, leaving galleries stale for visitors while looking correct to logged-in editors. Also embeds much richer image metadata for search engines.
 
 = 0.2.1 =
 Sharper gallery thumbnails.

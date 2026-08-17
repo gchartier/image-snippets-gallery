@@ -150,13 +150,14 @@ head_ "Freshness plumbing"
 # now" — right after a refresh nothing is due, and asserting otherwise just
 # tests leftovers. The question is whether a stale entry arms the machinery.
 
+# Assert on the refresh lock rather than on the cron array. wp_schedule_single_event
+# de-duplicates identical events, so an event left pending by an earlier run makes
+# the count stay flat even when this render did queue one. The lock is taken by
+# isg_schedule_refresh itself, so it is direct evidence rather than a side effect.
 fixture age gallery >/dev/null
-BEFORE="$(wp cron event list --fields=hook --format=csv | grep -c isg_refresh_cache)"
 fetch >/dev/null   # a render past soft expiry should queue the refresh
-AFTER="$(wp cron event list --fields=hook --format=csv | grep -c isg_refresh_cache)"
-
-if [ "$AFTER" -gt "$BEFORE" ]; then ok "a stale gallery queues a background refresh"
-else bad "a stale gallery queued nothing — cron path is not armed"; fi
+assert "a stale gallery queues a background refresh" "held" \
+    "$(fixture status gallery | awk '/^refresh lock/{print $3}')"
 
 wp cron event run --due-now >/dev/null
 FRESH="$(fixture status gallery | awk '/^soft expiry/{print $3}')"
