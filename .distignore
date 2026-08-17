@@ -1,0 +1,17 @@
+# Files that never ship in the plugin zip. Honoured by wp.org deploy tooling
+# and by Plugin Check; RELEASING.md's staging step should mirror this list.
+.git
+.gitignore
+.distignore
+.DS_Store
+node_modules
+devenv
+src
+vendor
+*.zip
+package.json
+package-lock.json
+composer.json
+composer.lock
+phpcs.xml.dist
+RELEASING.md

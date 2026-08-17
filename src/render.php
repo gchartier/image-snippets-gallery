@@ -8,6 +8,10 @@
  * @package ImageSnippetsGallery
  */
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 if ( ! function_exists( 'isg_render_gallery' ) ) {
 	return;
 }

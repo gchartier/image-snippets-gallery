@@ -14,6 +14,16 @@ The version string lives in **four** places — keep them in sync:
 | `src/block.json` | `"version"` |
 | `readme.txt` | `Stable tag:` — and add a `== Changelog ==` entry (plus an `== Upgrade Notice ==` line) |
 
+## 1b. Lint
+
+Both must be clean before tagging. `lint:php` runs PHPCS (WordPress-Extra) in a
+throwaway Composer container; `check` runs the official Plugin Check against the
+files that ship (the exclusion list mirrors `.distignore`).
+
+```bash
+npm run lint:js && npm run lint:php && npm run check
+```
+
 ## 2. Rebuild
 
 `build/` is gitignored but **ships in the zip**, and it carries its own copy of
@@ -43,7 +53,8 @@ git push origin vX.Y.Z
 
 A WordPress plugin zip must contain a **single top-level folder named after the
 plugin slug** (`image-snippets-gallery/`) holding only the runtime files —
-**no** `node_modules/`, `src/`, `package*.json`, or dotfiles.
+**no** `node_modules/`, `src/`, `package*.json`, or dotfiles. `.distignore` is the
+declared list of what stays out; keep the `cp` allowlist below consistent with it.
 
 This machine has no `zip` binary, so build it with Python's `zipfile`:
 

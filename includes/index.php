@@ -17,6 +17,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+// phpcs:disable WordPress.DB.DirectDatabaseQuery -- This file is the index: bulk lookups over post meta that WP_Query would do in N queries. Results are small and cached by the callers.
+
 const ISG_GALLERY_META = '_isg_gallery';
 
 /**
@@ -64,7 +66,7 @@ function isg_index_post( $post_id, $post = null ) {
 		return array();
 	}
 
-	$previous = (array) get_post_meta( $post_id, ISG_GALLERY_META );
+	$previous = (array) get_post_meta( $post_id, ISG_GALLERY_META, false );
 	delete_post_meta( $post_id, ISG_GALLERY_META );
 
 	// Skip the parse for the overwhelming majority of posts that contain no blocks.
@@ -96,7 +98,7 @@ add_action( 'save_post', 'isg_index_post', 10, 2 );
  * @return void
  */
 function isg_deindex_post( $post_id ) {
-	$had = (array) get_post_meta( absint( $post_id ), ISG_GALLERY_META );
+	$had = (array) get_post_meta( absint( $post_id ), ISG_GALLERY_META, false );
 	delete_post_meta( absint( $post_id ), ISG_GALLERY_META );
 	if ( ! empty( $had ) ) {
 		isg_prune_mirror();

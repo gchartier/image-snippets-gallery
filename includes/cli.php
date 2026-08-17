@@ -65,7 +65,7 @@ class ISG_CLI_Command {
 				if ( isset( $done[ $key ] ) ) {
 					continue;
 				}
-				$done[ $key ]                  = true;
+				$done[ $key ]                 = true;
 				$results[ $block['gallery'] ] = isg_sync_gallery( isg_resolve_endpoint( $a ), $block['gallery'], array( 'timeout' => 20 ) );
 			}
 		}
@@ -110,11 +110,11 @@ class ISG_CLI_Command {
 		$seen   = array();
 
 		foreach ( $terms as $term ) {
-			$gallery = (string) get_term_meta( $term->term_id, ISG_TERM_GALLERY, true );
-			$gallery = '' !== $gallery ? $gallery : $term->name;
-			$synced  = isg_gallery_synced_at( $term );
-			$s       = isset( $status[ $gallery ] ) ? $status[ $gallery ] : array();
-			$rows[]  = array(
+			$gallery          = (string) get_term_meta( $term->term_id, ISG_TERM_GALLERY, true );
+			$gallery          = '' !== $gallery ? $gallery : $term->name;
+			$synced           = isg_gallery_synced_at( $term );
+			$s                = isset( $status[ $gallery ] ) ? $status[ $gallery ] : array();
+			$rows[]           = array(
 				'gallery'   => $gallery,
 				'endpoint'  => (string) get_term_meta( $term->term_id, ISG_TERM_ENDPOINT, true ),
 				'mirrored'  => (int) $term->count,

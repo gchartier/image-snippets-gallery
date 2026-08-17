@@ -132,14 +132,13 @@ function isg_resolve_profile( $profile ) {
  * @return string
  */
 function isg_sparql_prefixes() {
-	return <<<SPARQL
-PREFIX dc: <http://purl.org/dc/elements/1.1/>
-PREFIX dcterms: <http://purl.org/dc/terms/>
-PREFIX lio: <https://w3id.org/lio/v1#>
-PREFIX schema: <http://schema.org/>
-PREFIX photoshop: <http://ns.adobe.com/photoshop/1.0/>
-
-SPARQL;
+	// Concatenated rather than heredoc: the wp.org review tooling rejects
+	// heredoc outright, so this stays a plain string.
+	return "PREFIX dc: <http://purl.org/dc/elements/1.1/>\n"
+		. "PREFIX dcterms: <http://purl.org/dc/terms/>\n"
+		. "PREFIX lio: <https://w3id.org/lio/v1#>\n"
+		. "PREFIX schema: <http://schema.org/>\n"
+		. "PREFIX photoshop: <http://ns.adobe.com/photoshop/1.0/>\n";
 }
 
 /**
@@ -168,18 +167,17 @@ function isg_build_sparql_list( $gallery ) {
 	$member = isg_sparql_membership( $gallery );
 	$cap    = max( 1, (int) apply_filters( 'isg_sync_max_images', ISG_SYNC_MAX_IMAGES ) );
 
-	return isg_sparql_prefixes() . <<<SPARQL
-SELECT ?page ?image (SAMPLE(?d) AS ?date_) (SAMPLE(?t) AS ?title_) WHERE {
-  GRAPH ?page {
-    {$member}
-    ?image schema:thumbnail ?thumb.
-    optional { ?image photoshop:DateCreated ?d. }
-    optional { ?image dc:title ?t. }
-  }
-}
-GROUP BY ?page ?image
-LIMIT {$cap}
-SPARQL;
+	return isg_sparql_prefixes()
+		. "SELECT ?page ?image (SAMPLE(?d) AS ?date_) (SAMPLE(?t) AS ?title_) WHERE {\n"
+		. "  GRAPH ?page {\n"
+		. "    {$member}\n"
+		. "    ?image schema:thumbnail ?thumb.\n"
+		. "    optional { ?image photoshop:DateCreated ?d. }\n"
+		. "    optional { ?image dc:title ?t. }\n"
+		. "  }\n"
+		. "}\n"
+		. "GROUP BY ?page ?image\n"
+		. "LIMIT {$cap}";
 }
 
 /**
@@ -194,15 +192,14 @@ SPARQL;
 function isg_build_sparql_graphs( array $pages ) {
 	$values = '';
 	foreach ( $pages as $page ) {
-		$values .= '<' . $page . "> ";
+		$values .= '<' . $page . '> ';
 	}
 
-	return isg_sparql_prefixes() . <<<SPARQL
-SELECT ?page ?s ?p ?o WHERE {
-  VALUES ?page { {$values}}
-  GRAPH ?page { ?s ?p ?o. }
-}
-SPARQL;
+	return isg_sparql_prefixes()
+		. "SELECT ?page ?s ?p ?o WHERE {\n"
+		. "  VALUES ?page { {$values}}\n"
+		. "  GRAPH ?page { ?s ?p ?o. }\n"
+		. '}';
 }
 
 /**
@@ -326,7 +323,7 @@ function isg_parse_graph_bindings( array $bindings, array $meta = array() ) {
 		$page = $binding['page']['value'];
 
 		if ( ! isset( $graphs[ $page ] ) ) {
-			$m = isset( $meta[ $page ] ) ? $meta[ $page ] : array();
+			$m               = isset( $meta[ $page ] ) ? $meta[ $page ] : array();
 			$graphs[ $page ] = array(
 				'image'   => isset( $m['image'] ) ? $m['image'] : ( isset( $binding['image']['value'] ) ? $binding['image']['value'] : '' ),
 				'date'    => isset( $m['date'] ) ? $m['date'] : '',

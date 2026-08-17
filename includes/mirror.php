@@ -181,7 +181,7 @@ function isg_row_hash( array $row ) {
 	$lines = array();
 	foreach ( $row['triples'] as $triple ) {
 		list( $s, $p, $o ) = $triple;
-		$lines[] = $s . "\t" . $p . "\t" . wp_json_encode( $o );
+		$lines[]           = $s . "\t" . $p . "\t" . wp_json_encode( $o );
 	}
 	sort( $lines, SORT_STRING );
 	return md5( $row['image'] . "\n" . implode( "\n", $lines ) );
@@ -258,8 +258,9 @@ function isg_mirror_posts_for_pages( array $pages ) {
 	$map = array();
 	foreach ( array_chunk( $pages, 200 ) as $chunk ) {
 		$placeholders = implode( ',', array_fill( 0, count( $chunk ), '%s' ) );
-		$rows         = $wpdb->get_results(
-			$wpdb->prepare(
+		// Direct query on purpose: one IN() lookup per 200 IRIs instead of 200 WP_Query calls during sync.
+		$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- placeholder list is built from count( $chunk ); the sniff cannot see it.
 				"SELECT pm.post_id, pm.meta_value
 				   FROM {$wpdb->postmeta} pm
 				   INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
@@ -298,12 +299,12 @@ function isg_mirror_write_row( array $row, $post_id = null ) {
 	}
 
 	$postarr = array(
-		'post_type'    => ISG_POST_TYPE,
-		'post_status'  => 'publish',
-		'post_title'   => $title,
-		'post_name'    => md5( $row['page'] ),
-		'post_content' => isg_row_search_text( $row ),
-		'post_excerpt' => isg_first( array( $row['desc'], $row['alt'] ) ),
+		'post_type'      => ISG_POST_TYPE,
+		'post_status'    => 'publish',
+		'post_title'     => $title,
+		'post_name'      => md5( $row['page'] ),
+		'post_content'   => isg_row_search_text( $row ),
+		'post_excerpt'   => isg_first( array( $row['desc'], $row['alt'] ) ),
 		'comment_status' => 'closed',
 		'ping_status'    => 'closed',
 	);
@@ -651,7 +652,8 @@ function isg_prune_mirror() {
 function isg_mirror_drop_all() {
 	global $wpdb;
 
-	$ids = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = %s", ISG_POST_TYPE ) );
+	// Direct query on purpose: bulk teardown; wp_delete_post() below does the cache invalidation.
+	$ids = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = %s", ISG_POST_TYPE ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	foreach ( (array) $ids as $id ) {
 		wp_delete_post( (int) $id, true );
 	}
@@ -698,7 +700,7 @@ function isg_mirror_query_rows( WP_Term $term, array $a ) {
 		),
 		'meta_key'               => $by_title ? ISG_META_TITLE : ISG_META_DATE, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
 		'orderby'                => array(
-			'meta_value' => $ascending ? 'ASC' : 'DESC',
+			'meta_value' => $ascending ? 'ASC' : 'DESC', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- bounded to one gallery's own mirror posts.
 			'ID'         => 'ASC',
 		),
 	);

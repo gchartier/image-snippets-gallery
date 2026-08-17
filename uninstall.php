@@ -12,6 +12,8 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
+// phpcs:disable WordPress.DB.DirectDatabaseQuery -- Uninstall must remove rows regardless of any cache; the post type and taxonomy are not registered here, so the API cannot see them.
+
 global $wpdb;
 
 // Mirrored images and gallery labels.
