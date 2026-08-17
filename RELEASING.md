@@ -51,7 +51,7 @@ This machine has no `zip` binary, so build it with Python's `zipfile`:
 VERSION=X.Y.Z
 STAGE="$(mktemp -d)/image-snippets-gallery"
 mkdir -p "$STAGE"
-cp image-snippets-gallery.php readme.txt LICENSE README.md "$STAGE/"
+cp image-snippets-gallery.php uninstall.php readme.txt LICENSE README.md "$STAGE/"
 cp -r includes build "$STAGE/"
 find "$STAGE" -name '.DS_Store' -delete
 
