@@ -22,6 +22,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 define( 'ISG_VERSION', '0.4.0' );
+// "image-snippets-gallery/image-snippets-gallery.php": how WordPress identifies
+// this plugin in per-plugin hooks such as plugin_action_links_{basename}.
+define( 'ISG_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ISG_DEFAULT_ENDPOINT', 'https://imagesnippets.com/sparql/dbpedia' );
 define( 'ISG_DATASET_BASE', 'https://imagesnippets.com/imgtag/datasets/Imagesnippets/' );
 define( 'ISG_USER_BASE', 'https://imagesnippets.com/imgtag/users/' );

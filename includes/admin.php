@@ -33,6 +33,29 @@ function isg_admin_menu() {
 add_action( 'admin_menu', 'isg_admin_menu' );
 
 /**
+ * Add a "Galleries" link to this plugin's row on the Plugins screen, first in
+ * the list, so the Tools page can be found from the place people look first.
+ *
+ * Gated on the same capability as the page itself.
+ *
+ * @param string[] $links Existing action links (Deactivate, etc.).
+ * @return string[]
+ */
+function isg_plugin_action_links( $links ) {
+	if ( ! current_user_can( 'edit_posts' ) ) {
+		return $links;
+	}
+	$galleries = sprintf(
+		'<a href="%s">%s</a>',
+		esc_url( admin_url( 'tools.php?page=isg-galleries' ) ),
+		esc_html__( 'Galleries', 'image-snippets-gallery' )
+	);
+	// Keyed, not array_unshift(): WordPress uses the key as the <span> class.
+	return array_merge( array( 'galleries' => $galleries ), $links );
+}
+add_filter( 'plugin_action_links_' . ISG_PLUGIN_BASENAME, 'isg_plugin_action_links' );
+
+/**
  * Handle the screen's two actions before anything renders.
  *
  * @return void
@@ -131,11 +154,11 @@ add_action( 'load-tools_page_isg-galleries', 'isg_handle_admin_actions' );
  *
  * @param string $action Action key.
  * @param string $label  Button label.
- * @param string $class  Button class.
+ * @param string $css_class Button class.
  * @param array  $fields Extra hidden fields.
  * @return void
  */
-function isg_action_button( $action, $label, $class = 'button', array $fields = array() ) {
+function isg_action_button( $action, $label, $css_class = 'button', array $fields = array() ) {
 	?>
 	<form method="post" style="display:inline-block;margin-right:.5em;">
 		<?php wp_nonce_field( 'isg_admin_' . $action ); ?>
@@ -143,7 +166,7 @@ function isg_action_button( $action, $label, $class = 'button', array $fields = 
 		<?php foreach ( $fields as $name => $value ) : ?>
 			<input type="hidden" name="<?php echo esc_attr( $name ); ?>" value="<?php echo esc_attr( $value ); ?>">
 		<?php endforeach; ?>
-		<button type="submit" class="<?php echo esc_attr( $class ); ?>"><?php echo esc_html( $label ); ?></button>
+		<button type="submit" class="<?php echo esc_attr( $css_class ); ?>"><?php echo esc_html( $label ); ?></button>
 	</form>
 	<?php
 }
