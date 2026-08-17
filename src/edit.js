@@ -21,6 +21,26 @@ import './editor.scss';
 
 const IRI_SAFE = /[^\w@.\-]/g; // mirror the server-side sanitizer
 
+// Mirror of isg_block_gap_css() in includes/query.php: turn the stored
+// "Block spacing" value into a CSS length for the --isg-gap custom property.
+function blockGapStyle( gap ) {
+	if ( gap && typeof gap === 'object' ) {
+		gap = gap.top;
+	}
+	if ( typeof gap !== 'string' || ! gap ) {
+		return undefined;
+	}
+	const preset = 'var:preset|spacing|';
+	if ( gap.includes( preset ) ) {
+		const slug = gap
+			.slice( gap.lastIndexOf( '|' ) + 1 )
+			.replace( /([a-z])([A-Z])/g, '$1-$2' )
+			.toLowerCase();
+		gap = `var(--wp--preset--spacing--${ slug })`;
+	}
+	return { '--isg-gap': gap };
+}
+
 export default function Edit( { attributes, setAttributes } ) {
 	const {
 		gallery,
@@ -39,7 +59,14 @@ export default function Edit( { attributes, setAttributes } ) {
 		jsonldProfile,
 	} = attributes;
 
-	const blockProps = useBlockProps();
+	// Native block supports (spacing/color/typography/border/shadow) are applied
+	// to this wrapper by useBlockProps. The server-side preview inside it is
+	// asked to skip them (skipBlockSupportAttributes below) so they are not
+	// applied twice. blockGap is the exception: core emits it only for blocks
+	// with `layout` support, so we bridge it to --isg-gap here as render does.
+	const blockProps = useBlockProps( {
+		style: blockGapStyle( attributes?.style?.spacing?.blockGap ),
+	} );
 
 	// Bumping this remounts ServerSideRender, forcing a re-fetch once the server
 	// has dropped the cached rows.
@@ -93,18 +120,30 @@ export default function Edit( { attributes, setAttributes } ) {
 						) }
 						value={ gallery }
 						onChange={ ( v ) =>
-							setAttributes( { gallery: v.replace( IRI_SAFE, '' ) } )
+							setAttributes( {
+								gallery: v.replace( IRI_SAFE, '' ),
+							} )
 						}
 					/>
 					<ToggleControl
-						label={ __( 'Show captions', 'image-snippets-gallery' ) }
+						label={ __(
+							'Show captions',
+							'image-snippets-gallery'
+						) }
 						checked={ displayCaption }
-						onChange={ ( v ) => setAttributes( { displayCaption: v } ) }
+						onChange={ ( v ) =>
+							setAttributes( { displayCaption: v } )
+						}
 					/>
 					<ToggleControl
-						label={ __( 'Show gallery title', 'image-snippets-gallery' ) }
+						label={ __(
+							'Show gallery title',
+							'image-snippets-gallery'
+						) }
 						checked={ displayTitle }
-						onChange={ ( v ) => setAttributes( { displayTitle: v } ) }
+						onChange={ ( v ) =>
+							setAttributes( { displayTitle: v } )
+						}
 					/>
 					<SelectControl
 						label={ __( 'Layout', 'image-snippets-gallery' ) }
@@ -117,7 +156,10 @@ export default function Edit( { attributes, setAttributes } ) {
 						onChange={ ( v ) => setAttributes( { layout: v } ) }
 					/>
 					<SelectControl
-						label={ __( 'Thumbnail size', 'image-snippets-gallery' ) }
+						label={ __(
+							'Thumbnail size',
+							'image-snippets-gallery'
+						) }
 						value={ thumbSize }
 						options={ [
 							{ label: 'Small', value: 'small' },
@@ -140,7 +182,9 @@ export default function Edit( { attributes, setAttributes } ) {
 							{ label: 'Photo (3:2)', value: '3-2' },
 							{ label: 'Wide (16:9)', value: '16-9' },
 						] }
-						onChange={ ( v ) => setAttributes( { aspectRatio: v } ) }
+						onChange={ ( v ) =>
+							setAttributes( { aspectRatio: v } )
+						}
 					/>
 					<ToggleControl
 						label={ __(
@@ -148,7 +192,9 @@ export default function Edit( { attributes, setAttributes } ) {
 							'image-snippets-gallery'
 						) }
 						checked={ useFilename }
-						onChange={ ( v ) => setAttributes( { useFilename: v } ) }
+						onChange={ ( v ) =>
+							setAttributes( { useFilename: v } )
+						}
 					/>
 					<Button
 						variant="secondary"
@@ -208,7 +254,10 @@ export default function Edit( { attributes, setAttributes } ) {
 						onChange={ ( v ) => setAttributes( { order: v } ) }
 					/>
 					<RangeControl
-						label={ __( 'Maximum images', 'image-snippets-gallery' ) }
+						label={ __(
+							'Maximum images',
+							'image-snippets-gallery'
+						) }
 						value={ limit }
 						min={ 1 }
 						max={ 200 }
@@ -303,6 +352,7 @@ export default function Edit( { attributes, setAttributes } ) {
 					key={ refreshKey }
 					block="imagesnippets/gallery"
 					attributes={ attributes }
+					skipBlockSupportAttributes
 					urlQueryArgs={ { isg_refresh: String( refreshKey ) } }
 				/>
 			</div>

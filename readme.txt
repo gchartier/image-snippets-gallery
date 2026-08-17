@@ -79,6 +79,11 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 
 == Changelog ==
 
+= Unreleased =
+
+* The block now uses the editor's native Color, Typography, Dimensions and Border &amp; Shadow panels (background, text and link colour; font size and line height; padding, margin and block spacing; border and shadow). Values follow the active theme's palette and spacing scale, and site owners can set defaults for the block in Styles. "Block spacing" sets the gap between images.
+* A "Galleries" link on the Plugins screen leads to Tools &rarr; ImageSnippets.
+
 = 0.4.0 =
 
 Galleries are now mirrored into WordPress rather than fetched and cached per query.

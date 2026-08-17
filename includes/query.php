@@ -80,7 +80,10 @@ function isg_flickr_base( $url ) {
 		return null;
 	}
 	$scheme = isset( $parts['scheme'] ) ? $parts['scheme'] : 'https';
-	return array( 'base' => $scheme . '://' . $parts['host'] . $stem, 'ext' => $ext );
+	return array(
+		'base' => $scheme . '://' . $parts['host'] . $stem,
+		'ext'  => $ext,
+	);
 }
 
 /**
@@ -117,7 +120,7 @@ function isg_flickr_srcset( $url ) {
 		'c' => 800,
 		'b' => 1024,
 	);
-	$out = array();
+	$out    = array();
 	foreach ( $widths as $code => $w ) {
 		$out[] = esc_url( isg_flickr_sized( $url, $code ) ) . ' ' . $w . 'w';
 	}
@@ -254,8 +257,8 @@ function isg_record_sync( $gallery, array $fields ) {
 		$status = array();
 	}
 
-	$existing            = isset( $status[ $gallery ] ) && is_array( $status[ $gallery ] ) ? $status[ $gallery ] : array();
-	$status[ $gallery ]  = array_merge( $existing, $fields );
+	$existing                           = isset( $status[ $gallery ] ) && is_array( $status[ $gallery ] ) ? $status[ $gallery ] : array();
+	$status[ $gallery ]                 = array_merge( $existing, $fields );
 	$status[ $gallery ]['last_attempt'] = time();
 
 	update_option( 'isg_sync_status', $status, false );
@@ -544,6 +547,34 @@ function isg_resolve_endpoint( array $a ) {
 }
 
 /**
+ * CSS value for the block's "Block spacing" (blockGap) setting, or '' if unset.
+ *
+ * Core only turns `style.spacing.blockGap` into CSS for blocks with `layout`
+ * support (wp-includes/block-supports/layout.php); that support is meant for
+ * container blocks and would bolt a Layout panel onto this leaf block. So we
+ * declare the support and bridge the stored value ourselves, mirroring core's
+ * preset conversion (`var:preset|spacing|40` → `var(--wp--preset--spacing--40)`)
+ * and its character allow-list.
+ *
+ * @param array $attributes Raw block attributes.
+ * @return string CSS length/var, or '' when unset or unsafe.
+ */
+function isg_block_gap_css( array $attributes ) {
+	$gap = $attributes['style']['spacing']['blockGap'] ?? null;
+	if ( is_array( $gap ) ) {
+		$gap = $gap['top'] ?? null;
+	}
+	if ( ! is_string( $gap ) || '' === $gap || preg_match( '%[\\\(&=}]|/\*%', $gap ) ) {
+		return '';
+	}
+	if ( false !== strpos( $gap, 'var:preset|spacing|' ) ) {
+		$slug = _wp_to_kebab_case( substr( $gap, strrpos( $gap, '|' ) + 1 ) );
+		return 'var(--wp--preset--spacing--' . $slug . ')';
+	}
+	return $gap;
+}
+
+/**
  * Render the gallery HTML for a set of block attributes. Called from render.php.
  *
  * @param array $attributes Block attributes.
@@ -562,8 +593,13 @@ function isg_render_gallery( array $attributes ) {
 		$ratio = 'original';
 	}
 
-	$classes            = 'isg-gallery isg-layout-' . $layout . ' isg-size-' . $size . ' isg-ratio-' . $ratio;
-	$wrapper_attributes = get_block_wrapper_attributes( array( 'class' => $classes ) );
+	$classes = 'isg-gallery isg-layout-' . $layout . ' isg-size-' . $size . ' isg-ratio-' . $ratio;
+	$extra   = array( 'class' => $classes );
+	$gap     = isg_block_gap_css( $attributes );
+	if ( '' !== $gap ) {
+		$extra['style'] = '--isg-gap:' . $gap;
+	}
+	$wrapper_attributes = get_block_wrapper_attributes( $extra );
 
 	if ( '' === trim( (string) $a['gallery'] ) ) {
 		return sprintf(
@@ -630,13 +666,21 @@ function isg_render_gallery( array $attributes ) {
 							if ( '' === $isg_source ) {
 								$isg_source = $row['thumb'];
 							}
-							$isg_src_map = array( 'small' => 'n', 'medium' => 'z', 'large' => 'c' );
+							$isg_src_map = array(
+								'small'  => 'n',
+								'medium' => 'z',
+								'large'  => 'c',
+							);
 							$isg_code    = isset( $isg_src_map[ $size ] ) ? $isg_src_map[ $size ] : 'z';
 							$isg_src     = isg_flickr_sized( $isg_source, $isg_code );
 							$isg_srcset  = isg_flickr_srcset( $isg_source );
 							// Column min-widths from style.scss (small 120 / medium 200 / large 320),
 							// with headroom since columns stretch to fill (auto-fill, 1fr).
-							$isg_sizes_map = array( 'small' => '160px', 'medium' => '260px', 'large' => '420px' );
+							$isg_sizes_map = array(
+								'small'  => '160px',
+								'medium' => '260px',
+								'large'  => '420px',
+							);
 							$isg_sizes     = isset( $isg_sizes_map[ $size ] ) ? $isg_sizes_map[ $size ] : '260px';
 							?>
 							<img
