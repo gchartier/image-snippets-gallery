@@ -2,10 +2,10 @@
 /**
  * Plugin Name:       ImageSnippets Gallery
  * Plugin URI:        https://imagesnippets.com/
- * Description:        Responsive, server-rendered gallery of images from ImageSnippets, with embedded provenance metadata (JSON-LD) for SEO and discoverability. A modern fork of "IS Gallery" by Henry Sautter.
+ * Description:        Responsive, server-rendered gallery of images from ImageSnippets, with embedded provenance metadata (JSON-LD) for SEO and discoverability. Galleries are mirrored into WordPress, so pages render without waiting on the network and site search finds the images. A modern fork of "IS Gallery" by Henry Sautter.
  * Requires at least: 6.4
  * Requires PHP:      7.4
- * Version:           0.3.0
+ * Version:           0.4.0
  * Author:            GnoSys Labs
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ISG_VERSION', '0.3.0' );
+define( 'ISG_VERSION', '0.4.0' );
 define( 'ISG_DEFAULT_ENDPOINT', 'https://imagesnippets.com/sparql/dbpedia' );
 define( 'ISG_DATASET_BASE', 'https://imagesnippets.com/imgtag/datasets/Imagesnippets/' );
 define( 'ISG_USER_BASE', 'https://imagesnippets.com/imgtag/users/' );
@@ -34,9 +34,14 @@ define( 'ISG_CRON_STALL_MARGIN', 120 );
 
 require_once __DIR__ . '/includes/cache-purge.php';
 require_once __DIR__ . '/includes/index.php';
-require_once __DIR__ . '/includes/query.php';
 require_once __DIR__ . '/includes/graph.php';
+require_once __DIR__ . '/includes/mirror.php';
+require_once __DIR__ . '/includes/query.php';
 require_once __DIR__ . '/includes/rest.php';
+
+if ( defined( 'WP_CLI' ) && WP_CLI ) {
+	require_once __DIR__ . '/includes/cli.php';
+}
 
 if ( is_admin() ) {
 	require_once __DIR__ . '/includes/admin.php';

@@ -6,11 +6,12 @@ It is an independent, modernized fork of [IS Gallery](https://wordpress.org/plug
 
 ## Why a fork?
 
-The original renders entirely in the browser, so search engines, social scrapers, and AI crawlers see an empty `<div>`. This fork runs the SPARQL query **on the server**, caches the result, and emits real HTML plus a JSON-LD `ImageGallery` — so the images *and their provenance* are present in the page source.
+The original renders entirely in the browser, so search engines, social scrapers, and AI crawlers see an empty `<div>`. This fork **mirrors each gallery into WordPress** — one hidden post per image, holding the image's whole named graph — and renders from that copy on the server, emitting real HTML plus JSON-LD. The images *and their provenance* are present in the page source, no page view ever waits on the endpoint, and WordPress site search finds the images.
 
 ## Features
 
-- **Server-side rendering** with transient caching (configurable via the `isg_cache_ttl` filter).
+- **Server-side rendering from a local mirror.** Galleries are re-fetched on a per-block interval (`isg_cache_ttl` filter), diffed, and the affected pages are cleared from any page cache when something changed. WP-CLI: `wp isg sync|status|prune|reindex|reset`.
+- **Site search** finds mirrored images by title, description, and depicted entities, linking to the gallery page.
 - **Rich JSON-LD**: an `ImageGallery` of `ImageObject`s, each linked to its canonical entity (`about`) and scene location (`contentLocation`) from the ImageSnippets graph.
 - **Smart text fallbacks**: alt text resolves `alt → description → title`; an optional filename fallback; an editor-only warning when images lack titles/alt text.
 - **Layouts**: grid, masonry, justified; small/medium/large thumbnails.

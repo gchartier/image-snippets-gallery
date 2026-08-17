@@ -76,9 +76,9 @@ Sautter's, the default) can be read but not added to. If you have one, pass it
 to setup: `./devenv/setup.sh my_gallery`, and use it below.
 
 If you do not, `simulate-change.sh` gives you the same test from the other end.
-It drops one image from what the *site* has stored, so a refresh has something
-real to correct. The purge path exercised is identical, and it does not depend
-on anyone's account:
+It drops one image from the *site's mirror* of the gallery, so a refresh has
+something real to correct. The purge path exercised is identical, and it does
+not depend on anyone's account:
 
 ```bash
 ./devenv/simulate-change.sh          # site now believes the gallery is smaller
@@ -148,7 +148,7 @@ is roughly the granularity a managed host gives you. To watch it:
 ```bash
 docker compose -f devenv/docker-compose.yml logs -f cron
 ./devenv/wp cron event list                      # what is scheduled
-./devenv/wp eval "print_r( isg_sync_status() );" # last sync, row count, errors
+./devenv/wp isg status                           # what the mirror holds, last sync, errors
 ```
 
 To iterate faster, shorten the interval — but change it back before drawing any
@@ -174,12 +174,37 @@ gallery still eventually updates for a visitor.
 
 ```bash
 ./devenv/verify.sh                       # all automated checks
-./devenv/simulate-change.sh              # make stored data disagree with source
+./devenv/simulate-change.sh              # make the mirror disagree with source
 ./devenv/wp <any wp-cli command>
+./devenv/wp isg sync [gallery] [--cron]  # sync now; --cron = purge only on change
+./devenv/wp isg status                   # the mirror, per gallery
+./devenv/wp isg reset --yes              # empty the mirror; next view rebuilds it
 ./devenv/wp cache-enabler clear          # empty the page cache by hand
 ./devenv/wp redis status                 # object cache health
 docker compose -f devenv/docker-compose.yml logs -f wordpress
 ```
+
+`fixture.php` stages states the plugin has to cope with, always resolved from
+the block on the page so it acts on what the page renders:
+
+| Command | Stages |
+|---|---|
+| `drop` | the mirror is missing an image ImageSnippets has |
+| `ghost` | the mirror has an image ImageSnippets does not — the deletion path |
+| `age` | the mirror is past its interval, nothing queued |
+| `stall` | past its interval, with a queued sync cron never ran |
+| `empty` | ImageSnippets answers with nothing — must be refused |
+| `reset` | no mirror at all — the cold-start path |
+
+---
+
+## Test D — the mirror stays invisible
+
+The mirror is one hidden post per image. `verify.sh` checks it is absent from
+the REST index, the sitemap, the admin menu, and generic `post_type => any`
+queries. If you add a plugin that enumerates post types (an SEO plugin, a
+search plugin, a backup tool), look for `isg_image` in its screens — that is
+the one place a leak would show up.
 
 ---
 

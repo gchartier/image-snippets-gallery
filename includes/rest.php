@@ -44,9 +44,9 @@ function isg_rest_can_refresh() {
 }
 
 /**
- * Pull one block's gallery again and invalidate the pages that show it.
+ * Sync one block's gallery again and invalidate the pages that show it.
  *
- * Deliberately a refresh, not just a purge. Dropping the cache and leaving the
+ * Deliberately a sync, not just a purge. Dropping the mirror and leaving the
  * refetch to whoever visits next would leave a page cache holding the old HTML
  * with nothing scheduled to replace it, so the button would appear to do
  * nothing. Fetch first, store, then invalidate.
@@ -65,27 +65,15 @@ function isg_rest_refresh( WP_REST_Request $request ) {
 		);
 	}
 
-	$endpoint = isg_resolve_endpoint( $a );
-	$query    = isg_build_sparql( $a );
+	$result = isg_refresh_gallery( isg_resolve_endpoint( $a ), $a['gallery'] );
 
-	// Clear the editor's own short-lived copy so the preview re-renders from the
-	// new rows, and the lock so this refresh is never skipped. The public entry
-	// stays put: isg_do_refresh_cache compares against it to decide whether
-	// anything actually changed.
-	delete_transient( isg_cache_key( $endpoint, $query, 'editor' ) );
-	delete_transient( isg_lock_key( $endpoint, $query ) );
-
-	// The configured lifetime, not the editor-capped one — this writes the entry
-	// the public page will read.
-	$rows = isg_do_refresh_cache( $endpoint, $query, isg_configured_ttl( $a ), $a['gallery'], true );
-
-	if ( is_wp_error( $rows ) ) {
+	if ( is_wp_error( $result ) ) {
 		return new WP_Error(
 			'isg_refresh_failed',
 			sprintf(
 				/* translators: %s: error message from the SPARQL endpoint */
 				__( 'ImageSnippets did not respond: %s', 'image-snippets-gallery' ),
-				$rows->get_error_message()
+				$result->get_error_message()
 			),
 			array( 'status' => 502 )
 		);
@@ -94,7 +82,10 @@ function isg_rest_refresh( WP_REST_Request $request ) {
 	return rest_ensure_response(
 		array(
 			'refreshed' => true,
-			'images'    => count( $rows ),
+			'images'    => (int) $result['images'],
+			'added'     => (int) $result['added'],
+			'updated'   => (int) $result['updated'],
+			'removed'   => (int) $result['removed'],
 		)
 	);
 }

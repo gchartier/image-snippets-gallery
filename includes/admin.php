@@ -72,6 +72,44 @@ function isg_handle_admin_actions() {
 		);
 	}
 
+	if ( 'sync_one' === $action ) {
+		$gallery  = isset( $_POST['isg_gallery'] ) ? sanitize_text_field( wp_unslash( $_POST['isg_gallery'] ) ) : '';
+		$endpoint = isset( $_POST['isg_endpoint'] ) ? esc_url_raw( wp_unslash( $_POST['isg_endpoint'] ) ) : ISG_DEFAULT_ENDPOINT;
+		$result   = isg_refresh_gallery( $endpoint ? $endpoint : ISG_DEFAULT_ENDPOINT, $gallery );
+		if ( is_wp_error( $result ) ) {
+			add_settings_error( 'isg', 'isg_synced', sprintf( '%s: %s', $gallery, $result->get_error_message() ), 'error' );
+		} else {
+			add_settings_error(
+				'isg',
+				'isg_synced',
+				sprintf(
+					/* translators: 1: gallery name, 2: images, 3: added, 4: updated, 5: removed */
+					__( 'Synced %1$s: %2$d images (%3$d added, %4$d updated, %5$d removed).', 'image-snippets-gallery' ),
+					$gallery,
+					$result['images'],
+					$result['added'],
+					$result['updated'],
+					$result['removed']
+				),
+				'success'
+			);
+		}
+	}
+
+	if ( 'reset_mirror' === $action ) {
+		$count = isg_mirror_drop_all();
+		add_settings_error(
+			'isg',
+			'isg_reset',
+			sprintf(
+				/* translators: %d: number of images */
+				__( 'Cleared the stored copy of every gallery (%d images). Each gallery is fetched again the next time its page is viewed.', 'image-snippets-gallery' ),
+				$count
+			),
+			'success'
+		);
+	}
+
 	if ( 'rebuild_index' === $action ) {
 		$count = isg_rebuild_index();
 		add_settings_error(
@@ -94,16 +132,40 @@ add_action( 'load-tools_page_isg-galleries', 'isg_handle_admin_actions' );
  * @param string $action Action key.
  * @param string $label  Button label.
  * @param string $class  Button class.
+ * @param array  $fields Extra hidden fields.
  * @return void
  */
-function isg_action_button( $action, $label, $class = 'button' ) {
+function isg_action_button( $action, $label, $class = 'button', array $fields = array() ) {
 	?>
 	<form method="post" style="display:inline-block;margin-right:.5em;">
 		<?php wp_nonce_field( 'isg_admin_' . $action ); ?>
 		<input type="hidden" name="isg_action" value="<?php echo esc_attr( $action ); ?>">
+		<?php foreach ( $fields as $name => $value ) : ?>
+			<input type="hidden" name="<?php echo esc_attr( $name ); ?>" value="<?php echo esc_attr( $value ); ?>">
+		<?php endforeach; ?>
 		<button type="submit" class="<?php echo esc_attr( $class ); ?>"><?php echo esc_html( $label ); ?></button>
 	</form>
 	<?php
+}
+
+/**
+ * The endpoint the site's blocks use for a gallery. Almost always the default;
+ * a block with an override wins if one exists.
+ *
+ * @param string $gallery Gallery name.
+ * @return string
+ */
+function isg_gallery_endpoint_in_use( $gallery ) {
+	static $blocks = null;
+	if ( null === $blocks ) {
+		$blocks = isg_indexed_gallery_blocks();
+	}
+	foreach ( $blocks as $block ) {
+		if ( $block['gallery'] === $gallery ) {
+			return isg_resolve_endpoint( isg_resolve_attributes( $block['attrs'] ) );
+		}
+	}
+	return ISG_DEFAULT_ENDPOINT;
 }
 
 /**
@@ -122,8 +184,12 @@ function isg_render_admin_page() {
 		<?php settings_errors( 'isg' ); ?>
 
 		<p>
+			<?php esc_html_e( 'Each gallery is fetched from ImageSnippets on a schedule and stored on this site, so pages render without waiting on the network and WordPress search can find the images. Refresh pulls the latest from ImageSnippets now.', 'image-snippets-gallery' ); ?>
+		</p>
+		<p>
 			<?php isg_action_button( 'refresh_all', __( 'Refresh all galleries', 'image-snippets-gallery' ), 'button button-primary' ); ?>
 			<?php isg_action_button( 'rebuild_index', __( 'Rebuild index', 'image-snippets-gallery' ) ); ?>
+			<?php isg_action_button( 'reset_mirror', __( 'Clear stored copies', 'image-snippets-gallery' ) ); ?>
 		</p>
 
 		<?php if ( empty( $galleries ) ) : ?>
@@ -137,28 +203,32 @@ function isg_render_admin_page() {
 						<th><?php esc_html_e( 'Last updated', 'image-snippets-gallery' ); ?></th>
 						<th><?php esc_html_e( 'Shown on', 'image-snippets-gallery' ); ?></th>
 						<th><?php esc_html_e( 'Status', 'image-snippets-gallery' ); ?></th>
+						<th></th>
 					</tr>
 				</thead>
 				<tbody>
 				<?php foreach ( $galleries as $gallery ) : ?>
 					<?php
-					$row   = isset( $status[ $gallery ] ) ? $status[ $gallery ] : array();
-					$posts = isg_posts_for_gallery( $gallery );
-					$error = isset( $row['error'] ) ? (string) $row['error'] : '';
+					$row      = isset( $status[ $gallery ] ) ? $status[ $gallery ] : array();
+					$posts    = isg_posts_for_gallery( $gallery );
+					$error    = isset( $row['error'] ) ? (string) $row['error'] : '';
+					$endpoint = isg_gallery_endpoint_in_use( $gallery );
+					$term     = isg_gallery_term( $endpoint, $gallery );
+					$synced   = isg_gallery_synced_at( $term );
 					?>
 					<tr>
 						<td><strong><?php echo esc_html( $gallery ); ?></strong></td>
-						<td><?php echo isset( $row['rows'] ) ? esc_html( (string) (int) $row['rows'] ) : '&mdash;'; ?></td>
+						<td><?php echo $term instanceof WP_Term ? esc_html( (string) (int) $term->count ) : '&mdash;'; ?></td>
 						<td>
 							<?php
-							if ( ! empty( $row['last_sync'] ) ) {
+							if ( $synced ) {
 								printf(
 									/* translators: %s: human-readable time difference */
 									esc_html__( '%s ago', 'image-snippets-gallery' ),
-									esc_html( human_time_diff( (int) $row['last_sync'] ) )
+									esc_html( human_time_diff( $synced ) )
 								);
 							} else {
-								echo '&mdash;';
+								esc_html_e( 'Not yet', 'image-snippets-gallery' );
 							}
 							?>
 						</td>
@@ -185,6 +255,19 @@ function isg_render_admin_page() {
 							<?php else : ?>
 								<span style="color:#00a32a;"><?php esc_html_e( 'OK', 'image-snippets-gallery' ); ?></span>
 							<?php endif; ?>
+						</td>
+						<td>
+							<?php
+							isg_action_button(
+								'sync_one',
+								__( 'Refresh', 'image-snippets-gallery' ),
+								'button button-small',
+								array(
+									'isg_gallery'  => $gallery,
+									'isg_endpoint' => $endpoint,
+								)
+							);
+							?>
 						</td>
 					</tr>
 				<?php endforeach; ?>
@@ -213,6 +296,26 @@ function isg_render_admin_page() {
 		<?php endif; ?>
 	</div>
 	<?php
+}
+
+/**
+ * How old a gallery's last sync may be before Site Health calls it stale.
+ *
+ * Three times the longest interval any block asks for, and never less than an
+ * hour: hosts run cron coarsely, and a warning that fires on ordinary latency
+ * teaches people to ignore it.
+ *
+ * @param string $gallery Gallery name.
+ * @return int Seconds.
+ */
+function isg_stale_after( $gallery ) {
+	$max = 0;
+	foreach ( isg_indexed_gallery_blocks() as $block ) {
+		if ( $block['gallery'] === $gallery ) {
+			$max = max( $max, isg_configured_ttl( isg_resolve_attributes( $block['attrs'] ) ) );
+		}
+	}
+	return max( HOUR_IN_SECONDS, 3 * $max );
 }
 
 /**
@@ -264,14 +367,45 @@ function isg_site_health_check() {
 	$status = isg_sync_status();
 
 	$errors = array();
+	$stale  = array();
+	$never  = array();
 	$oldest = null;
 	foreach ( $galleries as $gallery ) {
 		$row = isset( $status[ $gallery ] ) ? $status[ $gallery ] : array();
 		if ( ! empty( $row['error'] ) ) {
 			$errors[] = $gallery;
 		}
-		if ( ! empty( $row['last_sync'] ) && ( null === $oldest || (int) $row['last_sync'] < $oldest ) ) {
-			$oldest = (int) $row['last_sync'];
+		$synced = isg_gallery_synced_at( isg_gallery_term( isg_gallery_endpoint_in_use( $gallery ), $gallery ) );
+		if ( ! $synced ) {
+			if ( ! empty( isg_posts_for_gallery( $gallery ) ) ) {
+				$never[] = $gallery;
+			}
+			continue;
+		}
+		if ( null === $oldest || $synced < $oldest ) {
+			$oldest = $synced;
+		}
+		if ( ( time() - $synced ) > isg_stale_after( $gallery ) ) {
+			$stale[] = $gallery;
+		}
+	}
+
+	if ( ! empty( $stale ) || ! empty( $never ) ) {
+		$result['status'] = 'recommended';
+		$result['label']  = __( 'Some ImageSnippets galleries have not updated recently', 'image-snippets-gallery' );
+		if ( ! empty( $never ) ) {
+			$notes[] = sprintf(
+				/* translators: %s: comma-separated gallery names */
+				esc_html__( 'These galleries are on published pages but have never been fetched: %s.', 'image-snippets-gallery' ),
+				esc_html( implode( ', ', $never ) )
+			);
+		}
+		if ( ! empty( $stale ) ) {
+			$notes[] = sprintf(
+				/* translators: %s: comma-separated gallery names */
+				esc_html__( 'These galleries are well past their update interval, which usually means scheduled tasks are not running on this site: %s.', 'image-snippets-gallery' ),
+				esc_html( implode( ', ', $stale ) )
+			);
 		}
 	}
 

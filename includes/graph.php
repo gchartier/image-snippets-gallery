@@ -127,40 +127,11 @@ function isg_resolve_profile( $profile ) {
 }
 
 /**
- * Build the SPARQL query: whole named graphs for the images in a gallery.
+ * SPARQL prefixes shared by both sync queries.
  *
- * The inner SELECT picks and orders the images, so LIMIT bounds images rather
- * than triples — a plain LIMIT on the outer query would truncate mid-graph and
- * emit half an image's provenance.
- *
- * @param array $a Resolved block attributes.
  * @return string
  */
-function isg_build_sparql( array $a ) {
-	$gallery = isg_sanitize_iri_segment( $a['gallery'] );
-	$user_id = isg_sanitize_iri_segment( $a['userId'] );
-	$limit   = max( 1, min( 200, (int) $a['limit'] ) );
-	$dataset = ISG_DATASET_BASE . $gallery;
-
-	$order   = ( 'asc' === strtolower( (string) $a['order'] ) ) ? 'ASC' : 'DESC';
-	$orderby = ( 'title' === strtolower( (string) $a['orderBy'] ) ) ? '?title_' : '?date_';
-
-	// Optional filter: images whose named graph is created by a given user.
-	$creator = '';
-	if ( '' !== $user_id ) {
-		$creator = '    ?page dcterms:creator <' . ISG_USER_BASE . $user_id . ">.\n";
-	}
-
-	// The 'full' profile is verbatim by definition, so it skips the filter.
-	$filter = '';
-	if ( 'full' !== isg_resolve_profile( $a['jsonldProfile'] ) ) {
-		$clauses = array();
-		foreach ( isg_graph_dropped_prefixes() as $prefix ) {
-			$clauses[] = '! STRSTARTS( STR(?p), "' . $prefix . '" )';
-		}
-		$filter = "\n    FILTER( " . implode( ' && ', $clauses ) . ' )';
-	}
-
+function isg_sparql_prefixes() {
 	return <<<SPARQL
 PREFIX dc: <http://purl.org/dc/elements/1.1/>
 PREFIX dcterms: <http://purl.org/dc/terms/>
@@ -168,26 +139,89 @@ PREFIX lio: <https://w3id.org/lio/v1#>
 PREFIX schema: <http://schema.org/>
 PREFIX photoshop: <http://ns.adobe.com/photoshop/1.0/>
 
-SELECT ?page ?image ?date_ ?title_ ?s ?p ?o WHERE {
-  {
-    SELECT ?page ?image
-      (SAMPLE(?d) AS ?date_)
-      (SAMPLE(?t) AS ?title_)
-    WHERE { GRAPH ?page {
-      ?image lio:isIn <{$dataset}>.
-      ?image schema:thumbnail ?thumb.
-      optional { ?image photoshop:DateCreated ?d. }
-      optional { ?image dc:title ?t. }
-{$creator}    }}
-    GROUP BY ?page ?image
-    ORDER BY {$order}({$orderby})
-    LIMIT {$limit}
-  }
+SPARQL;
+}
+
+/**
+ * The gallery membership pattern. Isolated so that if ImageSnippets ever
+ * offers a better predicate than lio:isIn, this is the one place to change.
+ *
+ * Confirmed against the live endpoint (2026-08-17): the only predicate whose
+ * object is a dataset IRI is lio:isIn.
+ *
+ * @param string $gallery Gallery name (raw; sanitised here).
+ * @return string SPARQL fragment binding ?image.
+ */
+function isg_sparql_membership( $gallery ) {
+	$dataset = ISG_DATASET_BASE . isg_sanitize_iri_segment( $gallery );
+	return "?image lio:isIn <{$dataset}>.";
+}
+
+/**
+ * Sync query 1: every image in a gallery, with the fields the sync sorts and
+ * labels by. Small rows, so it is unbounded except for a safety ceiling.
+ *
+ * @param string $gallery Gallery name.
+ * @return string
+ */
+function isg_build_sparql_list( $gallery ) {
+	$member = isg_sparql_membership( $gallery );
+	$cap    = max( 1, (int) apply_filters( 'isg_sync_max_images', ISG_SYNC_MAX_IMAGES ) );
+
+	return isg_sparql_prefixes() . <<<SPARQL
+SELECT ?page ?image (SAMPLE(?d) AS ?date_) (SAMPLE(?t) AS ?title_) WHERE {
   GRAPH ?page {
-    ?s ?p ?o.{$filter}
+    {$member}
+    ?image schema:thumbnail ?thumb.
+    optional { ?image photoshop:DateCreated ?d. }
+    optional { ?image dc:title ?t. }
   }
 }
+GROUP BY ?page ?image
+LIMIT {$cap}
 SPARQL;
+}
+
+/**
+ * Sync query 2: the whole named graph for a batch of images, untrimmed.
+ *
+ * Trimming happens at render, per payload profile, so the mirror holds every
+ * triple ImageSnippets holds.
+ *
+ * @param array $pages Graph IRIs. Must already be checked with isg_iri_is_clean().
+ * @return string
+ */
+function isg_build_sparql_graphs( array $pages ) {
+	$values = '';
+	foreach ( $pages as $page ) {
+		$values .= '<' . $page . "> ";
+	}
+
+	return isg_sparql_prefixes() . <<<SPARQL
+SELECT ?page ?s ?p ?o WHERE {
+  VALUES ?page { {$values}}
+  GRAPH ?page { ?s ?p ?o. }
+}
+SPARQL;
+}
+
+/**
+ * Whether a predicate is dropped by the trimming profiles.
+ *
+ * @param string $predicate Predicate IRI.
+ * @return bool
+ */
+function isg_predicate_is_trimmed( $predicate ) {
+	static $prefixes = null;
+	if ( null === $prefixes ) {
+		$prefixes = isg_graph_dropped_prefixes();
+	}
+	foreach ( $prefixes as $prefix ) {
+		if ( 0 === strpos( $predicate, $prefix ) ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
@@ -270,16 +304,18 @@ function isg_term_to_jsonld( array $term ) {
 }
 
 /**
- * Group flat ?s ?p ?o bindings into rows, one per image.
+ * Group flat ?page ?s ?p ?o bindings into rows, one per image.
  *
- * Returns the same display keys the renderer already expects, so the render
- * path is unchanged, plus the graph itself and a label lookup built from the
- * rdfs:label statements that were sitting in the graph all along.
+ * Returns the display keys the renderer expects, plus the graph itself and a
+ * label lookup built from the rdfs:label statements that were sitting in the
+ * graph all along.
  *
- * @param array $bindings SPARQL JSON bindings.
+ * @param array $bindings SPARQL JSON bindings from the graph query.
+ * @param array $meta     Map of graph IRI to array( image, date, title ) from
+ *                        the list query.
  * @return array
  */
-function isg_parse_graph_bindings( array $bindings ) {
+function isg_parse_graph_bindings( array $bindings, array $meta = array() ) {
 	$graphs = array();
 
 	foreach ( $bindings as $binding ) {
@@ -290,10 +326,11 @@ function isg_parse_graph_bindings( array $bindings ) {
 		$page = $binding['page']['value'];
 
 		if ( ! isset( $graphs[ $page ] ) ) {
+			$m = isset( $meta[ $page ] ) ? $meta[ $page ] : array();
 			$graphs[ $page ] = array(
-				'image'   => isset( $binding['image']['value'] ) ? $binding['image']['value'] : '',
-				'date'    => isset( $binding['date_']['value'] ) ? $binding['date_']['value'] : '',
-				'title'   => isset( $binding['title_']['value'] ) ? $binding['title_']['value'] : '',
+				'image'   => isset( $m['image'] ) ? $m['image'] : ( isset( $binding['image']['value'] ) ? $binding['image']['value'] : '' ),
+				'date'    => isset( $m['date'] ) ? $m['date'] : '',
+				'title'   => isset( $m['title'] ) ? $m['title'] : '',
 				'triples' => array(),
 				'labels'  => array(),
 			);
@@ -314,10 +351,8 @@ function isg_parse_graph_bindings( array $bindings ) {
 		$rows[] = isg_graph_to_row( $page, $graph );
 	}
 
-	// Canonical order, not display order. Rows are cached and fingerprinted to
-	// decide whether a refresh changed anything, so an unstable order would look
-	// like a change every time and purge page caches for nothing. Display order
-	// is applied at render, which also means changing it needs no refetch.
+	// Canonical order, not display order. Display order is a query on the
+	// mirror; this only keeps the sync deterministic.
 	usort(
 		$rows,
 		static function ( $x, $y ) {
@@ -420,34 +455,6 @@ function isg_graph_to_row( $page, array $graph ) {
 }
 
 /**
- * Order rows.
- *
- * The inner SELECT orders the images it picks, but a SPARQL engine is under no
- * obligation to preserve that order through the outer join, so the sort is
- * redone here rather than trusted.
- *
- * @param array $rows Rows.
- * @param array $a    Resolved block attributes.
- * @return array
- */
-function isg_sort_rows( array $rows, array $a ) {
-	$by_title = ( 'title' === strtolower( (string) $a['orderBy'] ) );
-	$ascending = ( 'asc' === strtolower( (string) $a['order'] ) );
-
-	usort(
-		$rows,
-		static function ( $x, $y ) use ( $by_title ) {
-			if ( $by_title ) {
-				return strcasecmp( (string) $x['title'], (string) $y['title'] );
-			}
-			return strcmp( (string) $x['date'], (string) $y['date'] );
-		}
-	);
-
-	return $ascending ? $rows : array_reverse( $rows );
-}
-
-/**
  * The flat schema.org node for one image. This is the part Google reads.
  *
  * @param array $row          Row.
@@ -521,14 +528,23 @@ function isg_schema_node( array $row, $use_filename ) {
  * The named-graph object for one image: its triples, verbatim, still attributed
  * to the graph that asserted them.
  *
- * @param array $row Row.
+ * The mirror stores every triple. The 'provenance' profile drops the page
+ * furniture and camera fields here, at render; 'full' passes it all through.
+ *
+ * @param array  $row     Row.
+ * @param string $profile Resolved payload profile.
  * @return array
  */
-function isg_named_graph_node( array $row ) {
+function isg_named_graph_node( array $row, $profile = 'provenance' ) {
 	$subjects = array();
+	$trim     = ( 'full' !== $profile );
 
 	foreach ( $row['triples'] as $triple ) {
 		list( $subject, $predicate, $object ) = $triple;
+
+		if ( $trim && isg_predicate_is_trimmed( $predicate ) ) {
+			continue;
+		}
 
 		if ( ! isset( $subjects[ $subject ] ) ) {
 			$subjects[ $subject ] = array( '@id' => isg_compact_iri( $subject ) );
@@ -611,7 +627,7 @@ function isg_jsonld( array $rows, $gallery, $use_filename, $profile = 'provenanc
 		$nodes[]  = isg_schema_node( $row, $use_filename );
 
 		if ( 'schema' !== $profile ) {
-			$named[] = isg_named_graph_node( $row );
+			$named[] = isg_named_graph_node( $row, $profile );
 		}
 	}
 

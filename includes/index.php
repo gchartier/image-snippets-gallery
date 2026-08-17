@@ -60,20 +60,26 @@ function isg_index_post( $post_id, $post = null ) {
 	if ( ! $post instanceof WP_Post ) {
 		$post = get_post( $post_id );
 	}
-	if ( ! $post instanceof WP_Post ) {
+	if ( ! $post instanceof WP_Post || isg_is_mirror_post( $post ) ) {
 		return array();
 	}
 
+	$previous = (array) get_post_meta( $post_id, ISG_GALLERY_META );
 	delete_post_meta( $post_id, ISG_GALLERY_META );
 
 	// Skip the parse for the overwhelming majority of posts that contain no blocks.
-	if ( ! has_blocks( $post->post_content ) ) {
-		return array();
+	$galleries = array();
+	if ( has_blocks( $post->post_content ) ) {
+		$galleries = isg_collect_galleries( parse_blocks( $post->post_content ) );
+		foreach ( $galleries as $gallery ) {
+			add_post_meta( $post_id, ISG_GALLERY_META, $gallery );
+		}
 	}
 
-	$galleries = isg_collect_galleries( parse_blocks( $post->post_content ) );
-	foreach ( $galleries as $gallery ) {
-		add_post_meta( $post_id, ISG_GALLERY_META, $gallery );
+	// A gallery this post stopped showing may now be shown nowhere; if so its
+	// mirror is dead weight and goes.
+	if ( array_diff( $previous, $galleries ) ) {
+		isg_prune_mirror();
 	}
 
 	return $galleries;
@@ -83,13 +89,20 @@ add_action( 'save_post', 'isg_index_post', 10, 2 );
 /**
  * Drop a deleted post's entries so purges never target a post that is gone.
  *
+ * Hooked before deletion rather than after: by deleted_post WordPress has
+ * already removed the postmeta, so there would be nothing left to read.
+ *
  * @param int $post_id Post ID.
  * @return void
  */
 function isg_deindex_post( $post_id ) {
+	$had = (array) get_post_meta( absint( $post_id ), ISG_GALLERY_META );
 	delete_post_meta( absint( $post_id ), ISG_GALLERY_META );
+	if ( ! empty( $had ) ) {
+		isg_prune_mirror();
+	}
 }
-add_action( 'deleted_post', 'isg_deindex_post' );
+add_action( 'before_delete_post', 'isg_deindex_post' );
 
 /**
  * Published posts displaying a gallery.

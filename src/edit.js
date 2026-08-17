@@ -282,11 +282,11 @@ export default function Edit( { attributes, setAttributes } ) {
 				/>
 				<RangeControl
 					label={ __(
-						'Cache for (minutes)',
+						'Check ImageSnippets every (minutes)',
 						'image-snippets-gallery'
 					) }
 					help={ __(
-						'How long the public page reuses one pull from ImageSnippets. Set to 0 for always-live, which queries on every page view — good for demos, heavier on the endpoint. This editor preview is always live regardless.',
+						'How often this gallery is re-fetched from ImageSnippets and stored on this site. Pages always render from the stored copy, so this only sets how quickly changes arrive. Set to 0 to re-fetch on every page view — good for demos, heavier on the endpoint. This editor preview re-fetches every few seconds regardless.',
 						'image-snippets-gallery'
 					) }
 					value={ cacheTtl }
