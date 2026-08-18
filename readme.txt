@@ -27,7 +27,7 @@ Each image on ImageSnippets is described by its own named graph, and this plugin
 
 The result is a single JSON-LD block serving two readers at once. Search engines find ordinary schema.org — an ImageGallery of ImageObjects with names, descriptions, creators, licences and the entities each image is about, every one carrying a readable name rather than a bare identifier. Semantic-web tools additionally find each image's full graph, still attributed to the graph that asserted it, including the statements schema.org has no vocabulary for: what an image depicts, what is in its background, where its scene is set.
 
-How much to embed is a per-block setting (Structured data &rarr; Metadata detail):
+How much to embed is a per-block setting (Advanced &rarr; Structured data):
 
 * **schema.org only** — smallest; just what search engines read.
 * **Provenance** — the default. Adds the full provenance graph, with page furniture and camera fields stripped.
@@ -94,7 +94,7 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 * "Thumbnail size" is replaced by "Columns" (1–8, default 3), the way the core Gallery block works; phones show at most two. Existing blocks render three columns.
 * "Order by" and "Order" are merged into one "Sort by" control (Newest first, Oldest first, Title A→Z, Title Z→A). Nothing changes in saved blocks.
 * Site defaults: Tools &rarr; ImageSnippets now has a Default SPARQL endpoint and a Default refetch rate that every gallery block follows unless it sets its own under Advanced, plus a "Reset all galleries to defaults" button that removes per-block overrides.
-* Block settings are regrouped: Source (gallery, sort, maximum, refresh), Layout (layout, columns, crop ratio), Title &amp; captions, Structured data, and Advanced.
+* Block settings are regrouped: Source (gallery, sort, maximum, refresh), Layout (layout, columns, crop ratio), Title &amp; captions, and Advanced (which now also holds the structured-data detail).
 * Clicking an image opens its ImageSnippets page in a new tab, so visitors keep the gallery open.
 * The block's Advanced section shows the site default endpoint as a placeholder, and the refetch rate is a switch ("Custom refetch rate for this gallery") that reveals the slider only when overriding. "Use filename when title is missing" moved to Advanced.
 
