@@ -513,6 +513,7 @@ function isg_defaults() {
 		'endpoint'       => '',
 		'displayCaption' => false,
 		'displayTitle'   => false,
+		'titleLevel'     => 2,
 		'layout'         => 'grid',
 		'order'          => 'desc',
 		'orderBy'        => 'date',
@@ -585,7 +586,7 @@ function isg_render_gallery( array $attributes ) {
 
 	$endpoint = isg_resolve_endpoint( $a );
 
-	$layout = in_array( $a['layout'], array( 'grid', 'masonry', 'justified' ), true ) ? $a['layout'] : 'grid';
+	$layout = in_array( $a['layout'], array( 'grid', 'masonry' ), true ) ? $a['layout'] : 'grid';
 	$size   = in_array( $a['thumbSize'], array( 'small', 'medium', 'large' ), true ) ? $a['thumbSize'] : 'medium';
 	$ratio  = in_array( $a['aspectRatio'], array( 'original', '1-1', '4-3', '3-2', '16-9' ), true ) ? $a['aspectRatio'] : '4-3';
 	// Aspect-ratio cropping is incompatible with true masonry (variable heights).
@@ -627,8 +628,12 @@ function isg_render_gallery( array $attributes ) {
 	<div <?php echo $wrapper_attributes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 		<?php echo isg_editor_notice( $rows ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 
-		<?php if ( $a['displayTitle'] ) : ?>
-			<p class="isg-title"><?php echo esc_html( $a['gallery'] ); ?></p>
+		<?php
+		if ( $a['displayTitle'] ) :
+			$isg_level = (int) $a['titleLevel'];
+			$isg_tag   = 'h' . ( $isg_level >= 1 && $isg_level <= 6 ? $isg_level : 2 );
+			?>
+			<<?php echo $isg_tag; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- h1..h6 only. ?> class="isg-title"><?php echo esc_html( $a['gallery'] ); ?></<?php echo $isg_tag; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 		<?php endif; ?>
 
 		<?php if ( empty( $rows ) ) : ?>
@@ -711,9 +716,12 @@ function isg_render_gallery( array $attributes ) {
 				<?php endforeach; ?>
 			</div>
 			<?php
-			if ( '' !== $a['userId'] && '' !== $rows[0]['rights'] ) :
+			// One rights line for the whole gallery, but only when it is true of
+			// every image shown; otherwise it would misattribute someone's work.
+			$isg_rights = array_unique( array_map( 'strval', wp_list_pluck( $rows, 'rights' ) ) );
+			if ( 1 === count( $isg_rights ) && '' !== reset( $isg_rights ) ) :
 				?>
-				<p class="isg-footer"><?php echo esc_html( sprintf( /* translators: %s: rights statement */ __( 'Images %s', 'image-snippets-gallery' ), $rows[0]['rights'] ) ); ?></p>
+				<p class="isg-footer"><?php echo esc_html( sprintf( /* translators: %s: rights statement */ __( 'Images %s', 'image-snippets-gallery' ), reset( $isg_rights ) ) ); ?></p>
 			<?php endif; ?>
 			<?php echo isg_jsonld( $rows, $a['gallery'], $use_filename, $a['jsonldProfile'], isg_current_permalink() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 		<?php endif; ?>

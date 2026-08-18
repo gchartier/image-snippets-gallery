@@ -2,8 +2,9 @@
  * Front-end + shared styles for the ImageSnippets Gallery block.
  */
 .wp-block-imagesnippets-gallery {
+	// A real heading (h1–h6, level chosen in the toolbar); the theme owns its
+	// typography. Only the outer margin is normalised so it sits on the grid.
 	.isg-title {
-		font-weight: 600;
 		margin: 0 0 0.5em;
 	}
 

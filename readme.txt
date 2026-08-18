@@ -39,7 +39,7 @@ Options:
 
 * Filter by gallery name and (optionally) by ImageSnippets user.
 * Show captions and/or the gallery title.
-* Grid, masonry, or justified layouts; small/medium/large thumbnails.
+* Grid or masonry layouts; small/medium/large thumbnails; optional gallery title (heading level of your choice).
 * Sort by title or date, ascending or descending; limit the number of images.
 * Override the SPARQL endpoint (advanced).
 
@@ -84,6 +84,10 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 * The block now uses the editor's native Color, Typography, Dimensions and Border &amp; Shadow panels (background, text and link colour; font size and line height; padding, margin and block spacing; border and shadow). Values follow the active theme's palette and spacing scale, and site owners can set defaults for the block in Styles. "Block spacing" sets the gap between images.
 * A "Galleries" link on the Plugins screen leads to Tools &rarr; ImageSnippets.
 * Fixed: with a crop ratio and captions on the Grid layout, images stretched past their ratio and covered the row of captions below them.
+* The gallery title is now a real heading; choose its level (H1–H6, default H2) from the block toolbar.
+* Crop ratio is disabled, and shows "Original", while the Masonry layout is selected, since masonry keeps each image's own proportions.
+* Removed the "Justified" layout option; it had no styling of its own and rendered exactly like Grid. Saved blocks that used it fall back to Grid.
+* The rights line under a gallery now appears whenever every image shown carries the same rights statement, rather than only when a User ID filter is set (and never when statements differ, so no image is misattributed).
 
 = 0.4.0 =
 

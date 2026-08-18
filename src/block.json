@@ -65,6 +65,10 @@
 			"type": "boolean",
 			"default": false
 		},
+		"titleLevel": {
+			"type": "number",
+			"default": 2
+		},
 		"layout": {
 			"type": "string",
 			"default": "grid"

@@ -1,5 +1,6 @@
 import { __, _n, sprintf } from '@wordpress/i18n';
 import {
+	BlockControls,
 	InspectorControls,
 	InspectorAdvancedControls,
 	useBlockProps,
@@ -12,7 +13,16 @@ import {
 	RangeControl,
 	Button,
 	Notice,
+	ToolbarDropdownMenu,
 } from '@wordpress/components';
+import {
+	headingLevel1,
+	headingLevel2,
+	headingLevel3,
+	headingLevel4,
+	headingLevel5,
+	headingLevel6,
+} from '@wordpress/icons';
 import ServerSideRender from '@wordpress/server-side-render';
 import apiFetch from '@wordpress/api-fetch';
 import { useState } from '@wordpress/element';
@@ -20,6 +30,15 @@ import { useState } from '@wordpress/element';
 import './editor.scss';
 
 const IRI_SAFE = /[^\w@.\-]/g; // mirror the server-side sanitizer
+
+const HEADING_ICONS = [
+	headingLevel1,
+	headingLevel2,
+	headingLevel3,
+	headingLevel4,
+	headingLevel5,
+	headingLevel6,
+];
 
 // Mirror of isg_block_gap_css() in includes/query.php: turn the stored
 // "Block spacing" value into a CSS length for the --isg-gap custom property.
@@ -48,6 +67,7 @@ export default function Edit( { attributes, setAttributes } ) {
 		endpoint,
 		displayCaption,
 		displayTitle,
+		titleLevel,
 		layout,
 		order,
 		orderBy,
@@ -108,8 +128,36 @@ export default function Edit( { attributes, setAttributes } ) {
 			.finally( () => setRefreshing( false ) );
 	};
 
+	// Masonry keeps natural heights, so a crop ratio cannot apply there. The
+	// server forces 'original' in that case; show the same so the control tells
+	// the truth while disabled.
+	const isMasonry = 'masonry' === layout;
+	const shownRatio = isMasonry ? 'original' : aspectRatio;
+
 	return (
 		<>
+			{ displayTitle && (
+				<BlockControls group="block">
+					<ToolbarDropdownMenu
+						icon={ HEADING_ICONS[ titleLevel - 1 ] }
+						label={ __(
+							'Change title level',
+							'image-snippets-gallery'
+						) }
+						controls={ [ 1, 2, 3, 4, 5, 6 ].map( ( level ) => ( {
+							icon: HEADING_ICONS[ level - 1 ],
+							title: sprintf(
+								/* translators: %d: heading level */
+								__( 'Heading %d', 'image-snippets-gallery' ),
+								level
+							),
+							isActive: level === titleLevel,
+							onClick: () =>
+								setAttributes( { titleLevel: level } ),
+						} ) ) }
+					/>
+				</BlockControls>
+			) }
 			<InspectorControls>
 				<PanelBody title={ __( 'Gallery', 'image-snippets-gallery' ) }>
 					<TextControl
@@ -151,7 +199,6 @@ export default function Edit( { attributes, setAttributes } ) {
 						options={ [
 							{ label: 'Grid', value: 'grid' },
 							{ label: 'Masonry', value: 'masonry' },
-							{ label: 'Justified', value: 'justified' },
 						] }
 						onChange={ ( v ) => setAttributes( { layout: v } ) }
 					/>
@@ -170,11 +217,19 @@ export default function Edit( { attributes, setAttributes } ) {
 					/>
 					<SelectControl
 						label={ __( 'Crop ratio', 'image-snippets-gallery' ) }
-						help={ __(
-							'Uniform ratio prevents layout shift. Ignored for the masonry layout.',
-							'image-snippets-gallery'
-						) }
-						value={ aspectRatio }
+						help={
+							isMasonry
+								? __(
+										'Masonry keeps each image’s own proportions.',
+										'image-snippets-gallery'
+								  )
+								: __(
+										'A uniform ratio prevents layout shift while images load.',
+										'image-snippets-gallery'
+								  )
+						}
+						value={ shownRatio }
+						disabled={ isMasonry }
 						options={ [
 							{ label: 'Original (no crop)', value: 'original' },
 							{ label: 'Square (1:1)', value: '1-1' },
