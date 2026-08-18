@@ -4,7 +4,7 @@ Tags: gallery, block, media, provenance, rdf
 Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.5.1
+Stable tag: 0.5.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -79,6 +79,10 @@ If that screen says a page cache is active but has not been cleared by this plug
 Yes. When a gallery's contents change, the plugin clears the affected pages from WP Rocket, W3 Total Cache, WP Super Cache, Cache Enabler, LiteSpeed Cache, Cachify, and SG Optimizer, and signals WordPress so other caches following core conventions clear themselves. For anything else, hook the `isg_gallery_changed` action.
 
 == Changelog ==
+
+= 0.5.2 =
+
+* Fixed: an image whose ImageSnippets date is only a year (for example "2009") was mirrored but not shown, because that date was read as a time of day later today. The gallery now shows every image the refresh counts; the next sync repairs images already affected.
 
 = 0.5.1 =
 
@@ -159,6 +163,9 @@ Fixes:
 * Initial release of the fork: server-side rendering, transient caching, JSON-LD output, grid/masonry/justified layouts, configurable endpoint.
 
 == Upgrade Notice ==
+
+= 0.5.2 =
+Fixes images with year-only dates being counted but not shown. Refresh each gallery once after updating.
 
 = 0.5.1 =
 Galleries owned by other ImageSnippets accounts can now be shown by naming them owner/gallery. Existing pages need no changes.

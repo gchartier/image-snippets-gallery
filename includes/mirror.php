@@ -278,6 +278,36 @@ function isg_mirror_posts_for_pages( array $pages ) {
 }
 
 /**
+ * The timestamp to date a mirror post with, or 0 to let WordPress use now.
+ *
+ * photoshop:DateCreated is free-form. A bare year ("2009") is common, and
+ * strtotime() reads that as a clock time — 20:09 today — which is in the
+ * future, and wp_insert_post() quietly turns a future-dated post into a
+ * scheduled one that the gallery then does not show. So partial dates are
+ * completed to their first day, and anything still in the future is dropped:
+ * a post's date only sorts the admin list, so a wrong one is worse than none.
+ *
+ * @param string $raw photoshop:DateCreated as stored.
+ * @return int Unix timestamp, or 0.
+ */
+function isg_mirror_date_ts( $raw ) {
+	$raw = trim( (string) $raw );
+	if ( '' === $raw ) {
+		return 0;
+	}
+	if ( preg_match( '/^\d{4}$/', $raw ) ) {
+		$raw .= '-01-01';
+	} elseif ( preg_match( '/^\d{4}-\d{1,2}$/', $raw ) ) {
+		$raw .= '-01';
+	}
+	$ts = strtotime( $raw );
+	if ( ! $ts || $ts > time() ) {
+		return 0;
+	}
+	return $ts;
+}
+
+/**
  * Write one row to its mirror post, creating the post if needed.
  *
  * @param array    $row     Row.
@@ -291,11 +321,9 @@ function isg_mirror_write_row( array $row, $post_id = null ) {
 	}
 
 	$date = '';
-	if ( '' !== $row['date'] ) {
-		$ts = strtotime( $row['date'] );
-		if ( $ts ) {
-			$date = gmdate( 'Y-m-d H:i:s', $ts );
-		}
+	$ts   = isg_mirror_date_ts( $row['date'] );
+	if ( $ts ) {
+		$date = gmdate( 'Y-m-d H:i:s', $ts );
 	}
 
 	$postarr = array(
@@ -494,7 +522,10 @@ function isg_sync_gallery( $endpoint, $gallery, array $opts = array() ) {
 	foreach ( $rows as $row ) {
 		$post_id = isset( $existing[ $row['page'] ] ) ? (int) $existing[ $row['page'] ] : 0;
 
-		if ( $post_id && get_post_meta( $post_id, ISG_META_HASH, true ) === isg_row_hash( $row ) ) {
+		// An unchanged row is kept as is — unless its post is not published,
+		// which an earlier version could cause with a future post date. Rewriting
+		// republishes it.
+		if ( $post_id && 'publish' === get_post_status( $post_id ) && get_post_meta( $post_id, ISG_META_HASH, true ) === isg_row_hash( $row ) ) {
 			$kept[] = $post_id;
 		} else {
 			$written = isg_mirror_write_row( $row, $post_id ? $post_id : null );
