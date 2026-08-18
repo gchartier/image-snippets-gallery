@@ -38,6 +38,8 @@ delete_post_meta_by_key( '_isg_gallery' );
 // Options and transients.
 delete_option( 'isg_sync_status' );
 delete_option( 'isg_purge_adapters' );
+delete_option( 'isg_default_endpoint' );
+delete_option( 'isg_default_ttl' );
 $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_isg%' OR option_name LIKE '\\_transient\\_timeout\\_isg%'" );
 
 // Scheduled syncs.

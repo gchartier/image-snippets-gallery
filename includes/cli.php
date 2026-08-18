@@ -46,7 +46,7 @@ class ISG_CLI_Command {
 		$force = empty( $assoc_args['cron'] );
 
 		if ( ! empty( $args[0] ) ) {
-			$endpoint = ! empty( $assoc_args['endpoint'] ) ? esc_url_raw( $assoc_args['endpoint'] ) : ISG_DEFAULT_ENDPOINT;
+			$endpoint = ! empty( $assoc_args['endpoint'] ) ? esc_url_raw( $assoc_args['endpoint'] ) : isg_default_endpoint();
 			$result   = $force
 				? isg_refresh_gallery( $endpoint, $args[0] )
 				: isg_sync_gallery( $endpoint, $args[0], array( 'timeout' => 20 ) );

@@ -89,6 +89,10 @@
 			"type": "string",
 			"default": "medium"
 		},
+		"columns": {
+			"type": "number",
+			"default": 3
+		},
 		"aspectRatio": {
 			"type": "string",
 			"default": "4-3"
@@ -98,8 +102,7 @@
 			"default": false
 		},
 		"cacheTtl": {
-			"type": "number",
-			"default": 10
+			"type": [ "number", "null" ]
 		},
 		"jsonldProfile": {
 			"type": "string",

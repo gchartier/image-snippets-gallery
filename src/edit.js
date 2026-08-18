@@ -73,7 +73,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 		order,
 		orderBy,
 		limit,
-		thumbSize,
+		columns,
 		aspectRatio,
 		useFilename,
 		cacheTtl,
@@ -128,6 +128,14 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 			)
 			.finally( () => setRefreshing( false ) );
 	};
+
+	// Site-wide defaults from Tools → ImageSnippets, injected by
+	// isg_editor_defaults_script() ahead of this bundle.
+	const siteDefaults = window.isgEditorDefaults ?? {};
+	const defaultTtl = Number.isFinite( siteDefaults.ttl )
+		? siteDefaults.ttl
+		: 10;
+	const overridesTtl = null !== cacheTtl && undefined !== cacheTtl;
 
 	// Masonry keeps natural heights, so a crop ratio cannot apply there. The
 	// server forces 'original' in that case; show the same so the control tells
@@ -203,18 +211,20 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 						] }
 						onChange={ ( v ) => setAttributes( { layout: v } ) }
 					/>
-					<SelectControl
-						label={ __(
-							'Thumbnail size',
+					<RangeControl
+						label={ __( 'Columns', 'image-snippets-gallery' ) }
+						help={ __(
+							'Phones show at most two.',
 							'image-snippets-gallery'
 						) }
-						value={ thumbSize }
-						options={ [
-							{ label: 'Small', value: 'small' },
-							{ label: 'Medium', value: 'medium' },
-							{ label: 'Large', value: 'large' },
-						] }
-						onChange={ ( v ) => setAttributes( { thumbSize: v } ) }
+						value={ columns }
+						min={ 1 }
+						max={ 8 }
+						onChange={ ( v ) =>
+							setAttributes( { columns: v ?? 3 } )
+						}
+						__nextHasNoMarginBottom
+						__next40pxDefaultSize
 					/>
 					<SelectControl
 						label={ __( 'Crop ratio', 'image-snippets-gallery' ) }
@@ -240,16 +250,6 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 						] }
 						onChange={ ( v ) =>
 							setAttributes( { aspectRatio: v } )
-						}
-					/>
-					<ToggleControl
-						label={ __(
-							'Use filename when title is missing',
-							'image-snippets-gallery'
-						) }
-						checked={ useFilename }
-						onChange={ ( v ) =>
-							setAttributes( { useFilename: v } )
 						}
 					/>
 					<Button
@@ -292,22 +292,42 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 					initialOpen={ false }
 				>
 					<SelectControl
-						label={ __( 'Order by', 'image-snippets-gallery' ) }
-						value={ orderBy }
+						label={ __( 'Sort by', 'image-snippets-gallery' ) }
+						value={ `${ orderBy }-${ order }` }
 						options={ [
-							{ label: 'Title', value: 'title' },
-							{ label: 'Date', value: 'date' },
+							{
+								label: __(
+									'Newest first',
+									'image-snippets-gallery'
+								),
+								value: 'date-desc',
+							},
+							{
+								label: __(
+									'Oldest first',
+									'image-snippets-gallery'
+								),
+								value: 'date-asc',
+							},
+							{
+								label: __(
+									'Title A → Z',
+									'image-snippets-gallery'
+								),
+								value: 'title-asc',
+							},
+							{
+								label: __(
+									'Title Z → A',
+									'image-snippets-gallery'
+								),
+								value: 'title-desc',
+							},
 						] }
-						onChange={ ( v ) => setAttributes( { orderBy: v } ) }
-					/>
-					<SelectControl
-						label={ __( 'Order', 'image-snippets-gallery' ) }
-						value={ order }
-						options={ [
-							{ label: 'Ascending', value: 'asc' },
-							{ label: 'Descending', value: 'desc' },
-						] }
-						onChange={ ( v ) => setAttributes( { order: v } ) }
+						onChange={ ( v ) => {
+							const [ by, dir ] = v.split( '-' );
+							setAttributes( { orderBy: by, order: dir } );
+						} }
 					/>
 					<RangeControl
 						label={ __(
@@ -382,31 +402,71 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 						setAttributes( { userId: v.replace( IRI_SAFE, '' ) } )
 					}
 				/>
+				<ToggleControl
+					label={ __(
+						'Use filename when title is missing',
+						'image-snippets-gallery'
+					) }
+					checked={ useFilename }
+					onChange={ ( v ) => setAttributes( { useFilename: v } ) }
+				/>
 				<TextControl
 					label={ __( 'SPARQL endpoint', 'image-snippets-gallery' ) }
 					help={ __(
-						'Override the default ImageSnippets endpoint (optional).',
+						'Leave blank to use the site default (Tools → ImageSnippets).',
 						'image-snippets-gallery'
 					) }
+					placeholder={ siteDefaults.endpoint ?? '' }
 					value={ endpoint }
 					onChange={ ( v ) => setAttributes( { endpoint: v } ) }
 				/>
-				<RangeControl
-					label={ __(
-						'Check ImageSnippets every (minutes)',
-						'image-snippets-gallery'
+				{ /* One node, so the slider stays with its switch: the Advanced
+				     slot orders fills by mount time, and a child mounted later
+				     would otherwise land after core's own additions. */ }
+				<div>
+					<ToggleControl
+						label={ __(
+							'Custom refetch rate for this gallery',
+							'image-snippets-gallery'
+						) }
+						help={
+							overridesTtl
+								? undefined
+								: sprintf(
+										/* translators: %d: minutes */
+										__(
+											'Uses the site default: every %d minutes.',
+											'image-snippets-gallery'
+										),
+										defaultTtl
+								  )
+						}
+						checked={ overridesTtl }
+						onChange={ ( on ) =>
+							setAttributes( {
+								cacheTtl: on ? defaultTtl : null,
+							} )
+						}
+					/>
+					{ overridesTtl && (
+						<RangeControl
+							label={ __(
+								'Refetch every (minutes)',
+								'image-snippets-gallery'
+							) }
+							help={ __(
+								'Pages render from the stored copy; this only sets how soon changes from ImageSnippets arrive. 0 refetches on every page view.',
+								'image-snippets-gallery'
+							) }
+							value={ cacheTtl }
+							min={ 0 }
+							max={ 1440 }
+							onChange={ ( v ) =>
+								setAttributes( { cacheTtl: v ?? defaultTtl } )
+							}
+						/>
 					) }
-					help={ __(
-						'How often this gallery is re-fetched from ImageSnippets and stored on this site. Pages always render from the stored copy, so this only sets how quickly changes arrive. Set to 0 to re-fetch on every page view — good for demos, heavier on the endpoint. This editor preview re-fetches every few seconds regardless.',
-						'image-snippets-gallery'
-					) }
-					value={ cacheTtl }
-					min={ 0 }
-					max={ 120 }
-					onChange={ ( v ) =>
-						setAttributes( { cacheTtl: undefined === v ? 10 : v } )
-					}
-				/>
+				</div>
 			</InspectorAdvancedControls>
 
 			<div { ...blockProps }>

@@ -8,10 +8,16 @@
 		margin: 0 0 0.5em;
 	}
 
+	// --isg-cols / --isg-cols-sm are set on the wrapper by the server from the
+	// block's Columns setting; phones never get more than two.
 	.isg-grid {
 		display: grid;
 		gap: var( --isg-gap, 0.75rem );
-		grid-template-columns: repeat( auto-fill, minmax( var( --isg-col, 200px ), 1fr ) );
+		grid-template-columns: repeat( var( --isg-cols, 3 ), minmax( 0, 1fr ) );
+
+		@media ( max-width: 600px ) {
+			grid-template-columns: repeat( var( --isg-cols-sm, 2 ), minmax( 0, 1fr ) );
+		}
 	}
 
 	.isg-item {
@@ -69,16 +75,15 @@
 		color: #b32d2e;
 	}
 
-	// Thumbnail sizes set the grid column min-width.
-	&.isg-size-small .isg-grid { --isg-col: 120px; }
-	&.isg-size-medium .isg-grid { --isg-col: 200px; }
-	&.isg-size-large .isg-grid { --isg-col: 320px; }
-
 	// Masonry: CSS columns instead of grid.
 	&.isg-layout-masonry .isg-grid {
 		display: block;
-		column-width: var( --isg-col, 200px );
+		column-count: var( --isg-cols, 3 );
 		column-gap: var( --isg-gap, 0.75rem );
+
+		@media ( max-width: 600px ) {
+			column-count: var( --isg-cols-sm, 2 );
+		}
 
 		.isg-item {
 			break-inside: avoid;

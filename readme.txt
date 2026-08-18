@@ -90,6 +90,10 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 * New "Images" panel in the Styles tab: border, corner radius and shadow for the thumbnails themselves (the native Border &amp; Shadow panel styles the gallery as a whole). Radius defaults to the previous fixed 4px.
 * New "Title &amp; captions" panel in the Styles tab: a switch to style them separately, with their own text colour and font size (theme presets or custom); anything left unset still follows the gallery's Color and Typography.
 * The rights line under a gallery now appears whenever every image shown carries the same rights statement, rather than only when a User ID filter is set (and never when statements differ, so no image is misattributed).
+* "Thumbnail size" is replaced by "Columns" (1–8, default 3), the way the core Gallery block works; phones show at most two. Existing blocks render three columns.
+* "Order by" and "Order" are merged into one "Sort by" control (Newest first, Oldest first, Title A→Z, Title Z→A). Nothing changes in saved blocks.
+* Site defaults: Tools &rarr; ImageSnippets now has a Default SPARQL endpoint and a Default refetch rate that every gallery block follows unless it sets its own under Advanced, plus a "Reset all galleries to defaults" button that removes per-block overrides.
+* The block's Advanced section shows the site default endpoint as a placeholder, and the refetch rate is a switch ("Custom refetch rate for this gallery") that reveals the slider only when overriding. "Use filename when title is missing" moved to Advanced.
 
 = 0.4.0 =
 

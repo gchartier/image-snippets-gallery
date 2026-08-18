@@ -97,8 +97,8 @@ function isg_handle_admin_actions() {
 
 	if ( 'sync_one' === $action ) {
 		$gallery  = isset( $_POST['isg_gallery'] ) ? sanitize_text_field( wp_unslash( $_POST['isg_gallery'] ) ) : '';
-		$endpoint = isset( $_POST['isg_endpoint'] ) ? esc_url_raw( wp_unslash( $_POST['isg_endpoint'] ) ) : ISG_DEFAULT_ENDPOINT;
-		$result   = isg_refresh_gallery( $endpoint ? $endpoint : ISG_DEFAULT_ENDPOINT, $gallery );
+		$endpoint = isset( $_POST['isg_endpoint'] ) ? esc_url_raw( wp_unslash( $_POST['isg_endpoint'] ) ) : isg_default_endpoint();
+		$result   = isg_refresh_gallery( $endpoint ? $endpoint : isg_default_endpoint(), $gallery );
 		if ( is_wp_error( $result ) ) {
 			add_settings_error( 'isg', 'isg_synced', sprintf( '%s: %s', $gallery, $result->get_error_message() ), 'error' );
 		} else {
@@ -146,7 +146,120 @@ function isg_handle_admin_actions() {
 			'success'
 		);
 	}
+
+	if ( 'save_defaults' === $action ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$endpoint = isset( $_POST['isg_default_endpoint'] ) ? esc_url_raw( trim( wp_unslash( $_POST['isg_default_endpoint'] ) ) ) : '';
+		$ttl      = isset( $_POST['isg_default_ttl'] ) ? (int) wp_unslash( $_POST['isg_default_ttl'] ) : 10;
+		// The built-in endpoint is represented by an empty option, so clearing
+		// the field returns to it and a future change to the constant applies.
+		if ( ISG_DEFAULT_ENDPOINT === $endpoint ) {
+			$endpoint = '';
+		}
+		update_option( 'isg_default_endpoint', $endpoint, false );
+		update_option( 'isg_default_ttl', max( 0, min( 1440, $ttl ) ), false );
+		add_settings_error( 'isg', 'isg_defaults', __( 'Defaults saved. Galleries without their own override use them from now on.', 'image-snippets-gallery' ), 'success' );
+	}
+
+	if ( 'reset_overrides' === $action ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$count = isg_reset_block_overrides();
+		isg_rebuild_index();
+		add_settings_error(
+			'isg',
+			'isg_overrides_reset',
+			sprintf(
+				/* translators: %d: number of gallery blocks changed */
+				__( 'Removed the endpoint and refetch overrides from %d gallery blocks. They now follow the site defaults.', 'image-snippets-gallery' ),
+				$count
+			),
+			'success'
+		);
+	}
 }
+
+/**
+ * Strip the per-block `endpoint` and `cacheTtl` overrides from every
+ * ImageSnippets Gallery block on the site so they follow the site defaults.
+ *
+ * Only the block's own comment delimiter is rewritten, with WordPress's own
+ * attribute serialiser, so no other content in the post is touched. Posts are
+ * saved through wp_update_post(), which keeps a revision.
+ *
+ * @return int Number of blocks changed.
+ */
+function isg_reset_block_overrides() {
+	global $wpdb;
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off admin action; a LIKE over post_content has no WP_Query equivalent.
+	$post_ids = $wpdb->get_col(
+		"SELECT ID FROM {$wpdb->posts}
+		  WHERE post_content LIKE '%<!-- wp:imagesnippets/gallery%'
+		    AND post_status NOT IN ( 'auto-draft', 'trash', 'inherit' )
+		  LIMIT 1000"
+	);
+
+	$changed = 0;
+	foreach ( (array) $post_ids as $post_id ) {
+		$post = get_post( (int) $post_id );
+		if ( ! $post instanceof WP_Post ) {
+			continue;
+		}
+		$touched = 0;
+		$content = preg_replace_callback(
+			'#<!--\s+wp:imagesnippets/gallery(\s+(\{.*?\}))?\s+(/?)-->#s',
+			static function ( $m ) use ( &$touched ) {
+				$attrs = ! empty( $m[2] ) ? json_decode( $m[2], true ) : array();
+				if ( ! is_array( $attrs ) || ( ! array_key_exists( 'endpoint', $attrs ) && ! array_key_exists( 'cacheTtl', $attrs ) ) ) {
+					return $m[0];
+				}
+				unset( $attrs['endpoint'], $attrs['cacheTtl'] );
+				++$touched;
+				$json = $attrs ? ' ' . serialize_block_attributes( $attrs ) : '';
+				return '<!-- wp:imagesnippets/gallery' . $json . ' ' . $m[3] . '-->';
+			},
+			$post->post_content
+		);
+		if ( $touched && is_string( $content ) && $content !== $post->post_content ) {
+			wp_update_post(
+				array(
+					'ID'           => $post->ID,
+					'post_content' => $content,
+				)
+			);
+			$changed += $touched;
+		}
+	}
+	return $changed;
+}
+
+/**
+ * Hand the site defaults to the block editor so the block's Advanced section
+ * can show what "leave blank" means.
+ *
+ * An inline script rather than block_editor_settings_all: the editor package
+ * forwards only an allow-list of settings to the block editor store, so a
+ * custom key never reaches getSettings() in the post editor.
+ *
+ * @return void
+ */
+function isg_editor_defaults_script() {
+	wp_add_inline_script(
+		generate_block_asset_handle( 'imagesnippets/gallery', 'editorScript' ),
+		'window.isgEditorDefaults = ' . wp_json_encode(
+			array(
+				'endpoint' => isg_default_endpoint(),
+				'ttl'      => isg_default_ttl_minutes(),
+			)
+		) . ';',
+		'before'
+	);
+}
+add_action( 'enqueue_block_editor_assets', 'isg_editor_defaults_script' );
 add_action( 'load-tools_page_isg-galleries', 'isg_handle_admin_actions' );
 
 /**
@@ -188,7 +301,7 @@ function isg_gallery_endpoint_in_use( $gallery ) {
 			return isg_resolve_endpoint( isg_resolve_attributes( $block['attrs'] ) );
 		}
 	}
-	return ISG_DEFAULT_ENDPOINT;
+	return isg_default_endpoint();
 }
 
 /**
@@ -296,6 +409,42 @@ function isg_render_admin_page() {
 				<?php endforeach; ?>
 				</tbody>
 			</table>
+		<?php endif; ?>
+
+		<?php if ( current_user_can( 'manage_options' ) ) : ?>
+		<h2><?php esc_html_e( 'Defaults', 'image-snippets-gallery' ); ?></h2>
+		<p><?php esc_html_e( 'Every gallery block uses these unless it sets its own values under Advanced in the block settings.', 'image-snippets-gallery' ); ?></p>
+		<form method="post">
+			<?php wp_nonce_field( 'isg_admin_save_defaults' ); ?>
+			<input type="hidden" name="isg_action" value="save_defaults">
+			<table class="form-table" role="presentation">
+				<tr>
+					<th scope="row"><label for="isg_default_endpoint"><?php esc_html_e( 'Default SPARQL endpoint', 'image-snippets-gallery' ); ?></label></th>
+					<td>
+						<input type="url" class="regular-text code" id="isg_default_endpoint" name="isg_default_endpoint"
+							value="<?php echo esc_attr( (string) get_option( 'isg_default_endpoint', '' ) ); ?>"
+							placeholder="<?php echo esc_attr( ISG_DEFAULT_ENDPOINT ); ?>">
+						<p class="description"><?php esc_html_e( 'Leave blank for the ImageSnippets endpoint.', 'image-snippets-gallery' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><label for="isg_default_ttl"><?php esc_html_e( 'Default refetch rate', 'image-snippets-gallery' ); ?></label></th>
+					<td>
+						<input type="number" class="small-text" id="isg_default_ttl" name="isg_default_ttl" min="0" max="1440" step="1"
+							value="<?php echo esc_attr( (string) isg_default_ttl_minutes() ); ?>">
+						<?php esc_html_e( 'minutes', 'image-snippets-gallery' ); ?>
+						<p class="description"><?php esc_html_e( 'How often each gallery is checked against ImageSnippets and the stored copy updated. 0 checks on every page view.', 'image-snippets-gallery' ); ?></p>
+					</td>
+				</tr>
+			</table>
+			<p>
+				<button type="submit" class="button button-primary"><?php esc_html_e( 'Save defaults', 'image-snippets-gallery' ); ?></button>
+			</p>
+		</form>
+		<p>
+			<?php isg_action_button( 'reset_overrides', __( 'Reset all galleries to defaults', 'image-snippets-gallery' ) ); ?>
+			<span class="description"><?php esc_html_e( 'Removes any per-gallery endpoint or refetch override so every block follows the defaults above.', 'image-snippets-gallery' ); ?></span>
+		</p>
 		<?php endif; ?>
 
 		<h2><?php esc_html_e( 'Caching', 'image-snippets-gallery' ); ?></h2>

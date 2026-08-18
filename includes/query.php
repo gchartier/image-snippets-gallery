@@ -164,7 +164,8 @@ function isg_lock_key( $endpoint, $gallery ) {
  * @return int Seconds.
  */
 function isg_configured_ttl( array $a ) {
-	$minutes = isset( $a['cacheTtl'] ) ? (int) $a['cacheTtl'] : 10;
+	// null / '' = no per-block override: use the site default from Tools.
+	$minutes = ( isset( $a['cacheTtl'] ) && '' !== $a['cacheTtl'] ) ? (int) $a['cacheTtl'] : isg_default_ttl_minutes();
 	return max( 0, min( 1440, $minutes ) ) * MINUTE_IN_SECONDS;
 }
 
@@ -519,9 +520,10 @@ function isg_defaults() {
 		'orderBy'        => 'date',
 		'limit'          => 40,
 		'thumbSize'      => 'medium',
+		'columns'        => 3,
 		'aspectRatio'    => '4-3',
 		'useFilename'    => false,
-		'cacheTtl'       => 10,
+		'cacheTtl'       => null,
 		'jsonldProfile'  => 'provenance',
 		'imageBorder'    => null,
 		'imageRadius'    => null,
@@ -546,13 +548,36 @@ function isg_resolve_attributes( array $attributes ) {
 }
 
 /**
- * Resolve the SPARQL endpoint for a set of resolved attributes.
+ * The site-wide default SPARQL endpoint: the Tools screen setting, else the
+ * built-in ImageSnippets endpoint.
+ *
+ * @return string
+ */
+function isg_default_endpoint() {
+	$url = esc_url_raw( (string) get_option( 'isg_default_endpoint', '' ) );
+	return '' !== $url ? $url : ISG_DEFAULT_ENDPOINT;
+}
+
+/**
+ * The site-wide default refetch interval in minutes (Tools screen setting).
+ *
+ * @return int
+ */
+function isg_default_ttl_minutes() {
+	$minutes = get_option( 'isg_default_ttl', 10 );
+	$minutes = is_numeric( $minutes ) ? (int) $minutes : 10;
+	return max( 0, min( 1440, $minutes ) );
+}
+
+/**
+ * Resolve the SPARQL endpoint for a set of resolved attributes: the block's
+ * own override if it has one, else the site default.
  *
  * @param array $a Resolved attributes.
  * @return string
  */
 function isg_resolve_endpoint( array $a ) {
-	return $a['endpoint'] ? esc_url_raw( $a['endpoint'] ) : ISG_DEFAULT_ENDPOINT;
+	return ! empty( $a['endpoint'] ) ? esc_url_raw( $a['endpoint'] ) : isg_default_endpoint();
 }
 
 /**
@@ -726,17 +751,24 @@ function isg_render_gallery( array $attributes ) {
 	$endpoint = isg_resolve_endpoint( $a );
 
 	$layout = in_array( $a['layout'], array( 'grid', 'masonry' ), true ) ? $a['layout'] : 'grid';
-	$size   = in_array( $a['thumbSize'], array( 'small', 'medium', 'large' ), true ) ? $a['thumbSize'] : 'medium';
+	$cols   = max( 1, min( 8, (int) $a['columns'] ) );
 	$ratio  = in_array( $a['aspectRatio'], array( 'original', '1-1', '4-3', '3-2', '16-9' ), true ) ? $a['aspectRatio'] : '4-3';
+	// Which Flickr rendition to request as the src, by how wide a column is.
+	$size = $cols >= 5 ? 'small' : ( $cols >= 3 ? 'medium' : 'large' );
 	// Aspect-ratio cropping is incompatible with true masonry (variable heights).
 	if ( 'masonry' === $layout ) {
 		$ratio = 'original';
 	}
 
 	$style   = isg_style_vars( $a );
-	$classes = implode( ' ', array_merge( array( 'isg-gallery', 'isg-layout-' . $layout, 'isg-size-' . $size, 'isg-ratio-' . $ratio ), $style['classes'] ) );
+	$classes = implode( ' ', array_merge( array( 'isg-gallery', 'isg-layout-' . $layout, 'isg-ratio-' . $ratio ), $style['classes'] ) );
 	$extra   = array( 'class' => $classes );
-	$gap     = isg_block_gap_css( $attributes );
+
+	// Column count, and the count phones get (never more than two).
+	$style['vars']['--isg-cols']    = (string) $cols;
+	$style['vars']['--isg-cols-sm'] = (string) min( 2, $cols );
+
+	$gap = isg_block_gap_css( $attributes );
 	if ( '' !== $gap ) {
 		$style['vars']['--isg-gap'] = $gap;
 	}
@@ -826,14 +858,8 @@ function isg_render_gallery( array $attributes ) {
 							$isg_code    = isset( $isg_src_map[ $size ] ) ? $isg_src_map[ $size ] : 'z';
 							$isg_src     = isg_flickr_sized( $isg_source, $isg_code );
 							$isg_srcset  = isg_flickr_srcset( $isg_source );
-							// Column min-widths from style.scss (small 120 / medium 200 / large 320),
-							// with headroom since columns stretch to fill (auto-fill, 1fr).
-							$isg_sizes_map = array(
-								'small'  => '160px',
-								'medium' => '260px',
-								'large'  => '420px',
-							);
-							$isg_sizes     = isset( $isg_sizes_map[ $size ] ) ? $isg_sizes_map[ $size ] : '260px';
+							// One column's share of the viewport; phones cap at two columns.
+							$isg_sizes = sprintf( '(max-width: 600px) %dvw, %dvw', (int) ( 100 / min( 2, $cols ) ), (int) ceil( 100 / $cols ) );
 							?>
 							<img
 								src="<?php echo esc_url( $isg_src ); ?>"
