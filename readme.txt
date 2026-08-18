@@ -27,13 +27,9 @@ Each image on ImageSnippets is described by its own named graph, and this plugin
 
 The result is a single JSON-LD block serving two readers at once. Search engines find ordinary schema.org — an ImageGallery of ImageObjects with names, descriptions, creators, licences and the entities each image is about, every one carrying a readable name rather than a bare identifier. Semantic-web tools additionally find each image's full graph, still attributed to the graph that asserted it, including the statements schema.org has no vocabulary for: what an image depicts, what is in its background, where its scene is set.
 
-How much to embed is a per-block setting (Advanced &rarr; Structured data):
+Whether to embed the graphs is a per-block toggle (Advanced &rarr; "Include full JSON-LD for images"). It is on by default. Turned off, only the schema.org description of each image is embedded — smallest page, just what search engines read.
 
-* **schema.org only** — smallest; just what search engines read.
-* **Provenance** — the default. Adds the full provenance graph, with page furniture and camera fields stripped.
-* **Full graph** — everything, verbatim.
-
-For a forty-image gallery the default profile is roughly five kilobytes once compressed.
+For a forty-image gallery the default is roughly five kilobytes once compressed.
 
 Options:
 
@@ -82,6 +78,7 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 
 = 0.6.0 =
 
+* The Structured data dropdown (schema.org only / Provenance / Full graph) is now a single toggle, "Include full JSON-LD for images", on by default. Off embeds only the schema.org description. The Full graph profile — which added only the ImageSnippets page's Open Graph and Twitter tags — is no longer offered in the editor; the `isg_jsonld_payload` filter still receives the full graph. Blocks already saved with a profile keep working.
 * The Gallery setting is now a picker: it lists every gallery on ImageSnippets with its image count, searchable as you type. Galleries outside the main Imagesnippets datasets appear as owner/gallery. A name that is not on the list can still be typed. The list is fetched when the block settings open and cached for 15 minutes.
 
 = 0.5.2 =

@@ -109,6 +109,12 @@ function isg_graph_about_predicates() {
 /**
  * Valid JSON-LD payload profiles.
  *
+ * The editor exposes only two of these, as a toggle: 'provenance' (on) and
+ * 'schema' (off). 'full' — 'provenance' plus the ImageSnippets page's own Open
+ * Graph, Twitter and stylesheet triples, and EXIF where a graph has any — is
+ * still accepted from saved blocks and from code, but is not offered in the UI:
+ * on the corpus it adds page furniture, not provenance.
+ *
  * @return array
  */
 function isg_jsonld_profiles() {

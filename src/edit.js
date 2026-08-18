@@ -443,37 +443,28 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 			/>
 
 			<InspectorAdvancedControls>
-				<SelectControl
-					label={ __( 'Structured data', 'image-snippets-gallery' ) }
-					help={ __(
-						'How much of each image’s ImageSnippets metadata to embed in the page for search engines and semantic-web tools.',
+				<ToggleControl
+					label={ __(
+						'Include full JSON-LD for images',
 						'image-snippets-gallery'
 					) }
-					value={ jsonldProfile }
-					options={ [
-						{
-							label: __(
-								'schema.org only — smallest',
-								'image-snippets-gallery'
-							),
-							value: 'schema',
-						},
-						{
-							label: __(
-								'Provenance — recommended',
-								'image-snippets-gallery'
-							),
-							value: 'provenance',
-						},
-						{
-							label: __(
-								'Full graph — largest',
-								'image-snippets-gallery'
-							),
-							value: 'full',
-						},
-					] }
-					onChange={ ( v ) => setAttributes( { jsonldProfile: v } ) }
+					help={
+						'schema' === jsonldProfile
+							? __(
+									'Off: only the schema.org description of each image is embedded — what search engines read. Smallest page.',
+									'image-snippets-gallery'
+							  )
+							: __(
+									'On: each image’s ImageSnippets graph — what it depicts, where, by whom, and who asserted it — is embedded alongside the schema.org description, for semantic-web tools.',
+									'image-snippets-gallery'
+							  )
+					}
+					checked={ 'schema' !== jsonldProfile }
+					onChange={ ( on ) =>
+						setAttributes( {
+							jsonldProfile: on ? 'provenance' : 'schema',
+						} )
+					}
 				/>
 				<TextControl
 					label={ __( 'User ID', 'image-snippets-gallery' ) }
