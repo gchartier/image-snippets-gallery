@@ -151,8 +151,9 @@ function isg_handle_admin_actions() {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		$endpoint = isset( $_POST['isg_default_endpoint'] ) ? esc_url_raw( trim( wp_unslash( $_POST['isg_default_endpoint'] ) ) ) : '';
-		$ttl      = isset( $_POST['isg_default_ttl'] ) ? (int) wp_unslash( $_POST['isg_default_ttl'] ) : 10;
+		$endpoint = isset( $_POST['isg_default_endpoint'] ) ? esc_url_raw( wp_unslash( $_POST['isg_default_endpoint'] ) ) : '';
+		$ttl      = isset( $_POST['isg_default_ttl'] ) ? absint( wp_unslash( $_POST['isg_default_ttl'] ) ) : 10;
+		$endpoint = trim( $endpoint );
 		// The built-in endpoint is represented by an empty option, so clearing
 		// the field returns to it and a future change to the constant applies.
 		if ( ISG_DEFAULT_ENDPOINT === $endpoint ) {

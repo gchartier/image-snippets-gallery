@@ -4,7 +4,7 @@ Tags: gallery, block, media, provenance, rdf
 Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.4.0
+Stable tag: 0.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -80,7 +80,9 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 
 == Changelog ==
 
-= Unreleased =
+= 0.5.0 =
+
+A block-settings overhaul: the gallery now feels like a core block.
 
 * The block now uses the editor's native Color, Typography, Dimensions and Border &amp; Shadow panels (background, text and link colour; font size and line height; padding, margin and block spacing; border and shadow). Values follow the active theme's palette and spacing scale, and site owners can set defaults for the block in Styles. "Block spacing" sets the gap between images.
 * A "Galleries" link on the Plugins screen leads to Tools &rarr; ImageSnippets.
@@ -153,6 +155,9 @@ Fixes:
 * Initial release of the fork: server-side rendering, transient caching, JSON-LD output, grid/masonry/justified layouts, configurable endpoint.
 
 == Upgrade Notice ==
+
+= 0.5.0 =
+Settings overhaul: Columns replaces thumbnail size (existing galleries render three columns), the title is a real heading, thumbnails and captions can be styled on their own, and site-wide defaults live under Tools &rarr; ImageSnippets. Existing pages need no changes.
 
 = 0.4.0 =
 Galleries are now stored in WordPress: pages render without waiting on ImageSnippets, and your site search finds the images. Existing pages need no changes.
