@@ -7,6 +7,7 @@ import {
 } from '@wordpress/block-editor';
 import {
 	PanelBody,
+	ComboboxControl,
 	TextControl,
 	ToggleControl,
 	SelectControl,
@@ -25,7 +26,7 @@ import {
 } from '@wordpress/icons';
 import ServerSideRender from '@wordpress/server-side-render';
 import apiFetch from '@wordpress/api-fetch';
-import { useState } from '@wordpress/element';
+import { useState, useEffect, useMemo } from '@wordpress/element';
 
 import GalleryStyleControls from './style-controls';
 import './editor.scss';
@@ -97,6 +98,90 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 	const [ refreshing, setRefreshing ] = useState( false );
 	const [ refreshError, setRefreshError ] = useState( '' );
 	const [ refreshNotice, setRefreshNotice ] = useState( '' );
+
+	// The gallery picker's list, from imagesnippets/v1/galleries. Failure is
+	// not fatal: the picker still accepts a typed name.
+	const [ galleryList, setGalleryList ] = useState( [] );
+	const [ galleryListState, setGalleryListState ] = useState( 'loading' ); // loading | ready | error
+	const [ galleryTyped, setGalleryTyped ] = useState( '' );
+	useEffect( () => {
+		let cancelled = false;
+		setGalleryListState( 'loading' );
+		const query = endpoint
+			? `?endpoint=${ encodeURIComponent( endpoint ) }`
+			: '';
+		apiFetch( { path: `/imagesnippets/v1/galleries${ query }` } )
+			.then( ( result ) => {
+				if ( cancelled ) {
+					return;
+				}
+				setGalleryList( result?.galleries ?? [] );
+				setGalleryListState( 'ready' );
+			} )
+			.catch( () => {
+				if ( ! cancelled ) {
+					setGalleryList( [] );
+					setGalleryListState( 'error' );
+				}
+			} );
+		return () => {
+			cancelled = true;
+		};
+	}, [ endpoint ] );
+
+	const galleryOptions = useMemo( () => {
+		const options = galleryList.map( ( g ) => ( {
+			value: g.value,
+			label: sprintf(
+				/* translators: 1: gallery name, 2: number of images */
+				_n(
+					'%1$s — %2$d image',
+					'%1$s — %2$d images',
+					g.count,
+					'image-snippets-gallery'
+				),
+				g.value,
+				g.count
+			),
+		} ) );
+		const known = new Set( options.map( ( o ) => o.value ) );
+		// A stored name that is not on the list — set before the list existed,
+		// or newer than the cached list — stays selectable, shown plainly.
+		if ( gallery && ! known.has( gallery ) ) {
+			options.unshift( { value: gallery, label: gallery } );
+			known.add( gallery );
+		}
+		// A typed name that matches nothing is offered as an explicit choice.
+		// It goes last so Enter picks a real match when there is one.
+		const typed = galleryTyped.replace( GALLERY_SAFE, '' );
+		if ( typed && ! known.has( typed ) ) {
+			options.push( {
+				value: typed,
+				label: sprintf(
+					/* translators: %s: gallery name as typed */
+					__( 'Use “%s”', 'image-snippets-gallery' ),
+					typed
+				),
+			} );
+		}
+		return options;
+	}, [ galleryList, galleryTyped, gallery ] );
+
+	let galleryHelp = __(
+		'The gallery on ImageSnippets. Galleries outside the main Imagesnippets datasets are listed as owner/gallery.',
+		'image-snippets-gallery'
+	);
+	if ( 'loading' === galleryListState ) {
+		galleryHelp = __(
+			'Loading galleries from ImageSnippets…',
+			'image-snippets-gallery'
+		);
+	} else if ( 'error' === galleryListState ) {
+		galleryHelp = __(
+			'Could not load the gallery list from ImageSnippets. Type the gallery name; for a gallery outside the main Imagesnippets datasets, include its owner: owner/gallery.',
+			'image-snippets-gallery'
+		);
+	}
 
 	const refresh = () => {
 		setRefreshing( true );
@@ -171,18 +256,24 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 			) }
 			<InspectorControls>
 				<PanelBody title={ __( 'Source', 'image-snippets-gallery' ) }>
-					<TextControl
-						label={ __( 'Gallery name', 'image-snippets-gallery' ) }
-						help={ __(
-							'The gallery name on ImageSnippets. For a gallery outside the main Imagesnippets datasets, include its owner: owner/gallery.',
-							'image-snippets-gallery'
-						) }
+					<ComboboxControl
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+						label={ __( 'Gallery', 'image-snippets-gallery' ) }
+						help={ galleryHelp }
 						value={ gallery }
+						options={ galleryOptions }
 						onChange={ ( v ) =>
 							setAttributes( {
-								gallery: v.replace( GALLERY_SAFE, '' ),
+								gallery: ( v ?? '' ).replace(
+									GALLERY_SAFE,
+									''
+								),
 							} )
 						}
+						onFilterValueChange={ setGalleryTyped }
+						allowReset
+						expandOnFocus
 					/>
 					<SelectControl
 						label={ __( 'Sort by', 'image-snippets-gallery' ) }

@@ -181,6 +181,31 @@ function isg_dataset_iri( $gallery ) {
 }
 
 /**
+ * Listing query: every dataset that has at least one image with a thumbnail,
+ * with its image count. Feeds the editor's gallery picker.
+ *
+ * The thumbnail condition matches the sync's, so the count shown when
+ * choosing a gallery is the count the block will then show. lio:isIn also
+ * points at things that are not datasets (DBpedia concepts, places, skolem
+ * nodes); those are filtered out in PHP by IRI prefix, not here, so this
+ * query stays cheap and the endpoint's regex support is not relied on.
+ *
+ * @return string
+ */
+function isg_build_sparql_datasets() {
+	return isg_sparql_prefixes()
+		. "SELECT ?ds (COUNT(DISTINCT ?image) AS ?n) WHERE {\n"
+		. "  GRAPH ?page {\n"
+		. "    ?image lio:isIn ?ds.\n"
+		. "    ?image schema:thumbnail ?thumb.\n"
+		. "  }\n"
+		. "}\n"
+		. "GROUP BY ?ds\n"
+		. "ORDER BY ?ds\n"
+		. 'LIMIT 2000';
+}
+
+/**
  * Sync query 1: every image in a gallery, with the fields the sync sorts and
  * labels by. Small rows, so it is unbounded except for a safety ceiling.
  *

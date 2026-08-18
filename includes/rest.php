@@ -1,6 +1,6 @@
 <?php
 /**
- * REST route backing the editor's "Refresh from ImageSnippets" button.
+ * REST routes behind the editor: the gallery picker's list and the "Refresh from ImageSnippets" button.
  *
  * @package ImageSnippetsGallery
  */
@@ -15,6 +15,27 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return void
  */
 function isg_register_rest_routes() {
+	register_rest_route(
+		'imagesnippets/v1',
+		'/galleries',
+		array(
+			'methods'             => WP_REST_Server::READABLE,
+			'callback'            => 'isg_rest_galleries',
+			'permission_callback' => 'isg_rest_can_refresh',
+			'args'                => array(
+				'endpoint' => array(
+					'type'              => 'string',
+					'required'          => false,
+					'sanitize_callback' => 'esc_url_raw',
+				),
+				'fresh'    => array(
+					'type'     => 'boolean',
+					'required' => false,
+					'default'  => false,
+				),
+			),
+		)
+	);
 	register_rest_route(
 		'imagesnippets/v1',
 		'/refresh',
@@ -41,6 +62,37 @@ add_action( 'rest_api_init', 'isg_register_rest_routes' );
  */
 function isg_rest_can_refresh() {
 	return current_user_can( 'edit_posts' );
+}
+
+/**
+ * The galleries the endpoint offers, for the editor's gallery picker.
+ *
+ * Same permission as refresh: it makes an outbound request on the caller's
+ * behalf. Read-only otherwise.
+ *
+ * @param WP_REST_Request $request Request.
+ * @return WP_REST_Response|WP_Error
+ */
+function isg_rest_galleries( WP_REST_Request $request ) {
+	$endpoint = (string) $request->get_param( 'endpoint' );
+	if ( '' === $endpoint ) {
+		$endpoint = isg_default_endpoint();
+	}
+
+	$list = isg_list_galleries( $endpoint, (bool) $request->get_param( 'fresh' ) );
+	if ( is_wp_error( $list ) ) {
+		return new WP_Error(
+			'isg_list_failed',
+			sprintf(
+				/* translators: %s: error message from the SPARQL endpoint */
+				__( 'ImageSnippets did not respond: %s', 'image-snippets-gallery' ),
+				$list->get_error_message()
+			),
+			array( 'status' => 502 )
+		);
+	}
+
+	return rest_ensure_response( array( 'galleries' => $list ) );
 }
 
 /**

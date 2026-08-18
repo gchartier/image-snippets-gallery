@@ -553,6 +553,84 @@ function isg_resolve_attributes( array $attributes ) {
  *
  * @return string
  */
+/**
+ * The galleries an endpoint offers, for the editor's picker.
+ *
+ * One SPARQL query, cached briefly per endpoint: the list changes only when
+ * someone makes a gallery on ImageSnippets, and the picker is opened far more
+ * often than that. Failures are not cached, so a blip does not blank the
+ * picker for the whole cache period; the editor falls back to typing.
+ *
+ * Each entry: 'value' is what the block stores ("owner/gallery", or the bare
+ * name for the default owner — see isg_dataset_iri()), plus 'owner', 'name'
+ * and 'count'. Sorted with the default owner first, then by owner and name.
+ *
+ * @param string $endpoint SPARQL endpoint URL.
+ * @param bool   $fresh    Bypass and replace the cache.
+ * @return array|WP_Error
+ */
+function isg_list_galleries( $endpoint, $fresh = false ) {
+	$key = 'isg_galleries_' . md5( (string) $endpoint );
+	if ( ! $fresh ) {
+		$cached = get_transient( $key );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+	}
+
+	$rows = isg_sparql_json( $endpoint, isg_build_sparql_datasets(), 15 );
+	if ( is_wp_error( $rows ) ) {
+		return $rows;
+	}
+
+	$list = array();
+	foreach ( $rows as $row ) {
+		$iri = isset( $row['ds']['value'] ) ? (string) $row['ds']['value'] : '';
+		if ( 0 !== strpos( $iri, ISG_DATASET_BASE ) ) {
+			continue;
+		}
+		$parts = explode( '/', substr( $iri, strlen( ISG_DATASET_BASE ) ) );
+		if ( 2 !== count( $parts ) || '' === $parts[0] || '' === $parts[1] ) {
+			continue;
+		}
+		$owner = rawurldecode( $parts[0] );
+		$name  = rawurldecode( $parts[1] );
+		// Only names the block can store unchanged are offered.
+		if ( isg_sanitize_iri_segment( $owner ) !== $owner || isg_sanitize_iri_segment( $name ) !== $name ) {
+			continue;
+		}
+		$list[] = array(
+			'value' => ( ISG_DEFAULT_DATASET_OWNER === $owner ? '' : $owner . '/' ) . $name,
+			'owner' => $owner,
+			'name'  => $name,
+			'count' => isset( $row['n']['value'] ) ? (int) $row['n']['value'] : 0,
+		);
+	}
+
+	usort(
+		$list,
+		function ( $x, $y ) {
+			$xd = ( ISG_DEFAULT_DATASET_OWNER === $x['owner'] ) ? 0 : 1;
+			$yd = ( ISG_DEFAULT_DATASET_OWNER === $y['owner'] ) ? 0 : 1;
+			if ( $xd !== $yd ) {
+				return $xd - $yd;
+			}
+			return strcasecmp( $x['value'], $y['value'] );
+		}
+	);
+
+	/**
+	 * Filters how long the gallery list is cached, in seconds.
+	 *
+	 * @param int    $ttl      Seconds. Default 15 minutes.
+	 * @param string $endpoint SPARQL endpoint URL.
+	 */
+	$ttl = (int) apply_filters( 'isg_gallery_list_ttl', 15 * MINUTE_IN_SECONDS, $endpoint );
+	set_transient( $key, $list, max( 60, $ttl ) );
+
+	return $list;
+}
+
 function isg_default_endpoint() {
 	$url = esc_url_raw( (string) get_option( 'isg_default_endpoint', '' ) );
 	return '' !== $url ? $url : ISG_DEFAULT_ENDPOINT;
