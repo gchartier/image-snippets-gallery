@@ -21,7 +21,7 @@ The original renders entirely in the browser, so search engines, social scrapers
 
 ## Install (for testing)
 
-Download the latest `image-snippets-gallery-*.zip` from the [Releases](../../releases) page, then in WordPress go to **Plugins → Add New → Upload Plugin**, choose the zip, and activate. Add the **ImageSnippets Gallery** block and enter a gallery name.
+Download the latest `image-snippets-gallery-*.zip` from the [Releases](../../releases) page, then in WordPress go to **Plugins → Add New → Upload Plugin**, choose the zip, and activate. Add the **ImageSnippets Gallery** block and enter a gallery name (for a gallery outside the main Imagesnippets datasets, `owner/gallery`, e.g. `ejw_galleries/railroad_project`).
 
 ## Build from source
 

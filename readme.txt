@@ -4,7 +4,7 @@ Tags: gallery, block, media, provenance, rdf
 Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.5.0
+Stable tag: 0.5.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -50,7 +50,7 @@ This is an independent fork of "IS Gallery" by Henry Sautter, rebuilt for server
 
 1. Upload the plugin to `/wp-content/plugins/image-snippets-gallery`, or install through the Plugins screen.
 2. Activate it.
-3. Add the "ImageSnippets Gallery" block to a post or page and enter a gallery name in the block settings.
+3. Add the "ImageSnippets Gallery" block to a post or page and enter a gallery name in the block settings. Galleries outside the main Imagesnippets datasets are named owner/gallery, e.g. ejw_galleries/railroad_project.
 
 == Frequently Asked Questions ==
 
@@ -79,6 +79,10 @@ If that screen says a page cache is active but has not been cleared by this plug
 Yes. When a gallery's contents change, the plugin clears the affected pages from WP Rocket, W3 Total Cache, WP Super Cache, Cache Enabler, LiteSpeed Cache, Cachify, and SG Optimizer, and signals WordPress so other caches following core conventions clear themselves. For anything else, hook the `isg_gallery_changed` action.
 
 == Changelog ==
+
+= 0.5.1 =
+
+* Galleries outside the main Imagesnippets datasets can now be shown: enter the gallery as owner/gallery (for example ejw_galleries/railroad_project). A bare name still means the Imagesnippets datasets, so existing blocks are unchanged.
 
 = 0.5.0 =
 
@@ -155,6 +159,9 @@ Fixes:
 * Initial release of the fork: server-side rendering, transient caching, JSON-LD output, grid/masonry/justified layouts, configurable endpoint.
 
 == Upgrade Notice ==
+
+= 0.5.1 =
+Galleries owned by other ImageSnippets accounts can now be shown by naming them owner/gallery. Existing pages need no changes.
 
 = 0.5.0 =
 Settings overhaul: Columns replaces thumbnail size (existing galleries render three columns), the title is a real heading, thumbnails and captions can be styled on their own, and site-wide defaults live under Tools &rarr; ImageSnippets. Existing pages need no changes.

@@ -5,7 +5,7 @@
  * Description:        Responsive, server-rendered gallery of images from ImageSnippets, with embedded provenance metadata (JSON-LD) for SEO and discoverability. Galleries are mirrored into WordPress, so pages render without waiting on the network and site search finds the images. A modern fork of "IS Gallery" by Henry Sautter.
  * Requires at least: 6.4
  * Requires PHP:      7.4
- * Version:           0.5.0
+ * Version:           0.5.1
  * Author:            GnoSys Labs
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -21,12 +21,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ISG_VERSION', '0.5.0' );
+define( 'ISG_VERSION', '0.5.1' );
 // "image-snippets-gallery/image-snippets-gallery.php": how WordPress identifies
 // this plugin in per-plugin hooks such as plugin_action_links_{basename}.
 define( 'ISG_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 define( 'ISG_DEFAULT_ENDPOINT', 'https://imagesnippets.com/sparql/dbpedia' );
-define( 'ISG_DATASET_BASE', 'https://imagesnippets.com/imgtag/datasets/Imagesnippets/' );
+define( 'ISG_DATASET_BASE', 'https://imagesnippets.com/imgtag/datasets/' );
+// Datasets are grouped by owner: datasets/{owner}/{gallery}. A gallery name
+// without an owner is looked up under this one, which holds most galleries.
+define( 'ISG_DEFAULT_DATASET_OWNER', 'Imagesnippets' );
 define( 'ISG_USER_BASE', 'https://imagesnippets.com/imgtag/users/' );
 // Cap for block-editor previews, in seconds. Short enough to read as live while
 // still absorbing the burst of re-renders ServerSideRender fires as you drag a slider.

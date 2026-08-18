@@ -31,6 +31,8 @@ import GalleryStyleControls from './style-controls';
 import './editor.scss';
 
 const IRI_SAFE = /[^\w@.\-]/g; // mirror the server-side sanitizer
+// Gallery names may carry an owner: "owner/gallery". Each part is IRI_SAFE.
+const GALLERY_SAFE = /[^\w@.\-/]/g;
 
 const HEADING_ICONS = [
 	headingLevel1,
@@ -172,13 +174,13 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 					<TextControl
 						label={ __( 'Gallery name', 'image-snippets-gallery' ) }
 						help={ __(
-							'ImageSnippets entity label.',
+							'The gallery name on ImageSnippets. For a gallery outside the main Imagesnippets datasets, include its owner: owner/gallery.',
 							'image-snippets-gallery'
 						) }
 						value={ gallery }
 						onChange={ ( v ) =>
 							setAttributes( {
-								gallery: v.replace( IRI_SAFE, '' ),
+								gallery: v.replace( GALLERY_SAFE, '' ),
 							} )
 						}
 					/>

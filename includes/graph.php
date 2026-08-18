@@ -152,8 +152,32 @@ function isg_sparql_prefixes() {
  * @return string SPARQL fragment binding ?image.
  */
 function isg_sparql_membership( $gallery ) {
-	$dataset = ISG_DATASET_BASE . isg_sanitize_iri_segment( $gallery );
+	$dataset = isg_dataset_iri( $gallery );
 	return "?image lio:isIn <{$dataset}>.";
+}
+
+/**
+ * The dataset IRI a gallery name refers to.
+ *
+ * ImageSnippets groups datasets by owner: datasets/{owner}/{gallery}. Most
+ * galleries sit under "Imagesnippets", so a bare name ("ejwfeatured") is
+ * looked up there. Galleries elsewhere are named with their owner:
+ * "ejw_galleries/railroad_project". Anything after a second slash is
+ * discarded rather than guessed at.
+ *
+ * @param string $gallery Gallery name, optionally "owner/gallery" (raw; sanitised here).
+ * @return string Dataset IRI.
+ */
+function isg_dataset_iri( $gallery ) {
+	$parts = explode( '/', trim( (string) $gallery ), 3 );
+	if ( count( $parts ) >= 2 && '' !== $parts[0] && '' !== $parts[1] ) {
+		$owner = $parts[0];
+		$name  = $parts[1];
+	} else {
+		$owner = ISG_DEFAULT_DATASET_OWNER;
+		$name  = $parts[0];
+	}
+	return ISG_DATASET_BASE . isg_sanitize_iri_segment( $owner ) . '/' . isg_sanitize_iri_segment( $name );
 }
 
 /**
