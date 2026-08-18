@@ -38,10 +38,11 @@ For a forty-image gallery the default profile is roughly five kilobytes once com
 Options:
 
 * Filter by gallery name and (optionally) by ImageSnippets user.
-* Show captions and/or the gallery title.
-* Grid or masonry layouts; small/medium/large thumbnails; optional gallery title (heading level of your choice).
-* Sort by title or date, ascending or descending; limit the number of images.
-* Override the SPARQL endpoint (advanced).
+* Show captions and/or the gallery title (a real heading, level of your choice).
+* Grid or masonry layouts, 1–8 columns, optional uniform crop ratio.
+* Sort newest or oldest first, or by title; limit the number of images.
+* Style the whole gallery with the editor's native Color, Typography, Dimensions and Border panels; style the thumbnails' border, radius and shadow, and the title and captions, on their own.
+* Site-wide defaults for the SPARQL endpoint and refetch rate under Tools &rarr; ImageSnippets, overridable per block (advanced).
 
 This is an independent fork of "IS Gallery" by Henry Sautter, rebuilt for server-side rendering and structured-data output. With thanks to the original author.
 
@@ -59,7 +60,7 @@ From ImageSnippets. Any image tagged as being in the named gallery entity is sho
 
 = How quickly do changes on ImageSnippets reach my site? =
 
-Each gallery is re-fetched every ten minutes by default, adjustable per block under Advanced &rarr; "Check ImageSnippets every (minutes)". Set it to 0 to re-fetch on every page view. When a fetch finds changes, the affected pages are cleared from any page cache. Developers can change the default with the `isg_cache_ttl` filter.
+Each gallery is re-fetched every ten minutes by default. Change the default under Tools &rarr; ImageSnippets &rarr; Defaults, or give one gallery its own rate under the block's Advanced &rarr; "Custom refetch rate for this gallery". Set it to 0 to re-fetch on every page view. When a fetch finds changes, the affected pages are cleared from any page cache. Developers can change the default with the `isg_cache_ttl` filter.
 
 The Tools &rarr; ImageSnippets screen shows when each gallery was last fetched; the "Refresh" buttons there and in the block settings fetch immediately. There is also a WP-CLI command: `wp isg sync`.
 
@@ -93,6 +94,7 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 * "Thumbnail size" is replaced by "Columns" (1–8, default 3), the way the core Gallery block works; phones show at most two. Existing blocks render three columns.
 * "Order by" and "Order" are merged into one "Sort by" control (Newest first, Oldest first, Title A→Z, Title Z→A). Nothing changes in saved blocks.
 * Site defaults: Tools &rarr; ImageSnippets now has a Default SPARQL endpoint and a Default refetch rate that every gallery block follows unless it sets its own under Advanced, plus a "Reset all galleries to defaults" button that removes per-block overrides.
+* Clicking an image opens its ImageSnippets page in a new tab, so visitors keep the gallery open.
 * The block's Advanced section shows the site default endpoint as a placeholder, and the refetch rate is a switch ("Custom refetch rate for this gallery") that reveals the slider only when overriding. "Use filename when title is missing" moved to Advanced.
 
 = 0.4.0 =

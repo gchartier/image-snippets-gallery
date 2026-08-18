@@ -834,7 +834,7 @@ function isg_render_gallery( array $attributes ) {
 					);
 					?>
 					<figure class="isg-item" vocab="https://schema.org/" typeof="ImageObject">
-						<a href="<?php echo esc_url( $row['page'] ? $row['page'] : '#' ); ?>" aria-label="<?php echo esc_attr( $label ); ?>">
+						<a href="<?php echo esc_url( $row['page'] ? $row['page'] : '#' ); ?>" aria-label="<?php echo esc_attr( $label ); ?>" target="_blank" rel="noopener">
 							<?php
 							// The source URL (contentUrl) is the full-res original; for Flickr it
 							// carries the size in its filename suffix, so we request a rendition
