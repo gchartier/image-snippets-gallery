@@ -104,6 +104,31 @@
 		"jsonldProfile": {
 			"type": "string",
 			"default": "provenance"
+		},
+		"imageBorder": {
+			"type": "object"
+		},
+		"imageRadius": {
+			"type": [ "string", "object" ]
+		},
+		"imageShadow": {
+			"type": "string"
+		},
+		"separateText": {
+			"type": "boolean",
+			"default": false
+		},
+		"titleColor": {
+			"type": "string"
+		},
+		"titleSize": {
+			"type": "string"
+		},
+		"captionColor": {
+			"type": "string"
+		},
+		"captionSize": {
+			"type": "string"
 		}
 	},
 	"example": {

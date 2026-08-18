@@ -87,6 +87,8 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 * The gallery title is now a real heading; choose its level (H1–H6, default H2) from the block toolbar.
 * Crop ratio is disabled, and shows "Original", while the Masonry layout is selected, since masonry keeps each image's own proportions.
 * Removed the "Justified" layout option; it had no styling of its own and rendered exactly like Grid. Saved blocks that used it fall back to Grid.
+* New "Images" panel in the Styles tab: border, corner radius and shadow for the thumbnails themselves (the native Border &amp; Shadow panel styles the gallery as a whole). Radius defaults to the previous fixed 4px.
+* New "Title &amp; captions" panel in the Styles tab: a switch to style them separately, with their own text colour and font size (theme presets or custom); anything left unset still follows the gallery's Color and Typography.
 * The rights line under a gallery now appears whenever every image shown carries the same rights statement, rather than only when a User ID filter is set (and never when statements differ, so no image is misattributed).
 
 = 0.4.0 =

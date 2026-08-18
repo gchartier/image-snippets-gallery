@@ -27,6 +27,7 @@ import ServerSideRender from '@wordpress/server-side-render';
 import apiFetch from '@wordpress/api-fetch';
 import { useState } from '@wordpress/element';
 
+import GalleryStyleControls from './style-controls';
 import './editor.scss';
 
 const IRI_SAFE = /[^\w@.\-]/g; // mirror the server-side sanitizer
@@ -60,7 +61,7 @@ function blockGapStyle( gap ) {
 	return { '--isg-gap': gap };
 }
 
-export default function Edit( { attributes, setAttributes } ) {
+export default function Edit( { attributes, setAttributes, clientId } ) {
 	const {
 		gallery,
 		userId,
@@ -362,6 +363,12 @@ export default function Edit( { attributes, setAttributes } ) {
 					/>
 				</PanelBody>
 			</InspectorControls>
+
+			<GalleryStyleControls
+				attributes={ attributes }
+				setAttributes={ setAttributes }
+				clientId={ clientId }
+			/>
 
 			<InspectorAdvancedControls>
 				<TextControl

@@ -523,6 +523,14 @@ function isg_defaults() {
 		'useFilename'    => false,
 		'cacheTtl'       => 10,
 		'jsonldProfile'  => 'provenance',
+		'imageBorder'    => null,
+		'imageRadius'    => null,
+		'imageShadow'    => '',
+		'separateText'   => false,
+		'titleColor'     => '',
+		'titleSize'      => '',
+		'captionColor'   => '',
+		'captionSize'    => '',
 	);
 }
 
@@ -576,6 +584,137 @@ function isg_block_gap_css( array $attributes ) {
 }
 
 /**
+ * Accept a single CSS value (length, colour, preset var) from a block
+ * attribute, or return '' if it is empty or could break out of a declaration.
+ *
+ * Presets arrive as `var:preset|shadow|deep` and become
+ * `var(--wp--preset--shadow--deep)`, as core does. Everything else must be a
+ * plain token: no semicolons, braces, quotes, comments, or url()/expression().
+ *
+ * @param mixed $value Raw attribute value.
+ * @return string CSS value or ''.
+ */
+function isg_css_value( $value ) {
+	if ( ! is_string( $value ) ) {
+		return '';
+	}
+	$value = trim( $value );
+	if ( '' === $value ) {
+		return '';
+	}
+	if ( preg_match( '#^var:preset\|([a-z-]+)\|([a-z0-9-]+)$#i', $value, $m ) ) {
+		return 'var(--wp--preset--' . strtolower( $m[1] ) . '--' . _wp_to_kebab_case( $m[2] ) . ')';
+	}
+	if ( preg_match( '#[;{}"\'<>\\\\]|/\*|url\s*\(|expression\s*\(|@#i', $value ) ) {
+		return '';
+	}
+	return $value;
+}
+
+/**
+ * Turn a border value ({width,style,color} or one such object per side) into
+ * custom properties for the thumbnails.
+ *
+ * @param mixed $border Attribute value.
+ * @return array<string,string> Custom property name => value.
+ */
+function isg_border_vars( $border ) {
+	if ( ! is_array( $border ) ) {
+		return array();
+	}
+	$shorthand = static function ( $b ) {
+		if ( ! is_array( $b ) ) {
+			return '';
+		}
+		$width = isg_css_value( $b['width'] ?? '' );
+		$style = isg_css_value( $b['style'] ?? '' );
+		$color = isg_css_value( $b['color'] ?? '' );
+		if ( '' === $width && '' === $color ) {
+			return '';
+		}
+		// A width or colour with no style is invisible; solid is what the picker implies.
+		return trim( ( '' !== $width ? $width : '1px' ) . ' ' . ( '' !== $style ? $style : 'solid' ) . ' ' . $color );
+	};
+	$sides     = array( 'top', 'right', 'bottom', 'left' );
+	$vars      = array();
+	if ( array_intersect_key( $border, array_flip( $sides ) ) ) {
+		foreach ( $sides as $side ) {
+			$v = $shorthand( $border[ $side ] ?? null );
+			if ( '' !== $v ) {
+				$vars[ '--isg-img-border-' . $side ] = $v;
+			}
+		}
+	} else {
+		$v = $shorthand( $border );
+		if ( '' !== $v ) {
+			$vars['--isg-img-border'] = $v;
+		}
+	}
+	return $vars;
+}
+
+/**
+ * Turn a radius value (string, or {topLeft,topRight,bottomRight,bottomLeft})
+ * into the shorthand order border-radius expects.
+ *
+ * @param mixed $radius Attribute value.
+ * @return string
+ */
+function isg_radius_value( $radius ) {
+	if ( is_array( $radius ) ) {
+		$corners = array( 'topLeft', 'topRight', 'bottomRight', 'bottomLeft' );
+		$out     = array();
+		foreach ( $corners as $c ) {
+			$v     = isg_css_value( $radius[ $c ] ?? '' );
+			$out[] = '' !== $v ? $v : '0';
+		}
+		return implode( ' ', $out );
+	}
+	return isg_css_value( $radius );
+}
+
+/**
+ * Custom properties and gate classes for the block's own style settings
+ * (image border/radius/shadow, separate title/caption colour and size).
+ *
+ * @param array $a Resolved attributes.
+ * @return array{vars: array<string,string>, classes: string[]}
+ */
+function isg_style_vars( array $a ) {
+	$vars    = isg_border_vars( $a['imageBorder'] );
+	$classes = array();
+
+	$radius = isg_radius_value( $a['imageRadius'] );
+	if ( '' !== $radius ) {
+		$vars['--isg-img-radius'] = $radius;
+	}
+	$shadow = isg_css_value( $a['imageShadow'] );
+	if ( '' !== $shadow ) {
+		$vars['--isg-img-shadow'] = $shadow;
+	}
+
+	if ( ! empty( $a['separateText'] ) ) {
+		foreach ( array(
+			'titleColor'   => array( '--isg-title-color', 'isg-has-title-color' ),
+			'titleSize'    => array( '--isg-title-size', 'isg-has-title-size' ),
+			'captionColor' => array( '--isg-caption-color', 'isg-has-caption-color' ),
+			'captionSize'  => array( '--isg-caption-size', 'isg-has-caption-size' ),
+		) as $key => $target ) {
+			$v = isg_css_value( $a[ $key ] );
+			if ( '' !== $v ) {
+				$vars[ $target[0] ] = $v;
+				$classes[]          = $target[1];
+			}
+		}
+	}
+
+	return array(
+		'vars'    => $vars,
+		'classes' => $classes,
+	);
+}
+
+/**
  * Render the gallery HTML for a set of block attributes. Called from render.php.
  *
  * @param array $attributes Block attributes.
@@ -594,11 +733,19 @@ function isg_render_gallery( array $attributes ) {
 		$ratio = 'original';
 	}
 
-	$classes = 'isg-gallery isg-layout-' . $layout . ' isg-size-' . $size . ' isg-ratio-' . $ratio;
+	$style   = isg_style_vars( $a );
+	$classes = implode( ' ', array_merge( array( 'isg-gallery', 'isg-layout-' . $layout, 'isg-size-' . $size, 'isg-ratio-' . $ratio ), $style['classes'] ) );
 	$extra   = array( 'class' => $classes );
 	$gap     = isg_block_gap_css( $attributes );
 	if ( '' !== $gap ) {
-		$extra['style'] = '--isg-gap:' . $gap;
+		$style['vars']['--isg-gap'] = $gap;
+	}
+	if ( $style['vars'] ) {
+		$decls = array();
+		foreach ( $style['vars'] as $name => $value ) {
+			$decls[] = $name . ':' . $value;
+		}
+		$extra['style'] = implode( ';', $decls );
 	}
 	$wrapper_attributes = get_block_wrapper_attributes( $extra );
 

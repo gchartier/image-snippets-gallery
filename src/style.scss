@@ -19,10 +19,20 @@
 
 		img {
 			display: block;
+			box-sizing: border-box; // a thick border must not widen the column
 			width: 100%;
 			height: auto;
 			object-fit: cover;
-			border-radius: 4px;
+			// Thumbnail border / radius / shadow come from the block's Images
+			// panel via custom properties on the wrapper (isg_style_vars()).
+			// A whole-box border wins over nothing; a per-side one wins over both.
+			border: var( --isg-img-border, 0 );
+			border-top: var( --isg-img-border-top, var( --isg-img-border, 0 ) );
+			border-right: var( --isg-img-border-right, var( --isg-img-border, 0 ) );
+			border-bottom: var( --isg-img-border-bottom, var( --isg-img-border, 0 ) );
+			border-left: var( --isg-img-border-left, var( --isg-img-border, 0 ) );
+			border-radius: var( --isg-img-radius, 4px );
+			box-shadow: var( --isg-img-shadow, none );
 		}
 	}
 
@@ -40,6 +50,14 @@
 		font-size: 0.85em;
 		margin-top: 0.35em;
 	}
+
+	// "Style title and captions separately": the server sets a custom property
+	// and a gate class per value, so an unset size leaves the theme's heading
+	// size (or the caption default above) alone instead of collapsing to inherit.
+	&.isg-has-title-color .isg-title { color: var( --isg-title-color ); }
+	&.isg-has-title-size .isg-title { font-size: var( --isg-title-size ); }
+	&.isg-has-caption-color .isg-caption { color: var( --isg-caption-color ); }
+	&.isg-has-caption-size .isg-caption { font-size: var( --isg-caption-size ); }
 
 	.isg-footer,
 	.isg-message {
