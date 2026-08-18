@@ -168,7 +168,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 				</BlockControls>
 			) }
 			<InspectorControls>
-				<PanelBody title={ __( 'Gallery', 'image-snippets-gallery' ) }>
+				<PanelBody title={ __( 'Source', 'image-snippets-gallery' ) }>
 					<TextControl
 						label={ __( 'Gallery name', 'image-snippets-gallery' ) }
 						help={ __(
@@ -182,26 +182,90 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 							} )
 						}
 					/>
-					<ToggleControl
+					<SelectControl
+						label={ __( 'Sort by', 'image-snippets-gallery' ) }
+						value={ `${ orderBy }-${ order }` }
+						options={ [
+							{
+								label: __(
+									'Newest first',
+									'image-snippets-gallery'
+								),
+								value: 'date-desc',
+							},
+							{
+								label: __(
+									'Oldest first',
+									'image-snippets-gallery'
+								),
+								value: 'date-asc',
+							},
+							{
+								label: __(
+									'Title A → Z',
+									'image-snippets-gallery'
+								),
+								value: 'title-asc',
+							},
+							{
+								label: __(
+									'Title Z → A',
+									'image-snippets-gallery'
+								),
+								value: 'title-desc',
+							},
+						] }
+						onChange={ ( v ) => {
+							const [ by, dir ] = v.split( '-' );
+							setAttributes( { orderBy: by, order: dir } );
+						} }
+					/>
+					<RangeControl
 						label={ __(
-							'Show captions',
+							'Maximum images',
 							'image-snippets-gallery'
 						) }
-						checked={ displayCaption }
-						onChange={ ( v ) =>
-							setAttributes( { displayCaption: v } )
-						}
+						value={ limit }
+						min={ 1 }
+						max={ 200 }
+						onChange={ ( v ) => setAttributes( { limit: v } ) }
 					/>
-					<ToggleControl
-						label={ __(
-							'Show gallery title',
+					<Button
+						variant="secondary"
+						onClick={ refresh }
+						isBusy={ refreshing }
+						disabled={ refreshing || ! gallery }
+						__next40pxDefaultSize
+					>
+						{ __(
+							'Refresh from ImageSnippets',
 							'image-snippets-gallery'
 						) }
-						checked={ displayTitle }
-						onChange={ ( v ) =>
-							setAttributes( { displayTitle: v } )
-						}
-					/>
+					</Button>
+					<p
+						style={ {
+							marginTop: '.5em',
+							fontSize: '.85em',
+							fontStyle: 'italic',
+						} }
+					>
+						{ __(
+							'Pulls the gallery again and clears the cached copy the public page serves.',
+							'image-snippets-gallery'
+						) }
+					</p>
+					{ refreshError && (
+						<Notice status="error" isDismissible={ false }>
+							{ refreshError }
+						</Notice>
+					) }
+					{ ! refreshError && refreshNotice && (
+						<Notice status="success" isDismissible={ false }>
+							{ refreshNotice }
+						</Notice>
+					) }
+				</PanelBody>
+				<PanelBody title={ __( 'Layout', 'image-snippets-gallery' ) }>
 					<SelectControl
 						label={ __( 'Layout', 'image-snippets-gallery' ) }
 						value={ layout }
@@ -252,92 +316,29 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 							setAttributes( { aspectRatio: v } )
 						}
 					/>
-					<Button
-						variant="secondary"
-						onClick={ refresh }
-						isBusy={ refreshing }
-						disabled={ refreshing || ! gallery }
-						__next40pxDefaultSize
-					>
-						{ __(
-							'Refresh from ImageSnippets',
-							'image-snippets-gallery'
-						) }
-					</Button>
-					<p
-						style={ {
-							marginTop: '.5em',
-							fontSize: '.85em',
-							fontStyle: 'italic',
-						} }
-					>
-						{ __(
-							'Pulls the gallery again and clears the cached copy the public page serves.',
-							'image-snippets-gallery'
-						) }
-					</p>
-					{ refreshError && (
-						<Notice status="error" isDismissible={ false }>
-							{ refreshError }
-						</Notice>
-					) }
-					{ ! refreshError && refreshNotice && (
-						<Notice status="success" isDismissible={ false }>
-							{ refreshNotice }
-						</Notice>
-					) }
 				</PanelBody>
 				<PanelBody
-					title={ __( 'Sorting', 'image-snippets-gallery' ) }
-					initialOpen={ false }
+					title={ __( 'Title & captions', 'image-snippets-gallery' ) }
 				>
-					<SelectControl
-						label={ __( 'Sort by', 'image-snippets-gallery' ) }
-						value={ `${ orderBy }-${ order }` }
-						options={ [
-							{
-								label: __(
-									'Newest first',
-									'image-snippets-gallery'
-								),
-								value: 'date-desc',
-							},
-							{
-								label: __(
-									'Oldest first',
-									'image-snippets-gallery'
-								),
-								value: 'date-asc',
-							},
-							{
-								label: __(
-									'Title A → Z',
-									'image-snippets-gallery'
-								),
-								value: 'title-asc',
-							},
-							{
-								label: __(
-									'Title Z → A',
-									'image-snippets-gallery'
-								),
-								value: 'title-desc',
-							},
-						] }
-						onChange={ ( v ) => {
-							const [ by, dir ] = v.split( '-' );
-							setAttributes( { orderBy: by, order: dir } );
-						} }
-					/>
-					<RangeControl
+					<ToggleControl
 						label={ __(
-							'Maximum images',
+							'Show gallery title',
 							'image-snippets-gallery'
 						) }
-						value={ limit }
-						min={ 1 }
-						max={ 200 }
-						onChange={ ( v ) => setAttributes( { limit: v } ) }
+						checked={ displayTitle }
+						onChange={ ( v ) =>
+							setAttributes( { displayTitle: v } )
+						}
+					/>
+					<ToggleControl
+						label={ __(
+							'Show captions',
+							'image-snippets-gallery'
+						) }
+						checked={ displayCaption }
+						onChange={ ( v ) =>
+							setAttributes( { displayCaption: v } )
+						}
 					/>
 				</PanelBody>
 				<PanelBody
