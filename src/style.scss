@@ -26,10 +26,13 @@
 	}
 
 	// Uniform crop ratios reserve space and eliminate layout shift (CLS).
-	&.isg-ratio-1-1 .isg-item img { aspect-ratio: 1 / 1; height: 100%; }
-	&.isg-ratio-4-3 .isg-item img { aspect-ratio: 4 / 3; height: 100%; }
-	&.isg-ratio-3-2 .isg-item img { aspect-ratio: 3 / 2; height: 100%; }
-	&.isg-ratio-16-9 .isg-item img { aspect-ratio: 16 / 9; height: 100%; }
+	// aspect-ratio alone sizes the box from the column width; do NOT add
+	// height: 100% — inside a stretched grid cell that resolves to the whole
+	// row height, so the image grows past its ratio and covers the caption.
+	&.isg-ratio-1-1 .isg-item img { aspect-ratio: 1 / 1; }
+	&.isg-ratio-4-3 .isg-item img { aspect-ratio: 4 / 3; }
+	&.isg-ratio-3-2 .isg-item img { aspect-ratio: 3 / 2; }
+	&.isg-ratio-16-9 .isg-item img { aspect-ratio: 16 / 9; }
 	// isg-ratio-original intentionally sets no aspect-ratio.
 
 	.isg-caption {

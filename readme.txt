@@ -83,6 +83,7 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 
 * The block now uses the editor's native Color, Typography, Dimensions and Border &amp; Shadow panels (background, text and link colour; font size and line height; padding, margin and block spacing; border and shadow). Values follow the active theme's palette and spacing scale, and site owners can set defaults for the block in Styles. "Block spacing" sets the gap between images.
 * A "Galleries" link on the Plugins screen leads to Tools &rarr; ImageSnippets.
+* Fixed: with a crop ratio and captions on the Grid layout, images stretched past their ratio and covered the row of captions below them.
 
 = 0.4.0 =
 
