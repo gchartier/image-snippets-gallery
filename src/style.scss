@@ -22,6 +22,9 @@
 
 	.isg-item {
 		margin: 0;
+		// Search hits link here as #fragment; leave room above so the image is
+		// not jammed against the viewport edge (or under a sticky header).
+		scroll-margin-top: 2rem;
 
 		img {
 			display: block;
@@ -39,6 +42,30 @@
 			border-left: var( --isg-img-border-left, var( --isg-img-border, 0 ) );
 			border-radius: var( --isg-img-radius, 4px );
 			box-shadow: var( --isg-img-shadow, none );
+		}
+	}
+
+	// The image a search result pointed at. Reaching a gallery page with no
+	// idea which of hundreds matched is the whole reason the anchor exists, so
+	// say so visibly, then fade out rather than leaving the page marked up
+	// permanently. Both the fade and the reduced-motion fallback end at the
+	// same transparent outline, so the resting state is identical either way.
+	.isg-item:target {
+		outline: 3px solid var( --isg-target-color, currentColor );
+		outline-offset: 3px;
+		border-radius: var( --isg-img-radius, 4px );
+		animation: isg-target-fade 4s ease-out 1s forwards;
+	}
+
+	@keyframes isg-target-fade {
+		to { outline-color: transparent; }
+	}
+
+	@media ( prefers-reduced-motion: reduce ) {
+		.isg-item:target {
+			animation: none;
+			// Held, not faded: without motion there is no cue that it changed,
+			// so the marker has to stay for the visitor to find it at all.
 		}
 	}
 

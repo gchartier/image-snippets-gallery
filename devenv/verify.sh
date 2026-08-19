@@ -165,7 +165,58 @@ SEARCH="$(fetch '/?s=pelican')"
 assert "an anonymous search for a mirrored title finds it" "1" \
     "$(grep -c 'Brown Pelican' <<<"$SEARCH" | awk '{print ($1>0)?1:0}')"
 assert "the hit links to the gallery page" "1" \
-    "$(grep -o 'href="[^"]*/gallery/"[^>]*>Brown Pelican' <<<"$SEARCH" | wc -l | awk '{print ($1>0)?1:0}')"
+    "$(grep -o 'href="[^"]*/gallery/#isg-[a-f0-9]*"[^>]*>Brown Pelican' <<<"$SEARCH" | wc -l | awk '{print ($1>0)?1:0}')"
+
+# The fragment is the point of the link. A mirror post has no page of its own,
+# so every image in a gallery resolves to the same permalink; without the
+# anchor a search matching a dozen of them returns a dozen identical results
+# that all dump the visitor at the top of the grid. Resolve the fragment
+# against the rendered page rather than trusting that both sides agree — one
+# naming an id the page never renders would scroll nowhere and fail silently.
+FRAG="$(grep -o 'href="[^"]*/gallery/#isg-[a-f0-9]*"[^>]*>Brown Pelican' <<<"$SEARCH" \
+    | head -1 | sed 's|.*/gallery/#||; s|".*||')"
+assert "the fragment resolves to that image on the page" "1" \
+    "$(grep -c "id=\"${FRAG:-__missing__}\"" <<<"$(fetch)" | awk '{print ($1>0)?1:0}')"
+
+# Anchors are derived from the image IRI on both sides, so a collision would
+# silently point several results at one image.
+assert "every rendered image has a distinct anchor" "$TRUE_COUNT" \
+    "$(fetch | grep -o 'id="isg-[a-f0-9]*"' | sort -u | wc -l)"
+
+# A mirror post has no attachment, so wp_get_attachment_image() never runs and
+# everything it would have contributed has to come from our filter instead. The
+# theme asks through $size and $attr; ignoring either is what made these render
+# at natural size and spill over the title beneath them.
+IMG="$(grep -o '<img[^>]*wp-post-image[^>]*>' <<<"$SEARCH" | head -1)"
+assert "the thumbnail honours the caller's layout request" "1" \
+    "$(grep -c 'object-fit:cover' <<<"$IMG" | awk '{print ($1>0)?1:0}')"
+assert "the thumbnail carries core's size classes" "1" \
+    "$(grep -c 'attachment-post-thumbnail size-post-thumbnail' <<<"$IMG" | awk '{print ($1>0)?1:0}')"
+assert "the thumbnail declares a real width" "1" \
+    "$(grep -c 'width="[0-9][0-9]*"' <<<"$IMG" | awk '{print ($1>0)?1:0}')"
+assert "the thumbnail declares a real height" "1" \
+    "$(grep -c 'height="[0-9][0-9]*"' <<<"$IMG" | awk '{print ($1>0)?1:0}')"
+
+# post_content holds the index text — every entity label and keyword the graph
+# carries — which is what lets an unrelated word find the image. It has to keep
+# matching without being printed; these two assertions only mean anything as a
+# pair. "aves" is a graph keyword on the pelican that appears in no prose.
+assert "a graph keyword still matches an image whose prose never says it" "1" \
+    "$(fetch '/?s=aves' | grep -c 'Brown Pelican' | awk '{print ($1>0)?1:0}')"
+assert "but the keyword list is not printed as the result body" "0" \
+    "$(grep -c 'aves' <<<"$SEARCH")"
+
+# core/post-date reads through the core/post-data binding, which refuses any
+# post that is not publicly viewable — which mirror posts deliberately are not.
+# Every other result in Twenty Twenty-Five's search carries a date; without an
+# answer to that binding, ours were the only ones that did not.
+assert "the theme's own date block renders for an image result" "1" \
+    "$(grep -c 'class="wp-block-post-date[^"]*"><a href="[^"]*#isg-' <<<"$SEARCH" | awk '{print ($1>0)?1:0}')"
+
+# The photographer is not a user of this site and post_author is 0, so a theme
+# that prints an author gets it from the graph or gets nothing.
+assert "a theme that prints an author gets the photographer" "Henry Sautter" \
+    "$(wp eval '$q = new WP_Query( array( "post_type" => "isg_image", "posts_per_page" => 1, "s" => "pelican" ) ); $q->the_post(); echo get_the_author();' | tr -d '\r')"
 
 head_ "Editor preview renders server-side"
 

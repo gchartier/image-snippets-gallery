@@ -78,6 +78,11 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 
 = 0.6.0 =
 
+* Search results for images now carry a date, in whatever style and position the theme puts it. Block themes read the date through a binding that refuses posts which are not publicly viewable, and mirrored images deliberately are not, so every other result on the page had a date and these did not.
+* Themes that show an author on search results now show the photographer, taken from the image's provenance rather than from a WordPress user account.
+* Fixed: images in site search results rendered at their natural size and overlapped the result title. The thumbnail a mirrored image supplies now carries everything WordPress would have supplied for a real featured image — the theme's requested size and layout, the standard image classes, real width and height, and a srcset where the source offers one — so themes lay these out exactly as they lay out any other post's featured image.
+* Search results now show the image's description instead of the list of keywords and entity labels the search index is built from. Those keywords still match: searching one finds the image as before, it is just no longer printed as the result text.
+* Site search results for images now link to the image that matched, not just to the gallery page it sits on. A search matching several images in one gallery used to return several results that all led to the same page, leaving the visitor to find the image among hundreds; each result now scrolls to its own image and marks it briefly.
 * The Structured data dropdown (schema.org only / Provenance / Full graph) is now a single toggle, "Include full JSON-LD for images", on by default. Off embeds only the schema.org description. The Full graph profile — which added only the ImageSnippets page's Open Graph and Twitter tags — is no longer offered in the editor; the `isg_jsonld_payload` filter still receives the full graph. Blocks already saved with a profile keep working.
 * The Gallery setting is now a picker: it lists every gallery on ImageSnippets with its image count, searchable as you type. Galleries outside the main Imagesnippets datasets appear as owner/gallery. A name that is not on the list can still be typed. The list is fetched when the block settings open and cached for 15 minutes.
 

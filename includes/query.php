@@ -103,6 +103,40 @@ function isg_flickr_sized( $url, $code ) {
 }
 
 /**
+ * The Flickr renditions a source URL can be asked for, smallest first, keyed by
+ * the filename suffix that selects each one.
+ *
+ * @return int[] Suffix code => pixel width of the long edge.
+ */
+function isg_flickr_widths() {
+	return array(
+		'n' => 320,
+		'z' => 640,
+		'c' => 800,
+		'b' => 1024,
+	);
+}
+
+/**
+ * The smallest rendition that still covers a requested width.
+ *
+ * @param int $width Requested width in pixels; 0 means unconstrained.
+ * @return string Suffix code, or '' for the original.
+ */
+function isg_flickr_code_for_width( $width ) {
+	$width = (int) $width;
+	if ( $width < 1 ) {
+		return '';
+	}
+	foreach ( isg_flickr_widths() as $code => $rendition ) {
+		if ( $width <= $rendition ) {
+			return $code;
+		}
+	}
+	return '';
+}
+
+/**
  * Build a srcset of real Flickr renditions with true pixel-width descriptors, or
  * '' for non-Flickr URLs. Replaces the old `thumb 500w, content 2000w` pair whose
  * "thumb" was actually the 128px IS thumbnail — the source of the gallery's blur.
@@ -114,15 +148,11 @@ function isg_flickr_srcset( $url ) {
 	if ( null === isg_flickr_base( $url ) ) {
 		return '';
 	}
-	$widths = array(
-		'n' => 320,
-		'z' => 640,
-		'c' => 800,
-		'b' => 1024,
-	);
-	$out    = array();
-	foreach ( $widths as $code => $w ) {
-		$out[] = esc_url( isg_flickr_sized( $url, $code ) ) . ' ' . $w . 'w';
+	$out = array();
+	foreach ( isg_flickr_widths() as $code => $w ) {
+		// esc_url_raw, not esc_url: this is escaped once where it is printed,
+		// and entity-encoding it here would be encoded again on the way out.
+		$out[] = esc_url_raw( isg_flickr_sized( $url, $code ) ) . ' ' . $w . 'w';
 	}
 	return implode( ', ', $out );
 }
@@ -438,6 +468,27 @@ function isg_sparql_json( $endpoint, $query, $timeout = 20 ) {
 }
 
 /**
+ * The fragment identifier for one image inside a rendered gallery.
+ *
+ * Search results have no page of their own: they link to a gallery page that
+ * shows the image, which for a large gallery means landing at the top of a
+ * grid of hundreds with no clue which one matched. The anchor is what lets
+ * the browser scroll to it.
+ *
+ * Keyed on the named-graph IRI — the same identity the mirror posts use for
+ * post_name — so the renderer and the mirror agree on the id without sharing
+ * any state. Prefixed because a bare hash can begin with a digit, which is
+ * not a valid CSS selector and would break the :target highlight.
+ *
+ * @param string $page Named-graph IRI of the image.
+ * @return string Fragment id, or '' when the row carries no IRI.
+ */
+function isg_image_anchor( $page ) {
+	$page = (string) $page;
+	return '' !== $page ? 'isg-' . md5( $page ) : '';
+}
+
+/**
  * Resolve the visible title for a row (title -> name -> optional filename).
  *
  * @param array $row          Row.
@@ -450,6 +501,51 @@ function isg_row_title( array $row, $use_filename ) {
 		$title = isg_humanize_filename( $row['image'] ? $row['image'] : $row['content'] );
 	}
 	return $title;
+}
+
+/**
+ * The image's true pixel dimensions, or null when the graph does not say.
+ *
+ * ImageSnippets records these nowhere except the Open Graph tags it emits for
+ * its own page, which the mirror keeps because it stores every graph whole. So
+ * they are read back out of the triples rather than from a column.
+ *
+ * Only trusted when og:image names the very URL being rendered: the tag
+ * describes whatever image that page advertises, and reporting one image's
+ * dimensions for another would produce a confidently wrong aspect ratio —
+ * worse than admitting we do not know, which callers can handle.
+ *
+ * @param array $row Row.
+ * @return int[]|null array( width, height ), or null.
+ */
+function isg_row_dimensions( array $row ) {
+	$width  = 0;
+	$height = 0;
+	$og     = '';
+	foreach ( $row['triples'] as $triple ) {
+		$value = isset( $triple[2]['value'] ) ? (string) $triple[2]['value'] : '';
+		switch ( $triple[1] ) {
+			case 'https://ogp.me/ns#image':
+				$og = $value;
+				break;
+			case 'https://ogp.me/ns#image:width':
+				$width = (int) $value;
+				break;
+			case 'https://ogp.me/ns#image:height':
+				$height = (int) $value;
+				break;
+		}
+	}
+	if ( $width < 1 || $height < 1 || '' === $og ) {
+		return null;
+	}
+	$source = isg_first( array( $row['content'], $row['image'] ) );
+	// Compared decoded: the same URL reaches us percent-encoded in one triple
+	// and not in another often enough to matter.
+	if ( '' === $source || rawurldecode( $og ) !== rawurldecode( $source ) ) {
+		return null;
+	}
+	return array( $width, $height );
 }
 
 /**
@@ -910,8 +1006,10 @@ function isg_render_gallery( array $attributes ) {
 							sprintf( /* translators: 1: gallery name, 2: position */ __( '%1$s image %2$d', 'image-snippets-gallery' ), $a['gallery'], $position ),
 						)
 					);
+					// Anchor for search results, which link here with #fragment.
+					$isg_anchor = isg_image_anchor( $row['page'] );
 					?>
-					<figure class="isg-item" vocab="https://schema.org/" typeof="ImageObject">
+					<figure class="isg-item"<?php echo '' !== $isg_anchor ? ' id="' . esc_attr( $isg_anchor ) . '"' : ''; ?> vocab="https://schema.org/" typeof="ImageObject">
 						<a href="<?php echo esc_url( $row['page'] ? $row['page'] : '#' ); ?>" aria-label="<?php echo esc_attr( $label ); ?>" target="_blank" rel="noopener">
 							<?php
 							// The source URL (contentUrl) is the full-res original; for Flickr it
@@ -942,7 +1040,7 @@ function isg_render_gallery( array $attributes ) {
 							<img
 								src="<?php echo esc_url( $isg_src ); ?>"
 								<?php if ( '' !== $isg_srcset ) : ?>
-								srcset="<?php echo $isg_srcset; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- each URL escaped in isg_flickr_srcset() ?>"
+								srcset="<?php echo esc_attr( $isg_srcset ); ?>"
 								sizes="<?php echo esc_attr( $isg_sizes ); ?>"
 								<?php endif; ?>
 								<?php if ( $row['thumb'] && $row['thumb'] !== $isg_src ) : ?>
