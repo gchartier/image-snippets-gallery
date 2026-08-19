@@ -285,6 +285,18 @@ head_ "WP-CLI"
 assert "wp isg status lists the gallery" "hs_gallery02" "$(wp isg status --format=csv | awk -F, 'NR==2{print $1}' | tr -d '\r')"
 assert "wp isg sync reports counts" "1" "$(wp isg sync hs_gallery02 | grep -c 'images (+' )"
 
+head_ "Update channel"
+
+# The plugin is GitHub-hosted, so the update notice comes from our own checker,
+# not wordpress.org. Ask it directly what the latest release resolves to: it
+# must be a release *asset* zip, never GitHub's source archive, which lacks
+# build/ and would install a block that cannot register.
+PKG="$(wp eval '$c = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker("https://github.com/gchartier/image-snippets-gallery/", WP_PLUGIN_DIR."/image-snippets-gallery/image-snippets-gallery.php", "isg-verify"); $c->getVcsApi()->enableReleaseAssets("/^image-snippets-gallery-.*\.zip$/", YahnisElsts\PluginUpdateChecker\v5p7\Vcs\Api::REQUIRE_RELEASE_ASSETS); $u = $c->requestUpdate(); echo $u ? $u->download_url : "none";' | tr -d '\r')"
+assert "latest GitHub release offers a release-asset zip" "releases/download/" \
+    "$(grep -o 'releases/download/' <<<"$PKG" | head -1)"
+assert "only the release strategy is allowed (no tag/branch fallback)" "latest_release" \
+    "$(wp eval 'echo implode(",", array_keys(apply_filters("puc_vcs_update_detection_strategies-image-snippets-gallery", ["latest_release"=>1,"latest_tag"=>1,"branch"=>1])));' | tr -d '\r')"
+
 head_ "Sync status"
 wp isg status | sed 's/^/       /'
 

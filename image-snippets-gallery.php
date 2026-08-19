@@ -10,6 +10,7 @@
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       image-snippets-gallery
+ * Update URI:        https://github.com/gchartier/image-snippets-gallery
  *
  * Forked from "IS Gallery" (https://wordpress.org/plugins/is-gallery/),
  * Copyright 2021 Henry Sautter, GPL-2.0-or-later. With thanks.
@@ -22,6 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 define( 'ISG_VERSION', '0.6.0' );
+define( 'ISG_PLUGIN_FILE', __FILE__ );
 // "image-snippets-gallery/image-snippets-gallery.php": how WordPress identifies
 // this plugin in per-plugin hooks such as plugin_action_links_{basename}.
 define( 'ISG_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
@@ -53,6 +55,8 @@ if ( defined( 'WP_CLI' ) && WP_CLI ) {
 if ( is_admin() ) {
 	require_once __DIR__ . '/includes/admin.php';
 }
+
+require_once __DIR__ . '/includes/updates.php';
 
 /**
  * Build the gallery index on activation. Posts saved before this version never

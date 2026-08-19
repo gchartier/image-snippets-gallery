@@ -76,6 +76,10 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 
 == Changelog ==
 
+= Unreleased =
+
+* Updates now arrive the way they do for any other plugin: when a new version is published, the Plugins screen shows the usual update notice and a one-click Update, with the changelog behind "View details". Until now the plugin had no way to learn a newer version existed, so every site stayed on whatever zip had been uploaded by hand. Updates come from the plugin's GitHub releases; no account or key is needed.
+
 = 0.6.0 =
 
 * Search results for images now carry a date, in whatever style and position the theme puts it. Block themes read the date through a binding that refuses posts which are not publicly viewable, and mirrored images deliberately are not, so every other result on the page had a date and these did not.

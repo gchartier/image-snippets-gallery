@@ -6,6 +6,8 @@
 	<exclude-pattern>*/build/*</exclude-pattern>
 	<exclude-pattern>*/node_modules/*</exclude-pattern>
 	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<!-- Third-party library, vendored verbatim (MIT). Not held to WPCS. -->
+	<exclude-pattern>*/includes/plugin-update-checker/*</exclude-pattern>
 	<exclude-pattern>*/devenv/*</exclude-pattern>
 
 	<arg name="extensions" value="php"/>
