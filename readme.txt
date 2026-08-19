@@ -171,7 +171,7 @@ Fixes:
 == Upgrade Notice ==
 
 = 0.6.0 =
-The gallery name is now chosen from a searchable list of ImageSnippets galleries, with image counts. Existing pages need no changes.
+Images now render properly in site search results — correctly sized, with a description, a date, and a link straight to the image that matched. The gallery name is also chosen from a searchable list, with image counts. Existing pages need no changes.
 
 = 0.5.2 =
 Fixes images with year-only dates being counted but not shown. Refresh each gallery once after updating.
