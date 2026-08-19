@@ -24,8 +24,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-const ISG_POST_TYPE     = 'isg_image';
-const ISG_TAXONOMY      = 'isg_gallery';
+const ISG_POST_TYPE = 'isg_image';
+const ISG_TAXONOMY  = 'isg_gallery';
+// Object-cache group for decoded rows. Registered non-persistent in
+// isg_register_mirror_types(): this is a per-request memo, not a second store.
+const ISG_ROW_CACHE_GROUP = 'isg_rows';
+
 const ISG_META_PAGE     = '_isg_page';     // Named-graph IRI: the identity of the mirrored image.
 const ISG_META_IMAGE    = '_isg_image';    // Image IRI.
 const ISG_META_HASH     = '_isg_hash';     // Fingerprint of the stored graph, for the diff.
@@ -53,6 +57,8 @@ const ISG_SYNC_MAX_IMAGES = 2000;
  * @return void
  */
 function isg_register_mirror_types() {
+	wp_cache_add_non_persistent_groups( array( ISG_ROW_CACHE_GROUP ) );
+
 	register_post_type(
 		ISG_POST_TYPE,
 		array(
@@ -357,6 +363,7 @@ function isg_mirror_write_row( array $row, $post_id = null ) {
 	update_post_meta( $post_id, ISG_META_IMAGE, wp_slash( $row['image'] ) );
 	update_post_meta( $post_id, ISG_META_HASH, isg_row_hash( $row ) );
 	update_post_meta( $post_id, ISG_META_ROW, wp_slash( wp_json_encode( $row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ) );
+	isg_mirror_forget_row( $post_id );
 	update_post_meta( $post_id, ISG_META_DATE, wp_slash( $row['date'] ) );
 	update_post_meta( $post_id, ISG_META_TITLE, wp_slash( $row['title'] ) );
 
@@ -371,19 +378,54 @@ function isg_mirror_write_row( array $row, $post_id = null ) {
 /**
  * The stored row for a mirror post.
  *
+ * Memoised for the length of the request. The row is one JSON blob holding the
+ * image's whole named graph — a few hundred triples — and a search result asks
+ * for it once per question the theme puts to it: the thumbnail wants the source
+ * URL and dimensions, the content and excerpt want the description, the author
+ * filter wants the creator. That is four decodes of the same text per result,
+ * and the answer cannot change in between.
+ *
+ * The group is registered non-persistent, so on a site running a Redis object
+ * cache — as Margaret's does — this stays in process memory instead of writing
+ * a second, independently staleable copy of data postmeta already holds.
+ *
  * @param int $post_id Post ID.
  * @return array|null
  */
 function isg_mirror_read_row( $post_id ) {
-	$json = get_post_meta( (int) $post_id, ISG_META_ROW, true );
-	if ( ! is_string( $json ) || '' === $json ) {
-		return null;
+	$post_id = (int) $post_id;
+
+	$found = false;
+	$row   = wp_cache_get( $post_id, ISG_ROW_CACHE_GROUP, false, $found );
+	if ( $found ) {
+		return $row;
 	}
-	$row = json_decode( $json, true );
-	if ( ! is_array( $row ) || ! isset( $row['image'], $row['page'], $row['triples'] ) ) {
-		return null;
+
+	$row  = null;
+	$json = get_post_meta( $post_id, ISG_META_ROW, true );
+	if ( is_string( $json ) && '' !== $json ) {
+		$decoded = json_decode( $json, true );
+		if ( is_array( $decoded ) && isset( $decoded['image'], $decoded['page'], $decoded['triples'] ) ) {
+			$row = $decoded;
+		}
 	}
+
+	// null is cached too: a post with no readable row is asked the same four
+	// questions as any other, and should not re-read meta for each of them.
+	wp_cache_set( $post_id, $row, ISG_ROW_CACHE_GROUP );
 	return $row;
+}
+
+/**
+ * Forget a memoised row. Called wherever one is written, so a sync that writes
+ * and then renders in the same request — which is exactly what the first view
+ * of a never-synced gallery does — cannot serve what it has just replaced.
+ *
+ * @param int $post_id Post ID.
+ * @return void
+ */
+function isg_mirror_forget_row( $post_id ) {
+	wp_cache_delete( (int) $post_id, ISG_ROW_CACHE_GROUP );
 }
 
 /**
