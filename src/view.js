@@ -1,5 +1,6 @@
 /**
- * Front-end behaviour: the lightbox, the facet filters and the slideshow.
+ * Front-end behaviour: the lightbox, the facet filters, the slideshow and
+ * "Load more".
  *
  * Everything either shows was rendered by the server into the block's context,
  * so opening an image or narrowing the gallery is a state change, not a
@@ -48,6 +49,32 @@ function writeUrl( active ) {
 		);
 	}
 	window.history.replaceState( window.history.state, '', url );
+}
+
+// How many images the filters leave visible come before this one. With
+// "Load more" on, the first ctx.shown of those are displayed and the rest
+// wait, so a filter change still shows a full first batch.
+function rankOf( ctx, index ) {
+	const active = ctx.active || {};
+	let rank = 0;
+	for ( let i = 0; i < index; i++ ) {
+		if ( matches( ctx.items[ i ], active ) ) {
+			rank++;
+		}
+	}
+	return rank;
+}
+
+// Make sure the image at `index` is displayed, revealing whole batches up to it.
+function revealTo( ctx, index ) {
+	if ( ! ctx.shown ) {
+		return;
+	}
+	const needed = rankOf( ctx, index ) + 1;
+	if ( needed > ctx.shown ) {
+		const batch = ctx.batch || needed;
+		ctx.shown = Math.ceil( needed / batch ) * batch;
+	}
 }
 
 // "3 / 12", counted among the images the filters leave visible.
@@ -145,7 +172,13 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 		get itemHidden() {
 			const ctx = getContext();
 			const item = ctx.items[ ctx.i ];
-			return !! item && ! matches( item, ctx.active || {} );
+			if ( ! item ) {
+				return false;
+			}
+			if ( ! matches( item, ctx.active || {} ) ) {
+				return true;
+			}
+			return !! ctx.shown && rankOf( ctx, ctx.i ) >= ctx.shown;
 		},
 		get filtering() {
 			const active = getContext().active || {};
@@ -157,6 +190,16 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 			const ctx = getContext();
 			return ctx.items.filter( ( it ) => matches( it, ctx.active || {} ) )
 				.length;
+		},
+		// Load more.
+		get shownCount() {
+			const ctx = getContext();
+			const visible = state.visibleCount;
+			return ctx.shown ? Math.min( ctx.shown, visible ) : visible;
+		},
+		get hasMore() {
+			const ctx = getContext();
+			return !! ctx.shown && state.visibleCount > ctx.shown;
 		},
 	},
 	actions: {
@@ -175,9 +218,17 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 		close() {
 			const ctx = getContext();
 			ctx.open = false;
-			// Leaving the lightbox lands the slideshow on the image just seen.
+			// Leaving the lightbox lands the slideshow on the image just seen,
+			// and a paged gallery reveals up to it.
 			if ( ctx.slides ) {
 				ctx.slide = ctx.index;
+			}
+			revealTo( ctx, ctx.index );
+		},
+		more() {
+			const ctx = getContext();
+			if ( ctx.shown ) {
+				ctx.shown += ctx.batch || ctx.items.length;
 			}
 		},
 		// Arrows step over images the filters have hidden, so the lightbox
@@ -344,6 +395,18 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 			);
 			return () => clearInterval( timer );
 		},
+		// Figures are hidden by watches rather than bindings so that the
+		// server, which evaluates bindings without derived state, leaves the
+		// `hidden` it rendered alone until the script takes over.
+		syncItem() {
+			getElement().ref.hidden = state.itemHidden;
+		},
+		syncSlide() {
+			getElement().ref.hidden = state.slideHidden;
+		},
+		syncMore() {
+			getElement().ref.hidden = ! state.hasMore;
+		},
 		// Keep the <dialog> in step with context.open. showModal() rather than
 		// the open attribute: only the modal form traps focus and inerts the page.
 		syncDialog() {
@@ -356,18 +419,53 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 			}
 		},
 		// A search result or shared link that names an image (#isgal-…) opens
-		// it straight away when the gallery is set to lightbox.
+		// it straight away when the gallery is set to lightbox; either way it
+		// is revealed if "Load more" had it waiting, so the fragment lands.
 		openFromHash() {
-			const ctx = getContext();
-			if ( ! ctx.lightbox || ! window.location.hash ) {
+			if ( ! window.location.hash ) {
 				return;
 			}
+			const ctx = getContext();
 			const id = window.location.hash.slice( 1 );
 			const i = ctx.items.findIndex( ( it ) => it.anchor === id );
-			if ( i >= 0 ) {
+			if ( i < 0 ) {
+				return;
+			}
+			const waiting = !! ctx.shown && rankOf( ctx, i ) >= ctx.shown;
+			revealTo( ctx, i );
+			if ( ctx.lightbox ) {
 				ctx.index = i;
 				ctx.open = true;
+			} else if ( waiting ) {
+				// The figure was hidden when the browser tried to land on the
+				// fragment; land again now that it is shown.
+				const { ref } = getElement();
+				setTimeout( () => {
+					ref.querySelector(
+						'#' + window.CSS.escape( id )
+					)?.scrollIntoView();
+				}, 0 );
 			}
+		},
+		// With the scroll option the footer reveals the next batch when it
+		// comes into view; the button is still there for keyboards and for
+		// browsers without the observer.
+		watchMore() {
+			const ctx = getContext();
+			if ( ! ctx.scroll || ! window.IntersectionObserver ) {
+				return;
+			}
+			const { ref } = getElement();
+			const observer = new window.IntersectionObserver(
+				withScope( ( entries ) => {
+					if ( entries.some( ( e ) => e.isIntersecting ) ) {
+						actions.more();
+					}
+				} ),
+				{ rootMargin: '200px 0px' }
+			);
+			observer.observe( ref );
+			return () => observer.disconnect();
 		},
 	},
 } );

@@ -275,7 +275,7 @@ assert "facets render in the block's order (year before tag)" "isgal-facet-year 
 assert "a facet every image shares (creator) and one none has (camera) are left out" "0" "$(grep -c 'isgal-facet-creator\|isgal-facet-camera' <<<"$FCHTML")"
 assert "years are chips with counts, newest first" "2022 2017 2012 2007" "$(grep -o 'facet&quot;:&quot;year&quot;,&quot;value&quot;:&quot;[0-9]*' <<<"$FCHTML" | sed 's/.*;//' | tr '\n' ' ' | sed 's/ $//')"
 assert "chips are capped per facet, and a year chip carries a string, not a number" "4" "$(grep -o 'value&quot;:&quot;[0-9]*&quot;' <<<"$FCHTML" | wc -l)"
-assert "every figure is bound to its place in the context and stays in the HTML" "6" "$(grep -c '<figure class="isgal-item"[^>]*data-wp-bind--hidden="state.itemHidden"' <<<"$FCHTML")"
+assert "every figure watches its place in the context and stays in the HTML" "6" "$(grep -c '<figure class="isgal-item"[^>]*data-wp-watch--hidden="callbacks.syncItem"' <<<"$FCHTML")"
 assert "the context carries lowercased facet values per image" "1" "$(grep -o 'data-wp-context="[^"]*"' <<<"$FCHTML" | grep -c 'coast guard island')"
 assert "filtering works without a lightbox (interactive wrapper, lightbox off)" "1" "$(grep -o 'data-wp-context="[^"]*"' <<<"$FCHTML" | head -1 | grep -c '&quot;lightbox&quot;:false')"
 assert "the status line and empty message start hidden" "2" "$(grep -c 'class="isgal-facets__\(status\|empty\)[^"]*" hidden' <<<"$FCHTML")"
@@ -296,7 +296,7 @@ head_ "Slideshow is the whole gallery, one image at a time"
 SSHTML="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "layout" => "slideshow", "slideAutoplay" => true, "slideInterval" => 3, "facets" => array( "year" ), "limit" => 12 ) );' | tr -d '\r')"
 assert "every figure is in the page" "6" "$(grep -c '<figure class="isgal-item"' <<<"$SSHTML")"
 assert "all but the first carry hidden from the server (no flash before scripts run)" "5" "$(grep -c '<figure class="isgal-item"[^>]* hidden' <<<"$SSHTML")"
-assert "each figure is bound to the slide cursor, not just the filters" "6" "$(grep -c 'data-wp-bind--hidden="state.slideHidden"' <<<"$SSHTML")"
+assert "each figure watches the slide cursor, not just the filters" "6" "$(grep -c 'data-wp-watch--hidden="callbacks.syncSlide"' <<<"$SSHTML")"
 assert "the first slide loads eagerly, the rest lazily" "1 5" "$(echo "$(grep -c 'loading="eager"' <<<"$SSHTML") $(grep -c 'loading="lazy"' <<<"$SSHTML")")"
 assert "the column count is one, whatever the block says" "1" "$(grep -c 'isgal-cols:1;' <<<"$SSHTML")"
 assert "the wrapper is a carousel region that owns keys, hover and the autoplay watch" "1" "$(grep -c 'aria-roledescription="carousel"[^>]*' <<<"$SSHTML")$(grep -q 'data-wp-watch--autoplay="callbacks.autoplay"' <<<"$SSHTML" || echo x)"
@@ -314,7 +314,37 @@ if ! wp post list --post_type=page --name=slideshow --format=count | grep -q '^1
         --post_content='<!-- wp:imagesnippets/gallery {"gallery":"mmgallery01","layout":"slideshow","slideAutoplay":true,"slideNav":"thumbnails","onClick":"lightbox","facets":["year"],"displayCaption":true,"limit":12} /-->' >/dev/null
 fi
 SPAGE="$(fetch /slideshow/)"
-assert "the anonymous visitor gets one visible slide, the controls and the view module" "1 1 1" "$(echo "$(grep -c '<figure class="isgal-item"[^>]*id="isgal-[a-f0-9]*"[^>]*"state.slideHidden" vocab' <<<"$SPAGE" | awk '{print ($1>0)?1:0}') $(grep -c 'class="isgal-slides__controls"' <<<"$SPAGE") $(grep -c 'build/view.js' <<<"$SPAGE")")"
+assert "the anonymous visitor gets one visible slide, the controls and the view module" "1 1 1" "$(echo "$(grep -c '<figure class="isgal-item"[^>]*id="isgal-[a-f0-9]*"[^>]*"callbacks.syncSlide" vocab' <<<"$SPAGE" | awk '{print ($1>0)?1:0}') $(grep -c 'class="isgal-slides__controls"' <<<"$SPAGE") $(grep -c 'build/view.js' <<<"$SPAGE")")"
+# The server runs directives too; a bind on derived state would have taken the
+# attribute off before any script ran, and every slide would flash up at once.
+assert "the server-rendered hidden survives directive processing on the real page" "5" "$(grep -c '<figure class="isgal-item"[^>]* hidden' <<<"$SPAGE")"
+
+head_ "Load more reveals what is already in the page"
+
+LMHTML="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "pageSize" => 2, "limit" => 12 ) );' | tr -d '\r')"
+assert "every figure is in the page" "6" "$(grep -c '<figure class="isgal-item"' <<<"$LMHTML")"
+assert "all past the first batch carry hidden from the server" "4" "$(grep -c '<figure class="isgal-item"[^>]* hidden' <<<"$LMHTML")"
+assert "each figure watches the store, with no filters configured" "6" "$(grep -c 'data-wp-watch--hidden="callbacks.syncItem"' <<<"$LMHTML")"
+assert "the footer says how many are showing and offers the button" "1 1" "$(echo "$(tr -d '\n\t' <<<"$LMHTML" | grep -o 'Showing *<span[^>]*>2</span> of <span[^>]*>6</span>' | wc -l) $(grep -c 'class="isgal-more__button" data-wp-on--click="actions.more"' <<<"$LMHTML")")"
+assert "the context carries the batch and the count shown" "1" "$(grep -o 'data-wp-context="[^"]*"' <<<"$LMHTML" | head -1 | grep -c '&quot;shown&quot;:2,&quot;batch&quot;:2,&quot;scroll&quot;:false')"
+assert "JSON-LD still describes every image" "6" "$(grep -o '<script type="application/ld+json">.*</script>' <<<"$LMHTML" | grep -o '"contentUrl"' | wc -l)"
+LMSCROLL="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "pageSize" => 4, "loadMore" => "scroll", "limit" => 12 ) );' | tr -d '\r')"
+assert "the scroll option arms the observer on the footer" "1" "$(grep -c 'class="isgal-more" data-wp-init--scroll="callbacks.watchMore"' <<<"$LMSCROLL")"
+LMOFF="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "pageSize" => 12, "limit" => 12 ) ); echo "|"; echo isgal_render_gallery( array( "gallery" => "mmgallery01", "pageSize" => 2, "layout" => "slideshow", "limit" => 12 ) );' | tr -d '\r')"
+assert "a batch the gallery fits in, and a slideshow, get no footer" "0" "$(grep -c 'isgal-more' <<<"$LMOFF")"
+assert "and a fitting batch adds no interactivity" "0" "$(cut -d'|' -f1 <<<"$(tr -d '\n' <<<"$LMOFF")" | grep -c 'data-wp-interactive')"
+if ! wp post list --post_type=page --name=more --format=count | grep -q '^1$'; then
+    wp post create --post_type=page --post_status=publish --post_title='More' --post_name=more \
+        --post_content='<!-- wp:imagesnippets/gallery {"gallery":"mmgallery01","pageSize":3,"onClick":"lightbox","limit":12} /-->' >/dev/null
+fi
+MPAGE="$(fetch /more/)"
+assert "the anonymous visitor gets three showing, the footer and the view module" "3 1 1" "$(echo "$(grep -c '<figure class="isgal-item"[^>]* hidden' <<<"$MPAGE") $(grep -c 'class="isgal-more"[^>]*>' <<<"$MPAGE") $(grep -c 'build/view.js' <<<"$MPAGE")")"
+
+head_ "Site Health knows the numbers"
+
+ADMIN_PHP='require_once WP_PLUGIN_DIR . "/image-snippets-gallery/includes/admin.php";'
+assert "the check states the mirrored count and the no-request claim" "1" "$(wp eval "${ADMIN_PHP}"' $r = isgal_site_health_check(); echo (int) ( false !== strpos( $r["description"], "make no request to ImageSnippets" ) && preg_match( "/[1-9][0-9]* images? across/", $r["description"] ) );' | tr -d '\r')"
+assert "the Info section reports zero requests per page view" "1" "$(wp eval "${ADMIN_PHP}"' $i = isgal_site_health_info( array() ); echo (int) ( 0 === strpos( $i["image-snippets-gallery"]["fields"]["requests"]["value"], "0" ) && (int) $i["image-snippets-gallery"]["fields"]["mirrored"]["value"] > 0 );' | tr -d '\r')"
 
 head_ "JSON-LD on the public page"
 

@@ -721,6 +721,16 @@ function isgal_site_health_check() {
 		);
 	}
 
+	$mirrored = isgal_mirrored_image_count();
+	if ( $mirrored > 0 ) {
+		$notes[] = sprintf(
+			/* translators: 1: number of images, 2: number of galleries */
+			esc_html( _n( '%1$s image across %2$s galleries is kept on this site, so gallery pages are built from that copy and make no request to ImageSnippets while a visitor waits.', '%1$s images across %2$s galleries are kept on this site, so gallery pages are built from that copy and make no request to ImageSnippets while a visitor waits.', $mirrored, 'image-snippets-gallery' ) ),
+			esc_html( number_format_i18n( $mirrored ) ),
+			esc_html( number_format_i18n( count( $galleries ) ) )
+		);
+	}
+
 	if ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) {
 		$notes[] = esc_html__( 'WP-Cron is disabled on this site. Galleries still update, but the refresh happens during a page view rather than in the background.', 'image-snippets-gallery' );
 	}
@@ -743,3 +753,81 @@ function isgal_site_health_check() {
 	$result['description'] = '<p>' . implode( ' ', $notes ) . '</p>';
 	return $result;
 }
+
+/**
+ * How many images the mirror holds, across every gallery.
+ *
+ * @return int
+ */
+function isgal_mirrored_image_count() {
+	$counts = wp_count_posts( ISGAL_POST_TYPE );
+	return isset( $counts->publish ) ? (int) $counts->publish : 0;
+}
+
+/**
+ * A section under Site Health → Info, so the numbers behind the performance
+ * claim are somewhere a person can read them: what is mirrored, how fresh it
+ * is, and whether the page cache is being cleared.
+ *
+ * @param array $info Debug sections.
+ * @return array
+ */
+function isgal_site_health_info( $info ) {
+	$galleries = isgal_indexed_galleries();
+	$status    = isgal_sync_status();
+	$oldest    = null;
+	$errors    = 0;
+	foreach ( $galleries as $gallery ) {
+		$synced = isgal_gallery_synced_at( isgal_gallery_term( isgal_gallery_endpoint_in_use( $gallery ), $gallery ) );
+		if ( $synced && ( null === $oldest || $synced < $oldest ) ) {
+			$oldest = $synced;
+		}
+		if ( ! empty( $status[ $gallery ]['error'] ) ) {
+			++$errors;
+		}
+	}
+	$adapters = isgal_page_cache_detected() ? isgal_known_purge_adapters() : array();
+
+	$info['image-snippets-gallery'] = array(
+		'label'  => __( 'ImageSnippets Gallery', 'image-snippets-gallery' ),
+		'fields' => array(
+			'version'     => array(
+				'label' => __( 'Version', 'image-snippets-gallery' ),
+				'value' => ISGAL_VERSION,
+			),
+			'galleries'   => array(
+				'label' => __( 'Galleries on published pages', 'image-snippets-gallery' ),
+				'value' => number_format_i18n( count( $galleries ) ),
+			),
+			'mirrored'    => array(
+				'label' => __( 'Images kept on this site', 'image-snippets-gallery' ),
+				'value' => number_format_i18n( isgal_mirrored_image_count() ),
+			),
+			'requests'    => array(
+				'label' => __( 'Requests to ImageSnippets per page view', 'image-snippets-gallery' ),
+				'value' => __( '0 — pages render from the local copy; refreshes run in the background', 'image-snippets-gallery' ),
+			),
+			'oldest_sync' => array(
+				'label' => __( 'Least recently refreshed gallery', 'image-snippets-gallery' ),
+				'value' => $oldest ? sprintf( /* translators: %s: human-readable time difference */ __( '%s ago', 'image-snippets-gallery' ), human_time_diff( $oldest ) ) : __( 'Never', 'image-snippets-gallery' ),
+			),
+			'errors'      => array(
+				'label' => __( 'Galleries whose last refresh failed', 'image-snippets-gallery' ),
+				'value' => number_format_i18n( $errors ),
+			),
+			'page_cache'  => array(
+				'label' => __( 'Page cache', 'image-snippets-gallery' ),
+				'value' => isgal_page_cache_detected()
+					? ( $adapters ? sprintf( /* translators: %s: comma-separated cache plugin names */ __( 'Detected, cleared automatically (%s)', 'image-snippets-gallery' ), implode( ', ', $adapters ) ) : __( 'Detected, not cleared by this plugin', 'image-snippets-gallery' ) )
+					: __( 'Not detected', 'image-snippets-gallery' ),
+			),
+			'endpoint'    => array(
+				'label'   => __( 'Default endpoint', 'image-snippets-gallery' ),
+				'value'   => isgal_default_endpoint(),
+				'private' => false,
+			),
+		),
+	);
+	return $info;
+}
+add_filter( 'debug_information', 'isgal_site_health_info' );

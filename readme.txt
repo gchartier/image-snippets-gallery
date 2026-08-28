@@ -71,6 +71,10 @@ Open Tools &rarr; ImageSnippets. It shows when each gallery last updated, how ma
 
 If that screen says a page cache is active but has not been cleared by this plugin, your host or caching plugin is serving stored HTML to visitors. Exclude the gallery pages from that cache, or ask your host how to clear it when content changes.
 
+= Is it fast? =
+
+Yes, by construction. Each gallery is copied to your site once and refreshed in the background, so a page view makes no request to ImageSnippets: the HTML, the image sizes and the structured data all come from the local copy. Images load lazily with sizes matched to their column, and nothing on the page needs a script to appear. For long galleries, set "Images shown at first" to add a "Load more" button (or reveal on scroll); the rest of the images are still in the page for search engines, just hidden until asked for. Site Health → Info → ImageSnippets Gallery shows the numbers.
+
 = Does this work with caching plugins? =
 
 Yes. When a gallery's contents change, the plugin clears the affected pages from WP Rocket, W3 Total Cache, WP Super Cache, Cache Enabler, LiteSpeed Cache, Cachify, and SG Optimizer, and signals WordPress so other caches following core conventions clear themselves. For anything else, hook the `isgal_gallery_changed` action.
@@ -79,6 +83,8 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 
 = 0.7.0 =
 
+* "Load more". Set "Images shown at first" in the block's Source panel and long galleries show that many, with a button that reveals the next batch — or, with the scroll option, reveal as the visitor nears the end. Every image is still in the page for search engines and structured data; only the display waits. Works with filters (each filtered view starts with a full first batch) and the lightbox (closing it reveals up to the image you were on); a link to a specific image reveals it.
+* Site Health now says how many images are kept on this site and that pages make no request to ImageSnippets; Site Health → Info has a section with the figures.
 * New layout: Slideshow. One image at a time, as wide as the block, with previous/next arrows, a counter, and dots or a thumbnail strip to jump to any image; optional autoplay with a chosen number of seconds per image, which pauses while the pointer or keyboard focus is on the gallery and stays stopped for visitors who ask their browser for less motion. Arrow keys and swiping work. Every image is still in the page for search engines and structured data; the script only moves a `hidden` attribute. Works with filters (a filtered-out image loses its slide and its dot) and with the lightbox (closing it lands the slideshow on the image just seen).
 * Filters. Under the block's Filters panel, let visitors narrow a gallery by tag, creator, year, camera or rights — buttons above the images, built from what each image is annotated with on ImageSnippets, with counts. Pick any of several values in a filter, combine filters, share the result as a link (`?isgal_tag=…`). Every image stays in the page for search engines; filtering only hides. A filter every image shares is left out, as is one no image has.
 * Timeline layout: images grouped under year headings down a rule, oldest or newest first, each with its date.

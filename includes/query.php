@@ -629,6 +629,8 @@ function isgal_defaults() {
 		'order'             => 'desc',
 		'orderBy'           => 'date',
 		'limit'             => 40,
+		'pageSize'          => 0,
+		'loadMore'          => 'button',
 		'thumbSize'         => 'medium',
 		'columns'           => 3,
 		'aspectRatio'       => '4-3',
@@ -876,10 +878,10 @@ function isgal_facet_key( $value ) {
  * @return array Facet key => [ 'label' => string, 'values' => [ [ 'key', 'label', count ], … ] ].
  */
 function isgal_facet_index( array $rows, array $a, array $keys ) {
-	$labels = isgal_facets();
-	$max    = max( 1, min( 100, (int) $a['facetMax'] ) );
-	$counts = array_fill_keys( $keys, array() );
-	$shown  = array_fill_keys( $keys, array() );
+	$labels          = isgal_facets();
+	$max             = max( 1, min( 100, (int) $a['facetMax'] ) );
+	$counts          = array_fill_keys( $keys, array() );
+	$shown           = array_fill_keys( $keys, array() );
 	$rows_with_value = array_fill_keys( $keys, 0 );
 	foreach ( $rows as $row ) {
 		$values = isgal_row_facet_values( $row, $a );
@@ -907,7 +909,7 @@ function isgal_facet_index( array $rows, array $a, array $keys ) {
 		if ( ! $counts[ $facet ] ) {
 			continue;
 		}
-		if ( 1 === count( $counts[ $facet ] ) && $rows_with_value[ $facet ] === count( $rows ) ) {
+		if ( 1 === count( $counts[ $facet ] ) && count( $rows ) === $rows_with_value[ $facet ] ) {
 			continue; // Everything shares it: nothing to filter.
 		}
 		$c = $counts[ $facet ];
@@ -953,7 +955,18 @@ function isgal_facet_bar_html( array $index, $total ) {
 				<span class="isgal-facet__name"><?php echo esc_html( $group['label'] ); ?></span>
 				<span class="isgal-facet__chips">
 					<?php foreach ( $group['values'] as $v ) : ?>
-						<button type="button" class="isgal-chip" aria-pressed="false" data-wp-context="<?php echo esc_attr( wp_json_encode( array( 'facet' => $facet, 'value' => $v[0] ) ) ); ?>" data-wp-on--click="actions.toggle" data-wp-bind--aria-pressed="state.chipOn" data-wp-class--is-active="state.chipOn"><?php echo esc_html( $v[1] ); ?> <span class="isgal-chip__count"><?php echo esc_html( number_format_i18n( $v[2] ) ); ?></span></button>
+						<button type="button" class="isgal-chip" aria-pressed="false" data-wp-context="
+						<?php
+						echo esc_attr(
+							wp_json_encode(
+								array(
+									'facet' => $facet,
+									'value' => $v[0],
+								)
+							)
+						);
+						?>
+																										" data-wp-on--click="actions.toggle" data-wp-bind--aria-pressed="state.chipOn" data-wp-class--is-active="state.chipOn"><?php echo esc_html( $v[1] ); ?> <span class="isgal-chip__count"><?php echo esc_html( number_format_i18n( $v[2] ) ); ?></span></button>
 					<?php endforeach; ?>
 				</span>
 			</div>
@@ -1037,6 +1050,42 @@ function isgal_lightbox_html() {
 			<button type="button" class="isgal-lightbox__nav isgal-lightbox__next" data-wp-on--click="actions.next" data-wp-bind--hidden="!state.hasMany" aria-label="<?php esc_attr_e( 'Next image', 'image-snippets-gallery' ); ?>">&#x203A;</button>
 		</div>
 	</dialog>
+	<?php
+	return ob_get_clean();
+}
+
+/**
+ * The "Load more" footer: how many of the gallery's images are showing, and
+ * the button that reveals the next batch. Every image is already in the page
+ * (hidden past the first batch), so revealing is a state change, not a
+ * request; with the scroll option the footer reveals itself when it comes
+ * into view, and the button stays as the keyboard's way.
+ *
+ * @param int   $page_size Images shown at first, and per batch.
+ * @param int   $total     Images in the gallery.
+ * @param array $a         Resolved block attributes.
+ * @return string HTML.
+ */
+function isgal_load_more_html( $page_size, $total, array $a ) {
+	$scroll = 'scroll' === $a['loadMore'];
+	ob_start();
+	?>
+	<div class="isgal-more"<?php echo $scroll ? ' data-wp-init--scroll="callbacks.watchMore"' : ''; ?> data-wp-watch--more="callbacks.syncMore">
+		<p class="isgal-more__status" aria-live="polite">
+			<?php
+			echo wp_kses(
+				sprintf(
+					/* translators: 1: images shown so far, 2: images in the gallery */
+					__( 'Showing %1$s of %2$s', 'image-snippets-gallery' ),
+					'<span data-wp-text="state.shownCount">' . esc_html( number_format_i18n( min( $page_size, $total ) ) ) . '</span>',
+					'<span data-wp-text="state.visibleCount">' . esc_html( number_format_i18n( $total ) ) . '</span>'
+				),
+				array( 'span' => array( 'data-wp-text' => array() ) )
+			);
+			?>
+		</p>
+		<button type="button" class="isgal-more__button" data-wp-on--click="actions.more"><?php esc_html_e( 'Load more', 'image-snippets-gallery' ); ?></button>
+	</div>
 	<?php
 	return ob_get_clean();
 }
@@ -1558,7 +1607,14 @@ function isgal_render_gallery( array $attributes ) {
 	// controls stand in for it.
 	$slideshow   = 'slideshow' === $layout && ! empty( $rows );
 	$slides_live = $slideshow && ! isgal_is_editor_preview();
-	$interactive = $lightbox || $facets_live || $slides_live;
+	// "Load more" is the same idea: the whole gallery is rendered, the figures
+	// past the first batch carry `hidden`, and the script takes it off a batch
+	// at a time. Nothing is fetched, the page cache holds one page, JSON-LD
+	// and crawlers see every image. A slideshow already shows one at a time.
+	$page_size   = max( 0, min( 200, (int) $a['pageSize'] ) );
+	$paged       = $page_size > 0 && ! $slideshow && count( $rows ) > $page_size;
+	$paged_live  = $paged && ! isgal_is_editor_preview();
+	$interactive = $lightbox || $facets_live || $slides_live || $paged_live;
 	$items       = array();
 	$thumbs      = array();
 	if ( $interactive ) {
@@ -1629,7 +1685,9 @@ function isgal_render_gallery( array $attributes ) {
 					// custom property the stylesheet turns into flex-basis/grow and an
 					// aspect-ratio, so the row heights are known before any image loads.
 					// Each figure knows its place in the context's items, which
-					// carry its facet values; hiding is a binding on that.
+					// carry its facet values. Hiding is a watch, not a bind: the
+					// server evaluates data-wp-bind too, cannot see derived state,
+					// and would strip the `hidden` set below before scripts run.
 					$isgal_item_attrs = '';
 					if ( $interactive ) {
 						$isgal_facet_values = array();
@@ -1641,12 +1699,12 @@ function isgal_render_gallery( array $attributes ) {
 							'f'      => (object) $isgal_facet_values,
 						);
 						if ( $slides_live ) {
-							$isgal_item_attrs = ' data-wp-context="' . esc_attr( wp_json_encode( array( 'i' => count( $items ) ) ) ) . '" data-wp-bind--hidden="state.slideHidden"';
-						} elseif ( $facets_live ) {
-							$isgal_item_attrs = ' data-wp-context="' . esc_attr( wp_json_encode( array( 'i' => count( $items ) ) ) ) . '" data-wp-bind--hidden="state.itemHidden"';
+							$isgal_item_attrs = ' data-wp-context="' . esc_attr( wp_json_encode( array( 'i' => count( $items ) ) ) ) . '" data-wp-watch--hidden="callbacks.syncSlide"';
+						} elseif ( $facets_live || $paged_live ) {
+							$isgal_item_attrs = ' data-wp-context="' . esc_attr( wp_json_encode( array( 'i' => count( $items ) ) ) ) . '" data-wp-watch--hidden="callbacks.syncItem"';
 						}
 					}
-					if ( $slideshow && $position > 1 ) {
+					if ( ( $slideshow && $position > 1 ) || ( $paged && $position > $page_size ) ) {
 						$isgal_item_attrs .= ' hidden';
 					}
 					$isgal_item_style = '';
@@ -1738,6 +1796,7 @@ function isgal_render_gallery( array $attributes ) {
 			<?php endif; ?>
 			<?php endforeach; ?>
 			<?php echo $slideshow ? isgal_slideshow_controls_html( $thumbs, $a ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped within. ?>
+			<?php echo $paged ? isgal_load_more_html( $page_size, count( $rows ), $a ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped within. ?>
 			<?php
 			// One rights line for the whole gallery, but only when it is true of
 			// every image shown; otherwise it would misattribute someone's work.
@@ -1753,6 +1812,8 @@ function isgal_render_gallery( array $attributes ) {
 	<?php
 	$html = ob_get_clean();
 	if ( $interactive ) {
+		// shown: 0 means every image is displayed; otherwise how many are, and
+		// batch is how many each "Load more" adds.
 		$context = array(
 			'lightbox' => $lightbox,
 			'open'     => false,
@@ -1766,6 +1827,9 @@ function isgal_render_gallery( array $attributes ) {
 			'interval' => max( 2, min( 60, (int) $a['slideInterval'] ) ) * 1000,
 			'playing'  => $slides_live && (bool) $a['slideAutoplay'],
 			'held'     => false,
+			'shown'    => $paged_live ? $page_size : 0,
+			'batch'    => $page_size,
+			'scroll'   => $paged_live && 'scroll' === $a['loadMore'],
 		);
 		$html    = str_replace( esc_attr( 'ISGAL_CONTEXT_PLACEHOLDER' ), esc_attr( wp_json_encode( $context ) ), $html );
 	}

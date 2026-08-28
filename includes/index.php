@@ -135,6 +135,7 @@ function isgal_posts_for_gallery( $gallery ) {
 			  WHERE pm.meta_key = %s
 			    AND pm.meta_value = %s
 			    AND p.post_status = 'publish'
+			  ORDER BY p.ID ASC
 			  LIMIT 200",
 			ISGAL_GALLERY_META,
 			$gallery

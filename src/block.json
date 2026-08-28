@@ -137,6 +137,14 @@
 			"type": "number",
 			"default": 40
 		},
+		"pageSize": {
+			"type": "number",
+			"default": 0
+		},
+		"loadMore": {
+			"type": "string",
+			"default": "button"
+		},
 		"thumbSize": {
 			"type": "string",
 			"default": "medium"

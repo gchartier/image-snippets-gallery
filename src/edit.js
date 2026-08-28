@@ -245,6 +245,8 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 		order,
 		orderBy,
 		limit,
+		pageSize,
+		loadMore,
 		columns,
 		aspectRatio,
 		useFilename,
@@ -531,6 +533,61 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 						max={ 200 }
 						onChange={ ( v ) => setAttributes( { limit: v } ) }
 					/>
+					{ ! isSlideshow && (
+						<RangeControl
+							label={ __(
+								'Images shown at first',
+								'image-snippets-gallery'
+							) }
+							help={
+								pageSize
+									? __(
+											'The rest are in the page but hidden until the visitor asks for more — search engines still see them all.',
+											'image-snippets-gallery'
+									  )
+									: __(
+											'All at once. Set a number to add a “Load more” button that reveals that many at a time.',
+											'image-snippets-gallery'
+									  )
+							}
+							value={ pageSize || 0 }
+							min={ 0 }
+							max={ 100 }
+							onChange={ ( v ) =>
+								setAttributes( { pageSize: v ?? 0 } )
+							}
+							__nextHasNoMarginBottom
+							__next40pxDefaultSize
+						/>
+					) }
+					{ ! isSlideshow && pageSize > 0 && (
+						<SelectControl
+							label={ __(
+								'Reveal the rest',
+								'image-snippets-gallery'
+							) }
+							value={ loadMore || 'button' }
+							options={ [
+								{
+									label: __(
+										'With a “Load more” button',
+										'image-snippets-gallery'
+									),
+									value: 'button',
+								},
+								{
+									label: __(
+										'As the visitor scrolls (button stays as fallback)',
+										'image-snippets-gallery'
+									),
+									value: 'scroll',
+								},
+							] }
+							onChange={ ( v ) =>
+								setAttributes( { loadMore: v } )
+							}
+						/>
+					) }
 					<Button
 						variant="secondary"
 						onClick={ refresh }

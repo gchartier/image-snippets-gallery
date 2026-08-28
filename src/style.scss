@@ -275,6 +275,39 @@
 		display: none !important;
 	}
 
+	// "Load more": a centred line under the gallery and a button in the chip
+	// style, a size up. Gone (attribute) once everything is showing.
+	.isgal-more {
+		margin-top: 1rem;
+		text-align: center;
+
+		&[hidden] {
+			display: none;
+		}
+	}
+
+	.isgal-more__status {
+		margin: 0 0 0.5em;
+		font-size: 0.85em;
+		opacity: 0.8;
+	}
+
+	.isgal-more__button {
+		font: inherit;
+		line-height: 1.2;
+		padding: 0.5em 1.4em;
+		border: 1px solid currentColor;
+		border-radius: 999px;
+		background: transparent;
+		color: inherit;
+		cursor: pointer;
+
+		&:hover,
+		&:focus-visible {
+			background: color-mix( in srgb, currentColor 12%, transparent );
+		}
+	}
+
 	// A timeline year with nothing left in it loses its heading too.
 	.isgal-timeline__group:not( :has( .isgal-item:not( [hidden] ) ) ) {
 		display: none;
