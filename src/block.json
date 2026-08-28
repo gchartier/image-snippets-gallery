@@ -94,6 +94,18 @@
 			"type": "number",
 			"default": 12
 		},
+		"slideAutoplay": {
+			"type": "boolean",
+			"default": false
+		},
+		"slideInterval": {
+			"type": "number",
+			"default": 5
+		},
+		"slideNav": {
+			"type": "string",
+			"default": "dots"
+		},
 		"hoverEffect": {
 			"type": "string",
 			"default": "none"

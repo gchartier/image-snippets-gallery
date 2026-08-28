@@ -291,6 +291,31 @@ fi
 FPAGE="$(fetch /facets/)"
 assert "the anonymous visitor gets the bar and the view module on a page-cached page" "2" "$(grep -c 'class="isgal-facets"\|build/view.js' <<<"$FPAGE")"
 
+head_ "Slideshow is the whole gallery, one image at a time"
+
+SSHTML="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "layout" => "slideshow", "slideAutoplay" => true, "slideInterval" => 3, "facets" => array( "year" ), "limit" => 12 ) );' | tr -d '\r')"
+assert "every figure is in the page" "6" "$(grep -c '<figure class="isgal-item"' <<<"$SSHTML")"
+assert "all but the first carry hidden from the server (no flash before scripts run)" "5" "$(grep -c '<figure class="isgal-item"[^>]* hidden' <<<"$SSHTML")"
+assert "each figure is bound to the slide cursor, not just the filters" "6" "$(grep -c 'data-wp-bind--hidden="state.slideHidden"' <<<"$SSHTML")"
+assert "the first slide loads eagerly, the rest lazily" "1 5" "$(echo "$(grep -c 'loading="eager"' <<<"$SSHTML") $(grep -c 'loading="lazy"' <<<"$SSHTML")")"
+assert "the column count is one, whatever the block says" "1" "$(grep -c 'isgal-cols:1;' <<<"$SSHTML")"
+assert "the wrapper is a carousel region that owns keys, hover and the autoplay watch" "1" "$(grep -c 'aria-roledescription="carousel"[^>]*' <<<"$SSHTML")$(grep -q 'data-wp-watch--autoplay="callbacks.autoplay"' <<<"$SSHTML" || echo x)"
+assert "a dot per image, the first selected, each bound to the filters" "6 1" "$(echo "$(grep -c 'class="isgal-slides__dot"[^>]*data-wp-bind--hidden="state.itemHidden"' <<<"$SSHTML") $(grep -c 'class="isgal-slides__dot"[^>]*aria-selected="true"' <<<"$SSHTML")")"
+assert "prev, next and play controls are present when autoplay is on" "3" "$(grep -c 'actions.slidePrev\|actions.slideNext\|actions.togglePlay' <<<"$SSHTML")"
+assert "the context carries the interval in ms and starts playing" "1" "$(grep -o 'data-wp-context="[^"]*"' <<<"$SSHTML" | head -1 | grep -c '&quot;interval&quot;:3000,&quot;playing&quot;:true')"
+assert "the counter starts at 1 / 6 before any script" "1" "$(grep -c 'isgal-slides__count[^>]*>1 / 6<' <<<"$SSHTML")"
+assert "JSON-LD still describes every image" "6" "$(grep -o '<script type="application/ld+json">.*</script>' <<<"$SSHTML" | grep -o '"contentUrl"' | wc -l)"
+SSTH="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "layout" => "slideshow", "slideNav" => "thumbnails", "limit" => 12 ) );' | tr -d '\r')"
+assert "thumbnail picker: the small mirrored thumbnail per image, not the original; no play button" "6 0" "$(echo "$(tr -d '\n\t' <<<"$SSTH" | grep -o 'isgal-slides__thumb"[^>]*> *<img src="[^"]*/thumbnails/[^"]*"' | wc -l) $(grep -c 'actions.togglePlay' <<<"$SSTH")")"
+SSNONE="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "layout" => "slideshow", "slideNav" => "none", "limit" => 12 ) );' | tr -d '\r')"
+assert "no picker: arrows and counter only" "1 0" "$(echo "$(grep -c 'isgal-slides__controls' <<<"$SSNONE") $(grep -c 'role="tablist"' <<<"$SSNONE")")"
+if ! wp post list --post_type=page --name=slideshow --format=count | grep -q '^1$'; then
+    wp post create --post_type=page --post_status=publish --post_title='Slideshow' --post_name=slideshow \
+        --post_content='<!-- wp:imagesnippets/gallery {"gallery":"mmgallery01","layout":"slideshow","slideAutoplay":true,"slideNav":"thumbnails","onClick":"lightbox","facets":["year"],"displayCaption":true,"limit":12} /-->' >/dev/null
+fi
+SPAGE="$(fetch /slideshow/)"
+assert "the anonymous visitor gets one visible slide, the controls and the view module" "1 1 1" "$(echo "$(grep -c '<figure class="isgal-item"[^>]*id="isgal-[a-f0-9]*"[^>]*"state.slideHidden" vocab' <<<"$SPAGE" | awk '{print ($1>0)?1:0}') $(grep -c 'class="isgal-slides__controls"' <<<"$SPAGE") $(grep -c 'build/view.js' <<<"$SPAGE")")"
+
 head_ "JSON-LD on the public page"
 
 tally "$( fetch | python3 ./check-jsonld.py )"

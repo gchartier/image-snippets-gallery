@@ -233,6 +233,9 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 		dateFields,
 		facets,
 		facetMax,
+		slideAutoplay,
+		slideInterval,
+		slideNav,
 		onClick,
 		linkNewTab,
 		lightboxDetails,
@@ -408,6 +411,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 	// tells the truth while disabled.
 	const isMasonry = 'masonry' === layout;
 	const isJustified = 'justified' === layout;
+	const isSlideshow = 'slideshow' === layout;
 	const shownRatio = isMasonry || isJustified ? 'original' : aspectRatio;
 
 	return (
@@ -559,24 +563,96 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 							{ label: 'Masonry', value: 'masonry' },
 							{ label: 'Justified rows', value: 'justified' },
 							{ label: 'Timeline', value: 'timeline' },
+							{ label: 'Slideshow', value: 'slideshow' },
 						] }
 						onChange={ ( v ) => setAttributes( { layout: v } ) }
 					/>
-					<RangeControl
-						label={ __( 'Columns', 'image-snippets-gallery' ) }
-						help={ __(
-							'Max. 2 on mobile',
-							'image-snippets-gallery'
-						) }
-						value={ columns }
-						min={ 1 }
-						max={ 8 }
-						onChange={ ( v ) =>
-							setAttributes( { columns: v ?? 3 } )
-						}
-						__nextHasNoMarginBottom
-						__next40pxDefaultSize
-					/>
+					{ ! isSlideshow && (
+						<RangeControl
+							label={ __( 'Columns', 'image-snippets-gallery' ) }
+							help={ __(
+								'Max. 2 on mobile',
+								'image-snippets-gallery'
+							) }
+							value={ columns }
+							min={ 1 }
+							max={ 8 }
+							onChange={ ( v ) =>
+								setAttributes( { columns: v ?? 3 } )
+							}
+							__nextHasNoMarginBottom
+							__next40pxDefaultSize
+						/>
+					) }
+					{ isSlideshow && (
+						<>
+							<SelectControl
+								label={ __(
+									'Slide picker',
+									'image-snippets-gallery'
+								) }
+								value={ slideNav }
+								options={ [
+									{
+										label: __(
+											'Dots',
+											'image-snippets-gallery'
+										),
+										value: 'dots',
+									},
+									{
+										label: __(
+											'Thumbnails',
+											'image-snippets-gallery'
+										),
+										value: 'thumbnails',
+									},
+									{
+										label: __(
+											'None (arrows only)',
+											'image-snippets-gallery'
+										),
+										value: 'none',
+									},
+								] }
+								onChange={ ( v ) =>
+									setAttributes( { slideNav: v } )
+								}
+							/>
+							<ToggleControl
+								label={ __(
+									'Play automatically',
+									'image-snippets-gallery'
+								) }
+								help={ __(
+									'Pauses while the pointer is over the gallery, and stays stopped for visitors who ask for less motion.',
+									'image-snippets-gallery'
+								) }
+								checked={ !! slideAutoplay }
+								onChange={ ( v ) =>
+									setAttributes( { slideAutoplay: v } )
+								}
+							/>
+							{ slideAutoplay && (
+								<RangeControl
+									label={ __(
+										'Seconds per image',
+										'image-snippets-gallery'
+									) }
+									value={ slideInterval }
+									min={ 2 }
+									max={ 60 }
+									onChange={ ( v ) =>
+										setAttributes( {
+											slideInterval: v ?? 5,
+										} )
+									}
+									__nextHasNoMarginBottom
+									__next40pxDefaultSize
+								/>
+							) }
+						</>
+					) }
 					<SelectControl
 						label={ __( 'Crop ratio', 'image-snippets-gallery' ) }
 						help={

@@ -620,6 +620,9 @@ function isgal_defaults() {
 		'dateFields'        => null,
 		'facets'            => array(),
 		'facetMax'          => 12,
+		'slideAutoplay'     => false,
+		'slideInterval'     => 5,
+		'slideNav'          => 'dots',
 		'displayTitle'      => false,
 		'titleLevel'        => 2,
 		'layout'            => 'grid',
@@ -1039,6 +1042,48 @@ function isgal_lightbox_html() {
 }
 
 /**
+ * The controls under a slideshow: previous/next, a live "n / total" counter,
+ * play/pause when autoplay is on, and either a dot or a thumbnail per image.
+ * Dots and thumbnails know their place in the context's items, so a filtered
+ * out image loses its dot along with its slide.
+ *
+ * @param array $thumbs One entry per item: [ src, alt ].
+ * @param array $a      Resolved attributes.
+ * @return string HTML.
+ */
+function isgal_slideshow_controls_html( array $thumbs, array $a ) {
+	$nav  = in_array( $a['slideNav'], array( 'dots', 'thumbnails', 'none' ), true ) ? $a['slideNav'] : 'dots';
+	$many = count( $thumbs ) > 1;
+	ob_start();
+	?>
+	<div class="isgal-slides__controls">
+		<?php if ( $many ) : ?>
+		<button type="button" class="isgal-slides__nav isgal-slides__prev" data-wp-on--click="actions.slidePrev" aria-label="<?php esc_attr_e( 'Previous image', 'image-snippets-gallery' ); ?>">&#x2039;</button>
+		<?php endif; ?>
+		<span class="isgal-slides__count" data-wp-text="state.slidePosition" aria-live="polite"><?php echo esc_html( '1 / ' . number_format_i18n( count( $thumbs ) ) ); ?></span>
+		<?php if ( $many && $a['slideAutoplay'] ) : ?>
+		<button type="button" class="isgal-slides__play" data-wp-on--click="actions.togglePlay" aria-label="<?php esc_attr_e( 'Pause slideshow', 'image-snippets-gallery' ); ?>" data-wp-bind--aria-label="state.playLabel"><span data-wp-text="state.playGlyph">&#x23F8;</span></button>
+		<?php endif; ?>
+		<?php if ( $many ) : ?>
+		<button type="button" class="isgal-slides__nav isgal-slides__next" data-wp-on--click="actions.slideNext" aria-label="<?php esc_attr_e( 'Next image', 'image-snippets-gallery' ); ?>">&#x203A;</button>
+		<?php endif; ?>
+	</div>
+	<?php if ( $many && 'none' !== $nav ) : ?>
+	<div class="isgal-slides__<?php echo esc_attr( $nav ); ?>" role="tablist" aria-label="<?php esc_attr_e( 'Choose image', 'image-snippets-gallery' ); ?>">
+		<?php foreach ( $thumbs as $i => $thumb ) : ?>
+			<button type="button" role="tab" class="isgal-slides__<?php echo 'dots' === $nav ? 'dot' : 'thumb'; ?>" data-wp-context="<?php echo esc_attr( wp_json_encode( array( 'i' => $i ) ) ); ?>" data-wp-on--click="actions.slideTo" data-wp-bind--aria-selected="state.dotOn" data-wp-bind--hidden="state.itemHidden" aria-selected="<?php echo 0 === $i ? 'true' : 'false'; ?>" aria-label="<?php echo esc_attr( sprintf( /* translators: 1: position, 2: total */ __( 'Image %1$d of %2$d', 'image-snippets-gallery' ), $i + 1, count( $thumbs ) ) ); ?>">
+				<?php if ( 'thumbnails' === $nav ) : ?>
+					<img src="<?php echo esc_url( $thumb[0] ); ?>" alt="" loading="lazy" decoding="async" />
+				<?php endif; ?>
+			</button>
+		<?php endforeach; ?>
+	</div>
+	<?php endif; ?>
+	<?php
+	return ob_get_clean();
+}
+
+/**
  * Rows grouped by the year of their resolved date, for the timeline layout.
  * Rows are sorted by that date first (the block's direction), so a custom
  * date priority reorders the timeline as a person would expect. Undated
@@ -1429,9 +1474,14 @@ function isgal_render_gallery( array $attributes ) {
 
 	$endpoint = isgal_resolve_endpoint( $a );
 
-	$layout = in_array( $a['layout'], array( 'grid', 'masonry', 'justified', 'timeline' ), true ) ? $a['layout'] : 'grid';
+	$layout = in_array( $a['layout'], array( 'grid', 'masonry', 'justified', 'timeline', 'slideshow' ), true ) ? $a['layout'] : 'grid';
 	$cols   = max( 1, min( 8, (int) $a['columns'] ) );
-	$ratio  = in_array( $a['aspectRatio'], array( 'original', '1-1', '4-3', '3-2', '16-9' ), true ) ? $a['aspectRatio'] : '4-3';
+	// A slideshow shows one image at a time, as wide as the block: the column
+	// setting does not apply, and the renditions are chosen for one column.
+	if ( 'slideshow' === $layout ) {
+		$cols = 1;
+	}
+	$ratio = in_array( $a['aspectRatio'], array( 'original', '1-1', '4-3', '3-2', '16-9' ), true ) ? $a['aspectRatio'] : '4-3';
 	// Which Flickr rendition to request as the src, by how wide a column is.
 	$size = $cols >= 5 ? 'small' : ( $cols >= 3 ? 'medium' : 'large' );
 	// Aspect-ratio cropping is incompatible with true masonry (variable heights)
@@ -1501,10 +1551,30 @@ function isgal_render_gallery( array $attributes ) {
 	$facet_keys  = isgal_block_facets( $a );
 	$facet_index = $facet_keys && ! empty( $rows ) ? isgal_facet_index( $rows, $a, $facet_keys ) : array();
 	$facets_live = ! empty( $facet_index ) && ! isgal_is_editor_preview();
-	$interactive = $lightbox || $facets_live;
+	// A slideshow is server-rendered whole: every figure is in the page, all
+	// but the first carry `hidden`, and the script only moves that attribute
+	// around. Crawlers, JSON-LD and no-script visitors see the full gallery
+	// (the latter, the first image). In the editor the first slide and inert
+	// controls stand in for it.
+	$slideshow   = 'slideshow' === $layout && ! empty( $rows );
+	$slides_live = $slideshow && ! isgal_is_editor_preview();
+	$interactive = $lightbox || $facets_live || $slides_live;
 	$items       = array();
+	$thumbs      = array();
 	if ( $interactive ) {
 		$wrapper_attributes .= ' data-wp-interactive="imagesnippets/gallery" data-wp-init--hash="callbacks.openFromHash" data-wp-init--facets="callbacks.initFacets"';
+	}
+	if ( $slides_live ) {
+		wp_interactivity_state(
+			'imagesnippets/gallery',
+			array(
+				'i18n' => array(
+					'play'  => __( 'Play slideshow', 'image-snippets-gallery' ),
+					'pause' => __( 'Pause slideshow', 'image-snippets-gallery' ),
+				),
+			)
+		);
+		$wrapper_attributes .= ' data-wp-init--motion="callbacks.initMotion" data-wp-watch--autoplay="callbacks.autoplay" data-wp-on--keydown="actions.slideKeydown" data-wp-on--mouseenter="actions.hold" data-wp-on--mouseleave="actions.release" data-wp-on--focusin="actions.hold" data-wp-on--focusout="actions.release" data-wp-on--touchstart="actions.touchStart" data-wp-on--touchend="actions.slideTouchEnd" role="region" aria-roledescription="carousel" aria-label="' . esc_attr( $a['gallery'] ) . '"';
 	}
 	if ( $facet_index ) {
 		$wrapper_attributes = str_replace( 'class="', 'class="isgal-has-facets ', $wrapper_attributes );
@@ -1570,9 +1640,14 @@ function isgal_render_gallery( array $attributes ) {
 							'anchor' => $isgal_anchor,
 							'f'      => (object) $isgal_facet_values,
 						);
-						if ( $facets_live ) {
+						if ( $slides_live ) {
+							$isgal_item_attrs = ' data-wp-context="' . esc_attr( wp_json_encode( array( 'i' => count( $items ) ) ) ) . '" data-wp-bind--hidden="state.slideHidden"';
+						} elseif ( $facets_live ) {
 							$isgal_item_attrs = ' data-wp-context="' . esc_attr( wp_json_encode( array( 'i' => count( $items ) ) ) ) . '" data-wp-bind--hidden="state.itemHidden"';
 						}
+					}
+					if ( $slideshow && $position > 1 ) {
+						$isgal_item_attrs .= ' hidden';
 					}
 					$isgal_item_style = '';
 					if ( 'justified' === $layout ) {
@@ -1609,6 +1684,11 @@ function isgal_render_gallery( array $attributes ) {
 							if ( $interactive ) {
 								$items[] = $lightbox ? array_merge( $isgal_item, isgal_lightbox_item( $row, $a, $title, $alt, $isgal_source ) ) : $isgal_item;
 							}
+							if ( $slideshow ) {
+								// The picker strip wants something small: ImageSnippets' own
+								// 128px thumbnail when the row has one, else Flickr's square.
+								$thumbs[] = array( '' !== $row['thumb'] ? $row['thumb'] : isgal_flickr_sized( $isgal_source, 'q' ), $alt );
+							}
 							// One column's share of the viewport; phones cap at two columns.
 							$isgal_sizes = sprintf( '(max-width: 600px) %dvw, %dvw', (int) ( 100 / min( 2, $cols ) ), (int) ceil( 100 / $cols ) );
 							?>
@@ -1622,7 +1702,7 @@ function isgal_render_gallery( array $attributes ) {
 								onerror='this.onerror=null;this.removeAttribute("srcset");this.src="<?php echo esc_url( $row['thumb'] ); ?>";'
 								<?php endif; ?>
 								alt="<?php echo esc_attr( $alt ); ?>"
-								loading="lazy"
+								loading="<?php echo $slideshow && 1 === $position ? 'eager' : 'lazy'; ?>"
 								decoding="async"
 								property="contentUrl"
 							/>
@@ -1657,6 +1737,7 @@ function isgal_render_gallery( array $attributes ) {
 					</section>
 			<?php endif; ?>
 			<?php endforeach; ?>
+			<?php echo $slideshow ? isgal_slideshow_controls_html( $thumbs, $a ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped within. ?>
 			<?php
 			// One rights line for the whole gallery, but only when it is true of
 			// every image shown; otherwise it would misattribute someone's work.
@@ -1679,6 +1760,12 @@ function isgal_render_gallery( array $attributes ) {
 			'items'    => $items,
 			'facets'   => $facet_keys,
 			'active'   => (object) array_fill_keys( $facet_keys, array() ),
+			'slides'   => $slides_live,
+			'slide'    => 0,
+			'autoplay' => $slides_live && (bool) $a['slideAutoplay'],
+			'interval' => max( 2, min( 60, (int) $a['slideInterval'] ) ) * 1000,
+			'playing'  => $slides_live && (bool) $a['slideAutoplay'],
+			'held'     => false,
 		);
 		$html    = str_replace( esc_attr( 'ISGAL_CONTEXT_PLACEHOLDER' ), esc_attr( wp_json_encode( $context ) ), $html );
 	}

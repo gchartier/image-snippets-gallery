@@ -522,4 +522,135 @@
 			margin-bottom: var( --isgal-gap, 0.75rem );
 		}
 	}
+
+	// Slideshow: one figure shown at a time (the others carry `hidden`), as
+	// wide as the block, with the controls beneath. Crop ratio applies to the
+	// slide like any grid cell; "original" lets each image set the height,
+	// which means the block can change height between slides.
+	&.isgal-layout-slideshow {
+		.isgal-grid {
+			display: block;
+		}
+
+		.isgal-item img {
+			width: 100%;
+		}
+
+		.isgal-slides__controls {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 0.5rem;
+			margin-top: 0.5rem;
+		}
+
+		.isgal-slides__count {
+			font-size: 0.85em;
+			opacity: 0.8;
+			min-width: 4em;
+			text-align: center;
+		}
+
+		.isgal-slides__nav,
+		.isgal-slides__play {
+			appearance: none;
+			border: 1px solid currentColor;
+			background: none;
+			color: inherit;
+			border-radius: 50%;
+			width: 2.25rem;
+			height: 2.25rem;
+			line-height: 1;
+			font-size: 1.25rem;
+			cursor: pointer;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			padding: 0;
+			opacity: 0.75;
+
+			&:hover,
+			&:focus-visible {
+				opacity: 1;
+				box-shadow: 0 0 0 2px currentColor;
+			}
+		}
+
+		.isgal-slides__play {
+			font-size: 0.9rem;
+		}
+
+		.isgal-slides__dots,
+		.isgal-slides__thumbnails {
+			display: flex;
+			justify-content: center;
+			gap: 0.5rem;
+			margin-top: 0.5rem;
+		}
+
+		.isgal-slides__dots {
+			flex-wrap: wrap;
+		}
+
+		.isgal-slides__dot {
+			appearance: none;
+			border: 1px solid currentColor;
+			background: none;
+			border-radius: 50%;
+			width: 0.75rem;
+			height: 0.75rem;
+			padding: 0;
+			cursor: pointer;
+
+			&[aria-selected='true'] {
+				background: currentColor;
+			}
+		}
+
+		.isgal-slides__thumbnails {
+			justify-content: flex-start;
+			overflow-x: auto;
+			scrollbar-width: thin;
+			padding-bottom: 0.25rem;
+		}
+
+		.isgal-slides__thumb {
+			appearance: none;
+			border: 2px solid transparent;
+			background: none;
+			padding: 0;
+			flex: 0 0 auto;
+			width: 4.5rem;
+			height: 4.5rem;
+			cursor: pointer;
+			opacity: 0.6;
+			transition: opacity 0.2s;
+
+			img {
+				display: block;
+				width: 100%;
+				height: 100%;
+				object-fit: cover;
+				border-radius: var( --isgal-img-radius, 4px );
+			}
+
+			&[aria-selected='true'],
+			&:hover,
+			&:focus-visible {
+				opacity: 1;
+				border-color: currentColor;
+			}
+		}
+
+		.isgal-slides__dot[hidden],
+		.isgal-slides__thumb[hidden] {
+			display: none;
+		}
+
+		@media ( prefers-reduced-motion: reduce ) {
+			.isgal-slides__thumb {
+				transition: none;
+			}
+		}
+	}
 }
