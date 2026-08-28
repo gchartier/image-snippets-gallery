@@ -10,3 +10,15 @@
 		text-align: center;
 	}
 }
+
+.isgal-caption-fields__row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 4px;
+}
+
+.isgal-caption-fields__move .components-button {
+	min-width: 24px;
+	padding: 0 4px;
+}

@@ -18,10 +18,7 @@
 	"textdomain": "image-snippets-gallery",
 	"supports": {
 		"html": false,
-		"align": [
-			"wide",
-			"full"
-		],
+		"align": [ "wide", "full" ],
 		"spacing": {
 			"margin": true,
 			"padding": true,
@@ -60,6 +57,25 @@
 		"displayCaption": {
 			"type": "boolean",
 			"default": false
+		},
+		"captionPosition": {
+			"type": "string",
+			"default": "below"
+		},
+		"captionFields": {
+			"type": "array",
+			"default": [ "title" ]
+		},
+		"captionTags": {
+			"type": "number",
+			"default": 3
+		},
+		"hoverEffect": {
+			"type": "string",
+			"default": "none"
+		},
+		"captionBackground": {
+			"type": "string"
 		},
 		"displayTitle": {
 			"type": "boolean",

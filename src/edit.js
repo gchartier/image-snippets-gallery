@@ -15,6 +15,8 @@ import {
 	Button,
 	Notice,
 	ToolbarDropdownMenu,
+	CheckboxControl,
+	BaseControl,
 } from '@wordpress/components';
 import {
 	headingLevel1,
@@ -34,6 +36,113 @@ import {
 } from '@wordpress/element';
 
 import GalleryStyleControls from './style-controls';
+
+// The caption lines an image can show, in the order they are offered. The
+// block stores the chosen keys in its own order; the server renders that order.
+const CAPTION_FIELDS = [
+	{ key: 'title', label: __( 'Title', 'image-snippets-gallery' ) },
+	{ key: 'creator', label: __( 'Creator', 'image-snippets-gallery' ) },
+	{ key: 'date', label: __( 'Date', 'image-snippets-gallery' ) },
+	{ key: 'rights', label: __( 'Rights', 'image-snippets-gallery' ) },
+	{ key: 'tags', label: __( 'Tags', 'image-snippets-gallery' ) },
+];
+
+/**
+ * An ordered pick-list: a checkbox per field, and Up/Down on the chosen ones.
+ * Chosen fields are listed first in their stored order, then the rest.
+ *
+ * @param {Object}   props          Props.
+ * @param {string[]} props.value    Chosen field keys, in order.
+ * @param {Function} props.onChange Receives the new ordered list.
+ */
+function CaptionFieldsControl( { value, onChange } ) {
+	const chosen = ( value || [] ).filter( ( k ) =>
+		CAPTION_FIELDS.some( ( f ) => f.key === k )
+	);
+	const rest = CAPTION_FIELDS.filter( ( f ) => ! chosen.includes( f.key ) );
+	const rows = [
+		...chosen.map( ( k ) => CAPTION_FIELDS.find( ( f ) => f.key === k ) ),
+		...rest,
+	];
+	const move = ( key, delta ) => {
+		const i = chosen.indexOf( key );
+		const j = i + delta;
+		if ( i < 0 || j < 0 || j >= chosen.length ) {
+			return;
+		}
+		const next = [ ...chosen ];
+		next.splice( i, 1 );
+		next.splice( j, 0, key );
+		onChange( next );
+	};
+	return (
+		<BaseControl
+			id="isgal-caption-fields"
+			label={ __( 'Caption lines', 'image-snippets-gallery' ) }
+			help={ __(
+				'Shown in this order. Lines an image has no data for are left out.',
+				'image-snippets-gallery'
+			) }
+			__nextHasNoMarginBottom
+		>
+			<div className="isgal-caption-fields">
+				{ rows.map( ( f ) => {
+					const on = chosen.includes( f.key );
+					const i = chosen.indexOf( f.key );
+					return (
+						<div
+							className="isgal-caption-fields__row"
+							key={ f.key }
+						>
+							<CheckboxControl
+								label={ f.label }
+								checked={ on }
+								onChange={ ( v ) =>
+									onChange(
+										v
+											? [ ...chosen, f.key ]
+											: chosen.filter(
+													( k ) => k !== f.key
+											  )
+									)
+								}
+								__nextHasNoMarginBottom
+							/>
+							{ on && (
+								<span className="isgal-caption-fields__move">
+									<Button
+										size="small"
+										variant="tertiary"
+										disabled={ i === 0 }
+										onClick={ () => move( f.key, -1 ) }
+										label={ __(
+											'Move up',
+											'image-snippets-gallery'
+										) }
+									>
+										↑
+									</Button>
+									<Button
+										size="small"
+										variant="tertiary"
+										disabled={ i === chosen.length - 1 }
+										onClick={ () => move( f.key, 1 ) }
+										label={ __(
+											'Move down',
+											'image-snippets-gallery'
+										) }
+									>
+										↓
+									</Button>
+								</span>
+							) }
+						</div>
+					);
+				} ) }
+			</div>
+		</BaseControl>
+	);
+}
 import './editor.scss';
 
 const IRI_SAFE = /[^\w@.\-]/g; // mirror the server-side sanitizer
@@ -75,6 +184,10 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 		userId,
 		endpoint,
 		displayCaption,
+		captionPosition,
+		captionFields,
+		captionTags,
+		hoverEffect,
 		displayTitle,
 		titleLevel,
 		layout,
@@ -460,6 +573,90 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 						checked={ displayCaption }
 						onChange={ ( v ) =>
 							setAttributes( { displayCaption: v } )
+						}
+					/>
+					{ displayCaption && (
+						<>
+							<SelectControl
+								label={ __(
+									'Caption position',
+									'image-snippets-gallery'
+								) }
+								value={ captionPosition }
+								options={ [
+									{
+										label: __(
+											'Below the image',
+											'image-snippets-gallery'
+										),
+										value: 'below',
+									},
+									{
+										label: __(
+											'Over the image',
+											'image-snippets-gallery'
+										),
+										value: 'overlay',
+									},
+									{
+										label: __(
+											'Over the image, on hover',
+											'image-snippets-gallery'
+										),
+										value: 'hover',
+									},
+								] }
+								onChange={ ( v ) =>
+									setAttributes( { captionPosition: v } )
+								}
+							/>
+							<CaptionFieldsControl
+								value={ captionFields }
+								onChange={ ( v ) =>
+									setAttributes( { captionFields: v } )
+								}
+							/>
+							{ ( captionFields || [] ).includes( 'tags' ) && (
+								<RangeControl
+									label={ __(
+										'Tags per image',
+										'image-snippets-gallery'
+									) }
+									value={ captionTags }
+									min={ 1 }
+									max={ 20 }
+									onChange={ ( v ) =>
+										setAttributes( { captionTags: v ?? 3 } )
+									}
+									__nextHasNoMarginBottom
+									__next40pxDefaultSize
+								/>
+							) }
+						</>
+					) }
+					<SelectControl
+						label={ __( 'Hover effect', 'image-snippets-gallery' ) }
+						value={ hoverEffect }
+						options={ [
+							{
+								label: __( 'None', 'image-snippets-gallery' ),
+								value: 'none',
+							},
+							{
+								label: __( 'Zoom', 'image-snippets-gallery' ),
+								value: 'zoom',
+							},
+							{
+								label: __( 'Fade', 'image-snippets-gallery' ),
+								value: 'fade',
+							},
+							{
+								label: __( 'Lift', 'image-snippets-gallery' ),
+								value: 'lift',
+							},
+						] }
+						onChange={ ( v ) =>
+							setAttributes( { hoverEffect: v } )
 						}
 					/>
 					<ToggleControl

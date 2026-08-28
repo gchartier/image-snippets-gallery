@@ -84,6 +84,108 @@
 		margin-top: 0.35em;
 	}
 
+	// Each caption field is its own line. The title carries the theme's
+	// text colour; the rest step back a little so the title still reads first.
+	.isgal-cap {
+		display: block;
+	}
+
+	.isgal-cap-creator,
+	.isgal-cap-date,
+	.isgal-cap-rights,
+	.isgal-cap-tags {
+		opacity: 0.75;
+		font-size: 0.92em;
+	}
+
+	// Captions laid over the image, always or on hover/focus. The figure is
+	// the positioning box so overlays follow the image's rounded corners.
+	&.isgal-captions-overlay .isgal-item,
+	&.isgal-captions-hover .isgal-item {
+		position: relative;
+		overflow: hidden;
+		border-radius: var( --isgal-img-radius, 4px );
+
+		.isgal-caption {
+			position: absolute;
+			inset: auto 0 0 0;
+			margin: 0;
+			padding: 0.6em 0.75em;
+			background: var( --isgal-caption-bg, rgba( 0, 0, 0, 0.55 ) );
+			color: var( --isgal-caption-color, #fff );
+			box-sizing: border-box;
+			max-height: 100%;
+			overflow: hidden;
+		}
+	}
+
+	&.isgal-captions-hover .isgal-item {
+		.isgal-caption {
+			opacity: 0;
+			transform: translateY( 0.5em );
+			transition: opacity 0.2s ease, transform 0.2s ease;
+		}
+
+		&:hover .isgal-caption,
+		&:focus-within .isgal-caption {
+			opacity: 1;
+			transform: none;
+		}
+	}
+
+	// Hover effects. Three, deliberately: they should read as a photo gallery,
+	// not a demo of transitions.
+	&.isgal-hover-zoom,
+	&.isgal-hover-fade,
+	&.isgal-hover-lift {
+		.isgal-item a {
+			display: block;
+		}
+
+		.isgal-item img {
+			transition: transform 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease;
+		}
+	}
+
+	&.isgal-hover-zoom .isgal-item {
+		a {
+			overflow: hidden;
+			border-radius: var( --isgal-img-radius, 4px );
+		}
+
+		&:hover img,
+		&:focus-within img {
+			transform: scale( 1.05 );
+		}
+	}
+
+	&.isgal-hover-fade .isgal-item {
+		&:hover img,
+		&:focus-within img {
+			opacity: 0.75;
+		}
+	}
+
+	&.isgal-hover-lift .isgal-item {
+		&:hover img,
+		&:focus-within img {
+			transform: translateY( -4px );
+			box-shadow: 0 10px 24px rgba( 0, 0, 0, 0.22 );
+		}
+	}
+
+	@media ( prefers-reduced-motion: reduce ) {
+		.isgal-item img,
+		.isgal-caption {
+			transition: none !important;
+		}
+
+		&.isgal-hover-zoom .isgal-item:hover img,
+		&.isgal-hover-lift .isgal-item:hover img {
+			transform: none;
+		}
+	}
+
 	// "Style title and captions separately": the server sets a custom property
 	// and a gate class per value, so an unset size leaves the theme's heading
 	// size (or the caption default above) alone instead of collapsing to inherit.

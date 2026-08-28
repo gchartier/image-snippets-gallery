@@ -89,7 +89,11 @@ export default function GalleryStyleControls( {
 		titleSize,
 		captionColor,
 		captionSize,
+		captionBackground,
+		captionPosition,
 	} = attributes;
+	const overlaid =
+		'overlay' === captionPosition || 'hover' === captionPosition;
 
 	const [ palette, shadowPresets, fontSizes ] = useSettings(
 		'color.palette',
@@ -195,9 +199,32 @@ export default function GalleryStyleControls( {
 						titleSize: undefined,
 						captionColor: undefined,
 						captionSize: undefined,
+						captionBackground: undefined,
 					} )
 				}
 			>
+				{ overlaid && (
+					<ColorGradientSettingsDropdown
+						panelId={ clientId }
+						colors={ colors }
+						__experimentalIsRenderedInSidebar
+						settings={ [
+							{
+								label: __(
+									'Caption background',
+									'image-snippets-gallery'
+								),
+								colorValue: captionBackground,
+								onColorChange: set( 'captionBackground' ),
+								clearable: true,
+								isShownByDefault: true,
+								resetAllFilter: () => ( {
+									captionBackground: undefined,
+								} ),
+							},
+						] }
+					/>
+				) }
 				<ToolsPanelItem
 					panelId={ clientId }
 					label={ __( 'Style separately', 'image-snippets-gallery' ) }

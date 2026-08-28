@@ -605,31 +605,156 @@ function isgal_editor_notice( array $rows ) {
  */
 function isgal_defaults() {
 	return array(
-		'gallery'        => '',
-		'userId'         => '',
-		'endpoint'       => '',
-		'displayCaption' => false,
-		'displayTitle'   => false,
-		'titleLevel'     => 2,
-		'layout'         => 'grid',
-		'order'          => 'desc',
-		'orderBy'        => 'date',
-		'limit'          => 40,
-		'thumbSize'      => 'medium',
-		'columns'        => 3,
-		'aspectRatio'    => '4-3',
-		'useFilename'    => false,
-		'cacheTtl'       => null,
-		'jsonldProfile'  => 'provenance',
-		'imageBorder'    => null,
-		'imageRadius'    => null,
-		'imageShadow'    => '',
-		'separateText'   => false,
-		'titleColor'     => '',
-		'titleSize'      => '',
-		'captionColor'   => '',
-		'captionSize'    => '',
+		'gallery'           => '',
+		'userId'            => '',
+		'endpoint'          => '',
+		'displayCaption'    => false,
+		'captionPosition'   => 'below',
+		'captionFields'     => array( 'title' ),
+		'captionTags'       => 3,
+		'hoverEffect'       => 'none',
+		'captionBackground' => '',
+		'displayTitle'      => false,
+		'titleLevel'        => 2,
+		'layout'            => 'grid',
+		'order'             => 'desc',
+		'orderBy'           => 'date',
+		'limit'             => 40,
+		'thumbSize'         => 'medium',
+		'columns'           => 3,
+		'aspectRatio'       => '4-3',
+		'useFilename'       => false,
+		'cacheTtl'          => null,
+		'jsonldProfile'     => 'provenance',
+		'imageBorder'       => null,
+		'imageRadius'       => null,
+		'imageShadow'       => '',
+		'separateText'      => false,
+		'titleColor'        => '',
+		'titleSize'         => '',
+		'captionColor'      => '',
+		'captionSize'       => '',
 	);
+}
+
+/**
+ * The caption lines a block may show under (or over) each image, in the order
+ * the editor offers them. Keys are what captionFields stores.
+ *
+ * @return array Key => label.
+ */
+function isgal_caption_fields() {
+	return array(
+		'title'   => __( 'Title', 'image-snippets-gallery' ),
+		'creator' => __( 'Creator', 'image-snippets-gallery' ),
+		'date'    => __( 'Date', 'image-snippets-gallery' ),
+		'rights'  => __( 'Rights', 'image-snippets-gallery' ),
+		'tags'    => __( 'Tags', 'image-snippets-gallery' ),
+	);
+}
+
+/**
+ * A date as stored on ImageSnippets, shown at the precision it was given:
+ * "2002" stays a year, "2017-12" becomes a month, a full date follows the
+ * site's date format.
+ *
+ * @param string $raw Date string from the graph.
+ * @return string Empty when unparseable.
+ */
+function isgal_format_graph_date( $raw ) {
+	$raw = trim( (string) $raw );
+	if ( preg_match( '/^(\d{4})$/', $raw, $m ) ) {
+		return $m[1];
+	}
+	if ( preg_match( '/^(\d{4})-(\d{1,2})$/', $raw, $m ) ) {
+		$ts = mktime( 12, 0, 0, (int) $m[2], 1, (int) $m[1] );
+		return $ts ? date_i18n( 'F Y', $ts ) : $raw;
+	}
+	$ts = isgal_mirror_date_ts( $raw );
+	if ( ! $ts ) {
+		return '';
+	}
+	return date_i18n( get_option( 'date_format' ), $ts );
+}
+
+/**
+ * What an image is tagged with, as words: the labels of the entities it is
+ * about (DBpedia and the like) followed by any plain-string keywords. This is
+ * what lio:hasTag, schema:about and friends amount to once resolved.
+ *
+ * @param array $row Row.
+ * @return string[] Unique, in graph order.
+ */
+function isgal_row_tags( array $row ) {
+	$predicates = array_fill_keys( isgal_graph_tag_predicates(), true );
+	$tags       = array();
+	$labels     = isset( $row['labels'] ) ? (array) $row['labels'] : array();
+	foreach ( (array) $row['triples'] as $triple ) {
+		if ( ! isset( $predicates[ $triple[1] ] ) ) {
+			continue;
+		}
+		$term  = $triple[2];
+		$value = isset( $term['value'] ) ? trim( (string) $term['value'] ) : '';
+		if ( '' === $value ) {
+			continue;
+		}
+		if ( 'uri' === $term['type'] ) {
+			$value = isset( $labels[ $value ] ) ? trim( (string) $labels[ $value ] ) : '';
+			if ( '' === $value ) {
+				continue; // An entity nobody labelled: not a word to show.
+			}
+		}
+		$tags[ strtolower( $value ) ] = $value;
+	}
+	foreach ( (array) $row['keywords'] as $kw ) {
+		$kw = trim( (string) $kw );
+		if ( '' !== $kw && ! isset( $tags[ strtolower( $kw ) ] ) ) {
+			$tags[ strtolower( $kw ) ] = $kw;
+		}
+	}
+	return array_values( $tags );
+}
+
+/**
+ * The caption lines for one image, resolved from the row in the block's order.
+ *
+ * @param array $row   Row.
+ * @param array $a     Resolved attributes.
+ * @param string $title Already-resolved title (may use the filename fallback).
+ * @return array List of [ field key, text ].
+ */
+function isgal_row_caption_lines( array $row, array $a, $title ) {
+	$fields = is_array( $a['captionFields'] ) ? $a['captionFields'] : array( 'title' );
+	$known  = array_keys( isgal_caption_fields() );
+	$lines  = array();
+	foreach ( $fields as $field ) {
+		if ( ! in_array( $field, $known, true ) ) {
+			continue;
+		}
+		$text = '';
+		switch ( $field ) {
+			case 'title':
+				$text = (string) $title;
+				break;
+			case 'creator':
+				$text = (string) $row['creator'];
+				break;
+			case 'date':
+				$text = isgal_format_graph_date( $row['date'] );
+				break;
+			case 'rights':
+				$text = (string) $row['rights'];
+				break;
+			case 'tags':
+				$max  = max( 1, min( 20, (int) $a['captionTags'] ) );
+				$text = implode( ', ', array_slice( isgal_row_tags( $row ), 0, $max ) );
+				break;
+		}
+		if ( '' !== $text ) {
+			$lines[] = array( $field, $text );
+		}
+	}
+	return $lines;
 }
 
 /**
@@ -892,6 +1017,11 @@ function isgal_style_vars( array $a ) {
 		$vars['--isgal-img-shadow'] = $shadow;
 	}
 
+	$caption_bg = isgal_css_value( $a['captionBackground'] );
+	if ( '' !== $caption_bg ) {
+		$vars['--isgal-caption-bg'] = $caption_bg;
+	}
+
 	if ( ! empty( $a['separateText'] ) ) {
 		foreach ( array(
 			'titleColor'   => array( '--isgal-title-color', 'isgal-has-title-color' ),
@@ -935,8 +1065,17 @@ function isgal_render_gallery( array $attributes ) {
 		$ratio = 'original';
 	}
 
+	$caption_pos = in_array( $a['captionPosition'], array( 'below', 'overlay', 'hover' ), true ) ? $a['captionPosition'] : 'below';
+	$hover       = in_array( $a['hoverEffect'], array( 'none', 'zoom', 'fade', 'lift' ), true ) ? $a['hoverEffect'] : 'none';
+
 	$style   = isgal_style_vars( $a );
-	$classes = implode( ' ', array_merge( array( 'isgal-gallery', 'isgal-layout-' . $layout, 'isgal-ratio-' . $ratio ), $style['classes'] ) );
+	$classes = implode(
+		' ',
+		array_merge(
+			array( 'isgal-gallery', 'isgal-layout-' . $layout, 'isgal-ratio-' . $ratio, 'isgal-captions-' . $caption_pos, 'isgal-hover-' . $hover ),
+			$style['classes']
+		)
+	);
 	$extra   = array( 'class' => $classes );
 
 	// Column count, and the count phones get (never more than two).
@@ -1069,8 +1208,15 @@ function isgal_render_gallery( array $attributes ) {
 						<?php if ( '' !== $row['licurl'] ) : ?>
 							<span property="acquireLicensePage" hidden><?php echo esc_html( $row['licurl'] ); ?></span>
 						<?php endif; ?>
-						<?php if ( $a['displayCaption'] && '' !== $title ) : ?>
-							<figcaption class="isgal-caption" property="name"><?php echo esc_html( $title ); ?></figcaption>
+						<?php
+						$isgal_lines = $a['displayCaption'] ? isgal_row_caption_lines( $row, $a, $title ) : array();
+						if ( $isgal_lines ) :
+							?>
+							<figcaption class="isgal-caption">
+								<?php foreach ( $isgal_lines as $isgal_line ) : ?>
+									<span class="isgal-cap isgal-cap-<?php echo esc_attr( $isgal_line[0] ); ?>"<?php echo 'title' === $isgal_line[0] ? ' property="name"' : ''; ?>><?php echo esc_html( $isgal_line[1] ); ?></span>
+								<?php endforeach; ?>
+							</figcaption>
 						<?php endif; ?>
 					</figure>
 				<?php endforeach; ?>

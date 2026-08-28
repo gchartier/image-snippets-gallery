@@ -107,6 +107,30 @@ function isgal_graph_about_predicates() {
 }
 
 /**
+ * Predicates that tag an image with a thing, wherever in its graph they sit:
+ * the "is about" set above (subject = the image) plus the LIO relations that
+ * hang off regions and settings ("this region looks like an Eagle", "the
+ * setting is morning", "a wood fence is in the foreground").
+ *
+ * @return array
+ */
+function isgal_graph_tag_predicates() {
+	return array_merge(
+		isgal_graph_about_predicates(),
+		array(
+			'https://w3id.org/lio/v1#hasSetting',
+			'https://w3id.org/lio/v1#hasInForeground',
+			'https://w3id.org/lio/v1#hasInBackground',
+			'https://w3id.org/lio/v1#looksLike',
+			'https://w3id.org/lio/v1#hasProperty',
+			'https://w3id.org/lio/v1#conveys',
+			'https://w3id.org/lio/v1#evokes',
+			'https://w3id.org/lio/v1#hasVisualElement',
+		)
+	);
+}
+
+/**
  * Valid JSON-LD payload profiles.
  *
  * The editor exposes only two of these, as a toggle: 'provenance' (on) and

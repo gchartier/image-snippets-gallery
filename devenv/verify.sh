@@ -237,6 +237,15 @@ assert "justified items carry a per-image ratio" "6" "$(grep -o 'style="--isgal-
 assert "and at least one is not the 4:3 fallback" "1" "$(grep -o 'style="--isgal-r:[0-9.]*"' <<<"$JUSTHTML" | grep -vc 'r:1.3333' | awk '{print ($1>0)?1:0}')"
 assert "the wrapper is marked justified" "1" "$(grep -c 'isgal-layout-justified' <<<"$JUSTHTML")"
 
+head_ "Caption lines come from the graph"
+
+CAPHTML="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "displayCaption" => true, "captionPosition" => "overlay", "captionFields" => array( "creator", "title", "date", "tags", "rights" ), "hoverEffect" => "zoom", "limit" => 12 ) );' | tr -d '\r')"
+assert "creator line is the resolved dc:creator label" "6" "$(grep -o 'isgal-cap-creator">Margaret Warren<' <<<"$CAPHTML" | wc -l)"
+assert "the stored order is the rendered order (creator before title)" "1" "$(tr -d '\n\t' <<<"$CAPHTML" | grep -o 'isgal-cap-creator">[^<]*</span> *<span class="isgal-cap isgal-cap-title"' | head -1 | wc -l)"
+assert "a year-only date stays a year" "1" "$(grep -c 'isgal-cap-date">2002<' <<<"$CAPHTML")"
+assert "tags include an entity attached to a region, not just the image" "1" "$(grep -c 'isgal-cap-tags">[^<]*pinhole' <<<"$CAPHTML")"
+assert "position and hover effect are wrapper classes" "1" "$(grep -c 'isgal-captions-overlay isgal-hover-zoom' <<<"$CAPHTML")"
+
 head_ "JSON-LD on the public page"
 
 tally "$( fetch | python3 ./check-jsonld.py )"
