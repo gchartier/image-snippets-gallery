@@ -76,11 +76,13 @@ function isgal_run_page_cache_adapter( array $adapter, $arg = null ) {
 		if ( ! has_action( $target ) ) {
 			return '';
 		}
+		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- These are other plugins' purge actions (e.g. wp_cache_clear_cache), fired on purpose.
 		if ( null === $arg ) {
 			do_action( $target );
 		} else {
 			do_action( $target, $arg );
 		}
+		// phpcs:enable
 		return $label;
 	}
 
