@@ -242,7 +242,7 @@ head_ "Caption lines come from the graph"
 CAPHTML="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "displayCaption" => true, "captionPosition" => "overlay", "captionFields" => array( "creator", "title", "date", "tags", "rights" ), "hoverEffect" => "zoom", "limit" => 12 ) );' | tr -d '\r')"
 assert "creator line is the resolved dc:creator label" "6" "$(grep -o 'isgal-cap-creator">Margaret Warren<' <<<"$CAPHTML" | wc -l)"
 assert "the stored order is the rendered order (creator before title)" "1" "$(tr -d '\n\t' <<<"$CAPHTML" | grep -o 'isgal-cap-creator">[^<]*</span> *<span class="isgal-cap isgal-cap-title"' | head -1 | wc -l)"
-assert "a year-only date stays a year" "1" "$(grep -c 'isgal-cap-date">2002<' <<<"$CAPHTML")"
+assert "a year-only date stays a year" "1" "$(grep -c 'isgal-cap-date"[^>]*>2002<' <<<"$CAPHTML")"
 assert "tags include an entity attached to a region, not just the image" "1" "$(grep -c 'isgal-cap-tags">[^<]*pinhole' <<<"$CAPHTML")"
 assert "position and hover effect are wrapper classes" "1" "$(grep -c 'isgal-captions-overlay isgal-hover-zoom' <<<"$CAPHTML")"
 
@@ -257,6 +257,16 @@ assert "links still point at ImageSnippets for crawlers" "6" "$(grep -o '<a href
 assert "the view module is enqueued on the page" "1" "$(fetch | grep -c 'build/view.js')"
 NOLB="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "linkNewTab" => false, "limit" => 2 ) );' | tr -d '\r')"
 assert "open-in-new-tab can be turned off" "0" "$(grep -c 'target="_blank"' <<<"$NOLB")"
+
+head_ "Dates are resolved, and say where from"
+
+TLHTML="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "layout" => "timeline", "order" => "asc", "displayCaption" => true, "limit" => 12 ) );' | tr -d '\r')"
+assert "timeline groups by year, oldest first when ascending" "1983 2002 2007 2012 2017 2022" "$(grep -o 'isgal-timeline__label">[0-9]*' <<<"$TLHTML" | sed 's/.*>//' | tr '\n' ' ' | sed 's/ $//')"
+assert "every timeline item carries a date line even with no date field chosen" "6" "$(grep -c 'isgal-cap-date"' <<<"$TLHTML")"
+assert "the date line names its source" "6" "$(grep -c 'isgal-cap-date" title="Date created (IPTC/Photoshop DateCreated)"' <<<"$TLHTML")"
+RESOLVED="$(wp eval '$row = array( "dates" => array( "DateTimeOriginal" => "2019:07:04 10:11:12", "DateCreated" => "2021-10-06" ), "rights" => "© 2012 X", "date" => "" ); $a = isgal_row_resolved_date( $row ); $b = isgal_row_resolved_date( $row, array( "DateCreated" ) ); $c = isgal_row_resolved_date( $row, array( "rights" ) ); echo $a["source"], ":", gmdate( "Y-m-d", $a["ts"] ), " ", $b["source"], " ", $c["raw"];' | tr -d '\r')"
+assert "capture time wins by default, EXIF colons parsed; priority and rights-year honoured" "DateTimeOriginal:2019-07-04 DateCreated 2012" "$RESOLVED"
+assert "the mirror keeps every date source per image" "1" "$(wp eval '$t = isgal_gallery_term( "https://imagesnippets.com/sparql/dbpedia", "mmgallery01" ); $ids = get_objects_in_term( $t->term_id, ISGAL_TAXONOMY ); $r = isgal_mirror_read_row( $ids[0] ); echo (int) ( isset( $r["dates"] ) && is_array( $r["dates"] ) && ! empty( $r["dates"] ) );' | tr -d '\r')"
 
 head_ "JSON-LD on the public page"
 

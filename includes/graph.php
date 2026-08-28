@@ -131,6 +131,91 @@ function isgal_graph_tag_predicates() {
 }
 
 /**
+ * Where an image's date can come from, in the order the plugin trusts them by
+ * default. The corpus (full dump, 2026-08-28) carries exif:DateTimeOriginal on
+ * 27% of images — the camera's capture time — and photoshop:DateCreated on
+ * 54%, which on some galleries is when the image was catalogued rather than
+ * taken. A block may reorder these; the last resort is a year in the rights
+ * statement ("© 2012 …").
+ *
+ * @return array key => [ 'label' => string, 'predicates' => string[] ]
+ */
+function isgal_date_sources() {
+	return array(
+		'DateTimeOriginal' => array(
+			'label'      => __( 'Capture time (EXIF DateTimeOriginal)', 'image-snippets-gallery' ),
+			'predicates' => array( 'http://ns.adobe.com/exif/1.0/DateTimeOriginal' ),
+		),
+		'CreateDate'       => array(
+			'label'      => __( 'File created (EXIF/XMP CreateDate)', 'image-snippets-gallery' ),
+			'predicates' => array( 'http://ns.adobe.com/exif/1.0/CreateDate', 'http://ns.adobe.com/xap/1.0/CreateDate' ),
+		),
+		'DateCreated'      => array(
+			'label'      => __( 'Date created (IPTC/Photoshop DateCreated)', 'image-snippets-gallery' ),
+			'predicates' => array( 'http://ns.adobe.com/photoshop/1.0/DateCreated' ),
+		),
+		'ModifyDate'       => array(
+			'label'      => __( 'Last modified (EXIF ModifyDate)', 'image-snippets-gallery' ),
+			'predicates' => array( 'http://ns.adobe.com/exif/1.0/ModifyDate', 'http://ns.adobe.com/xap/1.0/ModifyDate' ),
+		),
+		'rights'           => array(
+			'label'      => __( 'Year in the rights statement', 'image-snippets-gallery' ),
+			'predicates' => array(),
+		),
+	);
+}
+
+/**
+ * The default order the date sources are tried in.
+ *
+ * @return string[]
+ */
+function isgal_default_date_priority() {
+	return array( 'DateTimeOriginal', 'CreateDate', 'DateCreated', 'rights' );
+}
+
+/**
+ * The date an image should be shown and sorted with, per a priority list:
+ * the first source that has a value wins.
+ *
+ * @param array         $row      Row.
+ * @param string[]|null $priority Source keys in order; null for the default.
+ * @return array|null [ 'raw' => as stored, 'source' => key, 'ts' => unix time or 0 ]
+ */
+function isgal_row_resolved_date( array $row, $priority = null ) {
+	$priority = is_array( $priority ) && $priority ? $priority : isgal_default_date_priority();
+	$dates    = isset( $row['dates'] ) && is_array( $row['dates'] ) ? $row['dates'] : array();
+	// Rows mirrored before dates were kept separately: the one date they have.
+	if ( empty( $dates ) && ! empty( $row['date'] ) ) {
+		$dates['DateCreated'] = $row['date'];
+	}
+	foreach ( $priority as $key ) {
+		$raw = '';
+		if ( 'rights' === $key ) {
+			$rights = isset( $row['rights'] ) ? (string) $row['rights'] : '';
+			if ( preg_match( '/\b(1[89]\d{2}|20\d{2})\b/', $rights, $m ) ) {
+				$raw = $m[1];
+			}
+		} elseif ( isset( $dates[ $key ] ) ) {
+			$raw = trim( (string) $dates[ $key ] );
+		}
+		if ( '' === $raw ) {
+			continue;
+		}
+		$ts = isgal_mirror_date_ts( $raw );
+		if ( ! $ts && ! preg_match( '/^\d{4}$/', $raw ) ) {
+			continue; // Unparseable: try the next source rather than show junk.
+		}
+		return array(
+			'raw'    => $raw,
+			'source' => $key,
+			'ts'     => $ts,
+		);
+	}
+	return null;
+}
+
+/**
  * Valid JSON-LD payload profiles.
  *
  * The editor exposes only two of these, as a toggle: 'provenance' (on) and
@@ -500,6 +585,19 @@ function isgal_graph_to_row( $page, array $graph ) {
 		}
 	}
 
+	// Every date the graph offers, keyed by source. Which one counts is the
+	// block's decision (isgal_row_resolved_date()); the mirror keeps them all.
+	$dates = array();
+	foreach ( isgal_date_sources() as $key => $source ) {
+		foreach ( $source['predicates'] as $predicate ) {
+			$value = $first( $predicate );
+			if ( '' !== $value ) {
+				$dates[ $key ] = $value;
+				break;
+			}
+		}
+	}
+
 	$about_list = array();
 	foreach ( $abouts as $id => $label ) {
 		$about_list[] = array(
@@ -508,7 +606,7 @@ function isgal_graph_to_row( $page, array $graph ) {
 		);
 	}
 
-	return array(
+	$row         = array(
 		'image'    => $image,
 		'page'     => $page,
 		'thumb'    => $first( 'http://schema.org/thumbnail' ),
@@ -517,7 +615,8 @@ function isgal_graph_to_row( $page, array $graph ) {
 		'name'     => $first( 'http://schema.org/name' ),
 		'desc'     => $first( 'http://www.iptc.org/std/Iptc4xmpCore/1.0/xmlns/ExtDescrAccessibility' ),
 		'alt'      => $first( 'http://www.iptc.org/std/Iptc4xmpCore/1.0/xmlns/AltTextAccessibility' ),
-		'date'     => $first( 'http://ns.adobe.com/photoshop/1.0/DateCreated' ),
+		'date'     => '', // Filled below from the default date resolution.
+		'dates'    => $dates,
 		'rights'   => $labelled( 'http://purl.org/dc/elements/1.1/rights' ),
 		'web'      => $first( 'http://ns.adobe.com/xap/1.0/rights/WebStatement' ),
 		'licurl'   => $first( 'http://ns.useplus.org/ldf/xmp/1.0/LicensorURL' ),
@@ -528,6 +627,9 @@ function isgal_graph_to_row( $page, array $graph ) {
 		'triples'  => $graph['triples'],
 		'labels'   => $graph['labels'],
 	);
+	$resolved    = isgal_row_resolved_date( $row );
+	$row['date'] = $resolved ? $resolved['raw'] : '';
+	return $row;
 }
 
 /**

@@ -316,6 +316,10 @@ function isgal_mirror_date_ts( $raw ) {
 	if ( '' === $raw ) {
 		return 0;
 	}
+	// EXIF writes dates with colons ("2022:03:18 08:20:14"), and a few records
+	// carry a bare "20220318"; strtotime understands neither.
+	$raw = preg_replace( '/^(\d{4}):(\d{2}):(\d{2})/', '$1-$2-$3', $raw );
+	$raw = preg_replace( '/^(\d{4})(\d{2})(\d{2})$/', '$1-$2-$3', $raw );
 	if ( preg_match( '/^\d{4}$/', $raw ) ) {
 		$raw .= '-01-01';
 	} elseif ( preg_match( '/^\d{4}-\d{1,2}$/', $raw ) ) {
@@ -780,6 +784,37 @@ function isgal_mirror_query_rows( WP_Term $term, array $a ) {
 	// their arranged order, leave the rest (new arrivals) after them, then cut
 	// to the limit. Done in PHP rather than with post__in so an image the
 	// order does not name is still shown.
+	// A block with its own date priority cannot sort on the stored key (which
+	// is the default resolution): read the gallery whole and sort here.
+	$priority = isgal_block_date_priority( $a );
+	if ( 'date' === $order_by && null !== $priority && isgal_default_date_priority() !== $priority ) {
+		$all   = isgal_mirror_query_rows(
+			$term,
+			array_merge(
+				$a,
+				array(
+					'dateFields' => null,
+					'limit'      => 200,
+				)
+			)
+		);
+		$keyed = array();
+		foreach ( $all as $i => $row ) {
+			$resolved = isgal_row_resolved_date( $row, $priority );
+			$keyed[]  = array( $resolved ? $resolved['ts'] : 0, $i, $row );
+		}
+		usort(
+			$keyed,
+			function ( $x, $y ) use ( $ascending ) {
+				if ( $x[0] !== $y[0] ) {
+					return $ascending ? $x[0] - $y[0] : $y[0] - $x[0];
+				}
+				return $x[1] - $y[1];
+			}
+		);
+		return array_slice( array_column( $keyed, 2 ), 0, $limit );
+	}
+
 	if ( 'manual' === $order_by ) {
 		$all = isgal_mirror_query_rows(
 			$term,

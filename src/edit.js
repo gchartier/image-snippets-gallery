@@ -39,6 +39,37 @@ import GalleryStyleControls from './style-controls';
 
 // The caption lines an image can show, in the order they are offered. The
 // block stores the chosen keys in its own order; the server renders that order.
+// Where an image's date may come from; the first with a value wins. Mirrors
+// isgal_date_sources() / isgal_default_date_priority() in PHP.
+const DATE_SOURCES = [
+	{
+		key: 'DateTimeOriginal',
+		label: __( 'Capture time (EXIF)', 'image-snippets-gallery' ),
+	},
+	{
+		key: 'CreateDate',
+		label: __( 'File created (EXIF/XMP)', 'image-snippets-gallery' ),
+	},
+	{
+		key: 'DateCreated',
+		label: __( 'Date created (IPTC/Photoshop)', 'image-snippets-gallery' ),
+	},
+	{
+		key: 'ModifyDate',
+		label: __( 'Last modified (EXIF)', 'image-snippets-gallery' ),
+	},
+	{
+		key: 'rights',
+		label: __( 'Year in the rights statement', 'image-snippets-gallery' ),
+	},
+];
+const DEFAULT_DATE_PRIORITY = [
+	'DateTimeOriginal',
+	'CreateDate',
+	'DateCreated',
+	'rights',
+];
+
 const CAPTION_FIELDS = [
 	{ key: 'title', label: __( 'Title', 'image-snippets-gallery' ) },
 	{ key: 'creator', label: __( 'Creator', 'image-snippets-gallery' ) },
@@ -52,16 +83,20 @@ const CAPTION_FIELDS = [
  * Chosen fields are listed first in their stored order, then the rest.
  *
  * @param {Object}   props          Props.
+ * @param {Object[]} props.fields   Every offerable field: { key, label }.
+ * @param {string}   props.id       Control id.
+ * @param {string}   props.label    Control label.
+ * @param {string}   props.help     Help text.
  * @param {string[]} props.value    Chosen field keys, in order.
  * @param {Function} props.onChange Receives the new ordered list.
  */
-function CaptionFieldsControl( { value, onChange } ) {
+function OrderedFieldsControl( { fields, id, label, help, value, onChange } ) {
 	const chosen = ( value || [] ).filter( ( k ) =>
-		CAPTION_FIELDS.some( ( f ) => f.key === k )
+		fields.some( ( f ) => f.key === k )
 	);
-	const rest = CAPTION_FIELDS.filter( ( f ) => ! chosen.includes( f.key ) );
+	const rest = fields.filter( ( f ) => ! chosen.includes( f.key ) );
 	const rows = [
-		...chosen.map( ( k ) => CAPTION_FIELDS.find( ( f ) => f.key === k ) ),
+		...chosen.map( ( k ) => fields.find( ( f ) => f.key === k ) ),
 		...rest,
 	];
 	const move = ( key, delta ) => {
@@ -77,12 +112,9 @@ function CaptionFieldsControl( { value, onChange } ) {
 	};
 	return (
 		<BaseControl
-			id="isgal-caption-fields"
-			label={ __( 'Caption lines', 'image-snippets-gallery' ) }
-			help={ __(
-				'Shown in this order. Lines an image has no data for are left out.',
-				'image-snippets-gallery'
-			) }
+			id={ id }
+			label={ label }
+			help={ help }
 			__nextHasNoMarginBottom
 		>
 			<div className="isgal-caption-fields">
@@ -188,6 +220,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 		captionFields,
 		captionTags,
 		hoverEffect,
+		dateFields,
 		onClick,
 		linkNewTab,
 		lightboxDetails,
@@ -513,6 +546,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 							{ label: 'Grid', value: 'grid' },
 							{ label: 'Masonry', value: 'masonry' },
 							{ label: 'Justified rows', value: 'justified' },
+							{ label: 'Timeline', value: 'timeline' },
 						] }
 						onChange={ ( v ) => setAttributes( { layout: v } ) }
 					/>
@@ -613,7 +647,17 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 									setAttributes( { captionPosition: v } )
 								}
 							/>
-							<CaptionFieldsControl
+							<OrderedFieldsControl
+								fields={ CAPTION_FIELDS }
+								id="isgal-caption-fields"
+								label={ __(
+									'Caption lines',
+									'image-snippets-gallery'
+								) }
+								help={ __(
+									'Shown in this order. Lines an image has no data for are left out.',
+									'image-snippets-gallery'
+								) }
 								value={ captionFields }
 								onChange={ ( v ) =>
 									setAttributes( { captionFields: v } )
@@ -763,6 +807,17 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 							jsonldProfile: on ? 'provenance' : 'schema',
 						} )
 					}
+				/>
+				<OrderedFieldsControl
+					fields={ DATE_SOURCES }
+					id="isgal-date-fields"
+					label={ __( 'Date comes from', 'image-snippets-gallery' ) }
+					help={ __(
+						'Tried in this order per image; the first that has a value is used for sorting, captions, the lightbox and the timeline.',
+						'image-snippets-gallery'
+					) }
+					value={ dateFields || DEFAULT_DATE_PRIORITY }
+					onChange={ ( v ) => setAttributes( { dateFields: v } ) }
 				/>
 				<TextControl
 					label={ __( 'Only images by', 'image-snippets-gallery' ) }

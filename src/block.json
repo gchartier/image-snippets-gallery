@@ -83,6 +83,9 @@
 			"type": "boolean",
 			"default": true
 		},
+		"dateFields": {
+			"type": [ "array", "null" ]
+		},
 		"hoverEffect": {
 			"type": "string",
 			"default": "none"

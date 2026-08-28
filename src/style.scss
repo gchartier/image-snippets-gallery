@@ -235,6 +235,38 @@
 		}
 	}
 
+	// Timeline: year groups down a rule on the left, each group a grid at the
+	// block's column count. Captions in this layout always carry the date.
+	&.isgal-layout-timeline .isgal-timeline__group {
+		position: relative;
+		padding-left: 1.5rem;
+		margin-bottom: 1.5rem;
+		border-left: 2px solid currentColor;
+
+		.isgal-timeline__label {
+			position: relative;
+			margin: 0 0 0.75rem;
+			font-size: 1.1em;
+			font-weight: 600;
+
+			&::before {
+				content: '';
+				position: absolute;
+				left: calc( -1.5rem - 7px );
+				top: 0.35em;
+				width: 12px;
+				height: 12px;
+				border-radius: 50%;
+				background: currentColor;
+			}
+		}
+	}
+
+	.isgal-lightbox__source {
+		opacity: 0.6;
+		font-size: 0.8em;
+	}
+
 	// Lightbox. A native <dialog>, so focus, Esc and the backdrop are the
 	// browser's; this only lays it out. Colours are fixed dark: it sits over
 	// the page, not in it, and must read the same on any theme.

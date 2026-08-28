@@ -617,6 +617,7 @@ function isgal_defaults() {
 		'onClick'           => 'page',
 		'linkNewTab'        => true,
 		'lightboxDetails'   => true,
+		'dateFields'        => null,
 		'displayTitle'      => false,
 		'titleLevel'        => 2,
 		'layout'            => 'grid',
@@ -665,7 +666,7 @@ function isgal_caption_fields() {
  * @return string Empty when unparseable.
  */
 function isgal_format_graph_date( $raw ) {
-	$raw = trim( (string) $raw );
+	$raw = preg_replace( '/^(\d{4}):(\d{2}):(\d{2})/', '$1-$2-$3', trim( (string) $raw ) );
 	if ( preg_match( '/^(\d{4})$/', $raw, $m ) ) {
 		return $m[1];
 	}
@@ -678,6 +679,45 @@ function isgal_format_graph_date( $raw ) {
 		return '';
 	}
 	return date_i18n( get_option( 'date_format' ), $ts );
+}
+
+/**
+ * The block's date priority, validated; null means the default.
+ *
+ * @param array $a Resolved attributes.
+ * @return string[]|null
+ */
+function isgal_block_date_priority( array $a ) {
+	if ( empty( $a['dateFields'] ) || ! is_array( $a['dateFields'] ) ) {
+		return null;
+	}
+	$known = array_keys( isgal_date_sources() );
+	$list  = array_values( array_intersect( $a['dateFields'], $known ) );
+	return $list ? $list : null;
+}
+
+/**
+ * The image's date for display: text plus which source it came from, so the
+ * page can say so (a tooltip) instead of presenting a catalogue time as a
+ * capture time.
+ *
+ * @param array $row Row.
+ * @param array $a   Resolved attributes.
+ * @return array [ 'text' => string, 'source' => string label ] or empty text.
+ */
+function isgal_row_display_date( array $row, array $a ) {
+	$resolved = isgal_row_resolved_date( $row, isgal_block_date_priority( $a ) );
+	if ( ! $resolved ) {
+		return array(
+			'text'   => '',
+			'source' => '',
+		);
+	}
+	$sources = isgal_date_sources();
+	return array(
+		'text'   => isgal_format_graph_date( $resolved['raw'] ),
+		'source' => isset( $sources[ $resolved['source'] ] ) ? $sources[ $resolved['source'] ]['label'] : $resolved['source'],
+	);
 }
 
 /**
@@ -731,17 +771,19 @@ function isgal_row_tags( array $row ) {
  */
 function isgal_lightbox_item( array $row, array $a, $title, $alt, $source ) {
 	$srcset = isgal_flickr_srcset( $source );
+	$date   = isgal_row_display_date( $row, $a );
 	return array(
-		'anchor'  => isgal_image_anchor( $row['page'] ),
-		'src'     => esc_url_raw( isgal_flickr_sized( $source, 'b' ) ),
-		'srcset'  => $srcset,
-		'alt'     => (string) $alt,
-		'title'   => (string) $title,
-		'creator' => $a['lightboxDetails'] ? (string) $row['creator'] : '',
-		'date'    => $a['lightboxDetails'] ? isgal_format_graph_date( $row['date'] ) : '',
-		'rights'  => $a['lightboxDetails'] ? (string) $row['rights'] : '',
-		'tags'    => $a['lightboxDetails'] ? array_slice( isgal_row_tags( $row ), 0, 12 ) : array(),
-		'page'    => $a['lightboxDetails'] ? esc_url_raw( $row['page'] ) : '',
+		'anchor'     => isgal_image_anchor( $row['page'] ),
+		'src'        => esc_url_raw( isgal_flickr_sized( $source, 'b' ) ),
+		'srcset'     => $srcset,
+		'alt'        => (string) $alt,
+		'title'      => (string) $title,
+		'creator'    => $a['lightboxDetails'] ? (string) $row['creator'] : '',
+		'date'       => $a['lightboxDetails'] ? $date['text'] : '',
+		'dateSource' => $a['lightboxDetails'] ? $date['source'] : '',
+		'rights'     => $a['lightboxDetails'] ? (string) $row['rights'] : '',
+		'tags'       => $a['lightboxDetails'] ? array_slice( isgal_row_tags( $row ), 0, 12 ) : array(),
+		'page'       => $a['lightboxDetails'] ? esc_url_raw( $row['page'] ) : '',
 	);
 }
 
@@ -765,7 +807,7 @@ function isgal_lightbox_html() {
 					<span class="isgal-lightbox__count" data-wp-text="state.position" data-wp-bind--hidden="!state.hasMany"></span>
 					<dl class="isgal-lightbox__details" data-wp-bind--hidden="!state.hasDetails">
 						<div data-wp-bind--hidden="!state.current.creator"><dt><?php esc_html_e( 'Creator', 'image-snippets-gallery' ); ?></dt><dd data-wp-text="state.current.creator"></dd></div>
-						<div data-wp-bind--hidden="!state.current.date"><dt><?php esc_html_e( 'Date', 'image-snippets-gallery' ); ?></dt><dd data-wp-text="state.current.date"></dd></div>
+						<div data-wp-bind--hidden="!state.current.date"><dt><?php esc_html_e( 'Date', 'image-snippets-gallery' ); ?></dt><dd><span data-wp-text="state.current.date"></span> <small class="isgal-lightbox__source" data-wp-text="state.current.dateSource"></small></dd></div>
 						<div data-wp-bind--hidden="!state.current.rights"><dt><?php esc_html_e( 'Rights', 'image-snippets-gallery' ); ?></dt><dd data-wp-text="state.current.rights"></dd></div>
 						<div data-wp-bind--hidden="!state.current.tags.length"><dt><?php esc_html_e( 'Tags', 'image-snippets-gallery' ); ?></dt><dd><template data-wp-each="state.current.tags"><span class="isgal-lightbox__tag" data-wp-text="context.item"></span></template></dd></div>
 						<div data-wp-bind--hidden="!state.current.page"><dt><?php esc_html_e( 'Source', 'image-snippets-gallery' ); ?></dt><dd><a data-wp-bind--href="state.current.page" target="_blank" rel="noopener"><?php esc_html_e( 'View on ImageSnippets', 'image-snippets-gallery' ); ?></a></dd></div>
@@ -777,6 +819,57 @@ function isgal_lightbox_html() {
 	</dialog>
 	<?php
 	return ob_get_clean();
+}
+
+/**
+ * Rows grouped by the year of their resolved date, for the timeline layout.
+ * Rows are sorted by that date first (the block's direction), so a custom
+ * date priority reorders the timeline as a person would expect. Undated
+ * images come last under their own heading.
+ *
+ * @param array $rows Rows.
+ * @param array $a    Resolved attributes.
+ * @return array List of [ label, rows ].
+ */
+function isgal_timeline_groups( array $rows, array $a ) {
+	$priority  = isgal_block_date_priority( $a );
+	$ascending = 'asc' === strtolower( (string) $a['order'] );
+	$dated     = array();
+	$undated   = array();
+	foreach ( $rows as $i => $row ) {
+		$resolved = isgal_row_resolved_date( $row, $priority );
+		if ( $resolved && ( $resolved['ts'] || preg_match( '/^\d{4}$/', $resolved['raw'] ) ) ) {
+			$year    = $resolved['ts'] ? (int) gmdate( 'Y', $resolved['ts'] ) : (int) $resolved['raw'];
+			$dated[] = array( $year, $resolved['ts'] ? $resolved['ts'] : mktime( 0, 0, 0, 1, 1, $year ), $i, $row );
+		} else {
+			$undated[] = $row;
+		}
+	}
+	usort(
+		$dated,
+		function ( $x, $y ) use ( $ascending ) {
+			if ( $x[1] !== $y[1] ) {
+				return $ascending ? $x[1] - $y[1] : $y[1] - $x[1];
+			}
+			return $x[2] - $y[2];
+		}
+	);
+	$groups = array();
+	foreach ( $dated as $entry ) {
+		$label = (string) $entry[0];
+		if ( ! isset( $groups[ $label ] ) ) {
+			$groups[ $label ] = array();
+		}
+		$groups[ $label ][] = $entry[3];
+	}
+	$out = array();
+	foreach ( $groups as $label => $group_rows ) {
+		$out[] = array( $label, $group_rows );
+	}
+	if ( $undated ) {
+		$out[] = array( __( 'Undated', 'image-snippets-gallery' ), $undated );
+	}
+	return $out;
 }
 
 /**
@@ -804,7 +897,8 @@ function isgal_row_caption_lines( array $row, array $a, $title ) {
 				$text = (string) $row['creator'];
 				break;
 			case 'date':
-				$text = isgal_format_graph_date( $row['date'] );
+				$date = isgal_row_display_date( $row, $a );
+				$text = $date['text'];
 				break;
 			case 'rights':
 				$text = (string) $row['rights'];
@@ -815,7 +909,7 @@ function isgal_row_caption_lines( array $row, array $a, $title ) {
 				break;
 		}
 		if ( '' !== $text ) {
-			$lines[] = array( $field, $text );
+			$lines[] = array( $field, $text, 'date' === $field ? $date['source'] : '' );
 		}
 	}
 	return $lines;
@@ -1118,7 +1212,7 @@ function isgal_render_gallery( array $attributes ) {
 
 	$endpoint = isgal_resolve_endpoint( $a );
 
-	$layout = in_array( $a['layout'], array( 'grid', 'masonry', 'justified' ), true ) ? $a['layout'] : 'grid';
+	$layout = in_array( $a['layout'], array( 'grid', 'masonry', 'justified', 'timeline' ), true ) ? $a['layout'] : 'grid';
 	$cols   = max( 1, min( 8, (int) $a['columns'] ) );
 	$ratio  = in_array( $a['aspectRatio'], array( 'original', '1-1', '4-3', '3-2', '16-9' ), true ) ? $a['aspectRatio'] : '4-3';
 	// Which Flickr rendition to request as the src, by how wide a column is.
@@ -1204,9 +1298,20 @@ function isgal_render_gallery( array $attributes ) {
 		<?php if ( empty( $rows ) ) : ?>
 			<p class="isgal-message"><?php echo esc_html( sprintf( /* translators: %s: gallery name */ __( '%s — no images available.', 'image-snippets-gallery' ), $a['gallery'] ) ); ?></p>
 		<?php else : ?>
+			<?php
+			// A timeline is the same items grouped under year headings, in date
+			// order; every other layout is one group with no heading.
+			$groups = 'timeline' === $layout ? isgal_timeline_groups( $rows, $a ) : array( array( '', $rows ) );
+			foreach ( $groups as $group ) :
+				list( $isgal_group_label, $isgal_group_rows ) = $group;
+				if ( '' !== $isgal_group_label ) :
+					?>
+					<section class="isgal-timeline__group">
+						<h3 class="isgal-timeline__label"><?php echo esc_html( $isgal_group_label ); ?></h3>
+				<?php endif; ?>
 			<div class="isgal-grid">
 				<?php
-				foreach ( $rows as $row ) :
+				foreach ( $isgal_group_rows as $row ) :
 					++$position;
 					$title = isgal_row_title( $row, $use_filename );
 					$alt   = isgal_row_alt( $row );
@@ -1285,17 +1390,28 @@ function isgal_render_gallery( array $attributes ) {
 						<?php endif; ?>
 						<?php
 						$isgal_lines = $a['displayCaption'] ? isgal_row_caption_lines( $row, $a, $title ) : array();
+						if ( 'timeline' === $layout && ! in_array( 'date', wp_list_pluck( $isgal_lines, 0 ), true ) ) {
+							// A timeline without dates on the items would be a grid with headings.
+							$isgal_when = isgal_row_display_date( $row, $a );
+							if ( '' !== $isgal_when['text'] ) {
+								$isgal_lines[] = array( 'date', $isgal_when['text'], $isgal_when['source'] );
+							}
+						}
 						if ( $isgal_lines ) :
 							?>
 							<figcaption class="isgal-caption">
 								<?php foreach ( $isgal_lines as $isgal_line ) : ?>
-									<span class="isgal-cap isgal-cap-<?php echo esc_attr( $isgal_line[0] ); ?>"<?php echo 'title' === $isgal_line[0] ? ' property="name"' : ''; ?>><?php echo esc_html( $isgal_line[1] ); ?></span>
+									<span class="isgal-cap isgal-cap-<?php echo esc_attr( $isgal_line[0] ); ?>"<?php echo 'title' === $isgal_line[0] ? ' property="name"' : ''; ?><?php echo '' !== $isgal_line[2] ? ' title="' . esc_attr( $isgal_line[2] ) . '"' : ''; ?>><?php echo esc_html( $isgal_line[1] ); ?></span>
 								<?php endforeach; ?>
 							</figcaption>
 						<?php endif; ?>
 					</figure>
 				<?php endforeach; ?>
 			</div>
+				<?php if ( '' !== $isgal_group_label ) : ?>
+					</section>
+			<?php endif; ?>
+			<?php endforeach; ?>
 			<?php
 			// One rights line for the whole gallery, but only when it is true of
 			// every image shown; otherwise it would misattribute someone's work.
