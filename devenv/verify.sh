@@ -14,7 +14,7 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-PORT="${ISG_PORT:-8080}"
+PORT="${ISGAL_PORT:-8080}"
 SITE="http://localhost:${PORT}"
 PASS=0
 FAIL=0
@@ -70,7 +70,7 @@ head_ "Cold start: a never-synced gallery syncs inline on first view"
 fixture reset >/dev/null
 wp cache-enabler clear >/dev/null
 assert "mirror is empty" "none" "$(fixture status gallery | awk '/^mirrored/{print $2}')"
-COLD="$(fetch | grep -c '<figure class="isg-item"')"
+COLD="$(fetch | grep -c '<figure class="isgal-item"')"
 if [ "$COLD" -gt 0 ]; then ok "first anonymous view rendered ${COLD} images from an inline sync"
 else bad "first anonymous view rendered no images"; fi
 assert "the view left the gallery mirrored" "$COLD" "$(fixture status gallery | awk '/^mirrored/{print $2}')"
@@ -78,15 +78,15 @@ assert "the view left the gallery mirrored" "$COLD" "$(fixture status gallery | 
 head_ "The mirror is invisible"
 
 assert "post type is not in the REST index" "0" \
-    "$(curl -sS "${SITE}/wp-json/wp/v2/types" | grep -c isg_image)"
+    "$(curl -sS "${SITE}/wp-json/wp/v2/types" | grep -c isgal_image)"
 assert "post type is not in the sitemap" "0" \
-    "$(curl -sS "${SITE}/wp-sitemap.xml" | grep -c isg_image)"
+    "$(curl -sS "${SITE}/wp-sitemap.xml" | grep -c isgal_image)"
 assert "no admin menu entry for it" "0" \
-    "$(wp eval 'global $menu, $submenu; do_action("admin_menu"); echo (int) ( false !== strpos( wp_json_encode( array( $menu, $submenu ) ), "isg_image" ) );' | tr -d '\r')"
+    "$(wp eval 'global $menu, $submenu; do_action("admin_menu"); echo (int) ( false !== strpos( wp_json_encode( array( $menu, $submenu ) ), "isgal_image" ) );' | tr -d '\r')"
 assert "not offered by the block inserter or editor REST" "0" \
-    "$(wp eval 'echo (int) get_post_type_object("isg_image")->show_in_rest;' | tr -d '\r')"
+    "$(wp eval 'echo (int) get_post_type_object("isgal_image")->show_in_rest;' | tr -d '\r')"
 assert "not in generic any-post-type queries" "0" \
-    "$(wp eval 'echo count( array_filter( get_posts( array( "post_type" => "any", "posts_per_page" => 100 ) ), function( $p ) { return "isg_image" === $p->post_type; } ) );' | tr -d '\r')"
+    "$(wp eval 'echo count( array_filter( get_posts( array( "post_type" => "any", "posts_per_page" => 100 ) ), function( $p ) { return "isgal_image" === $p->post_type; } ) );' | tr -d '\r')"
 
 head_ "Page cache behaves like a page cache"
 
@@ -97,7 +97,7 @@ assert "second anonymous request hits"   "HIT"  "$(cached)"
 head_ "Purge reaches the cache"
 
 POST_ID="$(wp post list --post_type=page --name=gallery --field=ID | tr -d '\r')"
-ADAPTERS="$(wp eval "echo implode( ',', isg_purge_page_cache( array( ${POST_ID} ) ) );" | tr -d '\r')"
+ADAPTERS="$(wp eval "echo implode( ',', isgal_purge_page_cache( array( ${POST_ID} ) ) );" | tr -d '\r')"
 
 if [ -n "$ADAPTERS" ]; then ok "an adapter matched: ${ADAPTERS}"
 else bad "no adapter matched — this site would go stale silently"; fi
@@ -112,7 +112,7 @@ assert "cache warm before refresh" "HIT" "$(cached)"
 
 REFRESH="$(curl -sS -u "admin:${APP}" -X POST "${SITE}/wp-json/imagesnippets/v1/refresh" \
     -H 'Content-Type: application/json' \
-    -d '{"attributes":{"gallery":"hs_gallery02","limit":12}}')"
+    -d '{"attributes":{"gallery":"mmgallery01","limit":12}}')"
 
 if grep -q '"refreshed":true' <<<"$REFRESH"; then ok "refresh route returned success: ${REFRESH}"
 else bad "refresh route failed: ${REFRESH}"; fi
@@ -123,27 +123,27 @@ head_ "Sync corrects the mirror in both directions"
 
 # Direction one: the site is missing an image ImageSnippets has. Drop one from
 # the mirror and check Refresh all puts it back and the visitor sees it.
-TRUE_COUNT="$(fetch | grep -c '<figure class="isg-item"')"
+TRUE_COUNT="$(fetch | grep -c '<figure class="isgal-item"')"
 fixture drop gallery >/dev/null
-DEGRADED="$(fetch | grep -c '<figure class="isg-item"')"
+DEGRADED="$(fetch | grep -c '<figure class="isgal-item"')"
 
 assert "fixture removed one image" "$((TRUE_COUNT - 1))" "$DEGRADED"
 
-wp eval 'isg_refresh_all_galleries();' >/dev/null
-assert "refresh all restored the gallery" "$TRUE_COUNT" "$(fetch | grep -c '<figure class="isg-item"')"
+wp eval 'isgal_refresh_all_galleries();' >/dev/null
+assert "refresh all restored the gallery" "$TRUE_COUNT" "$(fetch | grep -c '<figure class="isgal-item"')"
 
 # Direction two: the site has an image ImageSnippets no longer has. This is
 # the deletion path — detach, then hard-delete the orphan — run as cron would
 # (no forced purge), so the purge-on-change is what reaches the visitor.
 fixture ghost gallery >/dev/null
-assert "fixture added a ghost image" "$((TRUE_COUNT + 1))" "$(fetch | grep -c '<figure class="isg-item"')"
+assert "fixture added a ghost image" "$((TRUE_COUNT + 1))" "$(fetch | grep -c '<figure class="isgal-item"')"
 fetch >/dev/null
 assert "ghost is frozen in the page cache" "HIT" "$(cached)"
 
-wp isg sync --cron >/dev/null
-assert "an unforced sync removed it and purged for the visitor" "$TRUE_COUNT" "$(fetch | grep -c '<figure class="isg-item"')"
+wp isgal sync --cron >/dev/null
+assert "an unforced sync removed it and purged for the visitor" "$TRUE_COUNT" "$(fetch | grep -c '<figure class="isgal-item"')"
 assert "the orphaned ghost was hard-deleted, not trashed" "0" \
-    "$(wp post list --post_type=isg_image --post_status=any --s='Ghost image' --format=count | tr -d '\r')"
+    "$(wp post list --post_type=isgal_image --post_status=any --s='Ghost image' --format=count | tr -d '\r')"
 
 head_ "Sync refuses to act on a bad answer"
 
@@ -153,19 +153,19 @@ EMPTY="$(fixture empty gallery)"
 assert "empty result is refused" "refused:" "$(awk '/^sync/{print $2}' <<<"$EMPTY")"
 assert "mirror is untouched" "${TRUE_COUNT} -> ${TRUE_COUNT}" "$(awk '/^mirrored/{print $2, $3, $4}' <<<"$EMPTY")"
 
-ERR="$(wp eval 'print_r( isg_sync_gallery( "http://localhost:1/sparql", "hs_gallery02" )->get_error_code() );' | tr -d '\r')"
+ERR="$(wp eval 'print_r( isgal_sync_gallery( "http://localhost:1/sparql", "mmgallery01" )->get_error_code() );' | tr -d '\r')"
 assert "unreachable endpoint is refused" "http_request_failed" "$ERR"
 assert "and leaves no gallery label behind" "0" \
-    "$(wp eval 'echo (int) ( isg_gallery_term( "http://localhost:1/sparql", "hs_gallery02" ) instanceof WP_Term );' | tr -d '\r')"
-assert "mirror still renders" "$TRUE_COUNT" "$(fetch | grep -c '<figure class="isg-item"')"
+    "$(wp eval 'echo (int) ( isgal_gallery_term( "http://localhost:1/sparql", "mmgallery01" ) instanceof WP_Term );' | tr -d '\r')"
+assert "mirror still renders" "$TRUE_COUNT" "$(fetch | grep -c '<figure class="isgal-item"')"
 
 head_ "Site search finds mirrored images"
 
-SEARCH="$(fetch '/?s=pelican')"
+SEARCH="$(fetch '/?s=carburetor')"
 assert "an anonymous search for a mirrored title finds it" "1" \
-    "$(grep -c 'Brown Pelican' <<<"$SEARCH" | awk '{print ($1>0)?1:0}')"
+    "$(grep -c 'Carburetor Abstract' <<<"$SEARCH" | awk '{print ($1>0)?1:0}')"
 assert "the hit links to the gallery page" "1" \
-    "$(grep -o 'href="[^"]*/gallery/#isg-[a-f0-9]*"[^>]*>Brown Pelican' <<<"$SEARCH" | wc -l | awk '{print ($1>0)?1:0}')"
+    "$(grep -o 'href="[^"]*/gallery/#isgal-[a-f0-9]*"[^>]*>Carburetor Abstract' <<<"$SEARCH" | wc -l | awk '{print ($1>0)?1:0}')"
 
 # The fragment is the point of the link. A mirror post has no page of its own,
 # so every image in a gallery resolves to the same permalink; without the
@@ -173,7 +173,7 @@ assert "the hit links to the gallery page" "1" \
 # that all dump the visitor at the top of the grid. Resolve the fragment
 # against the rendered page rather than trusting that both sides agree — one
 # naming an id the page never renders would scroll nowhere and fail silently.
-FRAG="$(grep -o 'href="[^"]*/gallery/#isg-[a-f0-9]*"[^>]*>Brown Pelican' <<<"$SEARCH" \
+FRAG="$(grep -o 'href="[^"]*/gallery/#isgal-[a-f0-9]*"[^>]*>Carburetor Abstract' <<<"$SEARCH" \
     | head -1 | sed 's|.*/gallery/#||; s|".*||')"
 assert "the fragment resolves to that image on the page" "1" \
     "$(grep -c "id=\"${FRAG:-__missing__}\"" <<<"$(fetch)" | awk '{print ($1>0)?1:0}')"
@@ -181,7 +181,7 @@ assert "the fragment resolves to that image on the page" "1" \
 # Anchors are derived from the image IRI on both sides, so a collision would
 # silently point several results at one image.
 assert "every rendered image has a distinct anchor" "$TRUE_COUNT" \
-    "$(fetch | grep -o 'id="isg-[a-f0-9]*"' | sort -u | wc -l)"
+    "$(fetch | grep -o 'id="isgal-[a-f0-9]*"' | sort -u | wc -l)"
 
 # A mirror post has no attachment, so wp_get_attachment_image() never runs and
 # everything it would have contributed has to come from our filter instead. The
@@ -200,29 +200,29 @@ assert "the thumbnail declares a real height" "1" \
 # post_content holds the index text — every entity label and keyword the graph
 # carries — which is what lets an unrelated word find the image. It has to keep
 # matching without being printed; these two assertions only mean anything as a
-# pair. "aves" is a graph keyword on the pelican that appears in no prose.
+# pair. "pinhole" is a graph label on the carburetor that appears in no prose.
 assert "a graph keyword still matches an image whose prose never says it" "1" \
-    "$(fetch '/?s=aves' | grep -c 'Brown Pelican' | awk '{print ($1>0)?1:0}')"
+    "$(fetch '/?s=pinhole' | grep -c 'Carburetor Abstract' | awk '{print ($1>0)?1:0}')"
 assert "but the keyword list is not printed as the result body" "0" \
-    "$(grep -c 'aves' <<<"$SEARCH")"
+    "$(grep -c 'pinhole' <<<"$SEARCH")"
 
 # core/post-date reads through the core/post-data binding, which refuses any
 # post that is not publicly viewable — which mirror posts deliberately are not.
 # Every other result in Twenty Twenty-Five's search carries a date; without an
 # answer to that binding, ours were the only ones that did not.
 assert "the theme's own date block renders for an image result" "1" \
-    "$(grep -c 'class="wp-block-post-date[^"]*"><a href="[^"]*#isg-' <<<"$SEARCH" | awk '{print ($1>0)?1:0}')"
+    "$(grep -c 'class="wp-block-post-date[^"]*"><a href="[^"]*#isgal-' <<<"$SEARCH" | awk '{print ($1>0)?1:0}')"
 
 # The photographer is not a user of this site and post_author is 0, so a theme
 # that prints an author gets it from the graph or gets nothing.
-assert "a theme that prints an author gets the photographer" "Henry Sautter" \
-    "$(wp eval '$q = new WP_Query( array( "post_type" => "isg_image", "posts_per_page" => 1, "s" => "pelican" ) ); $q->the_post(); echo get_the_author();' | tr -d '\r')"
+assert "a theme that prints an author gets the photographer" "Margaret Warren" \
+    "$(wp eval '$q = new WP_Query( array( "post_type" => "isgal_image", "posts_per_page" => 1, "s" => "pinhole" ) ); $q->the_post(); echo get_the_author();' | tr -d '\r')"
 
 head_ "Editor preview renders server-side"
 
 SSR="$(curl -sS -u "admin:${APP}" -G \
     --data-urlencode 'context=edit' \
-    --data-urlencode 'attributes[gallery]=hs_gallery02' \
+    --data-urlencode 'attributes[gallery]=mmgallery01' \
     --data-urlencode 'attributes[limit]=6' \
     "${SITE}/wp-json/wp/v2/block-renderer/imagesnippets/gallery")"
 
@@ -237,10 +237,10 @@ head_ "Payload profiles"
 PROFILES="$( wp eval '
 $sizes = array();
 foreach ( array( "schema", "provenance", "full" ) as $p ) {
-    $a    = isg_resolve_attributes( array( "gallery" => "hs_gallery02", "limit" => 12, "jsonldProfile" => $p ) );
-    $rows = isg_gallery_rows( $a, isg_resolve_endpoint( $a ) );
+    $a    = isgal_resolve_attributes( array( "gallery" => "mmgallery01", "limit" => 12, "jsonldProfile" => $p ) );
+    $rows = isgal_gallery_rows( $a, isgal_resolve_endpoint( $a ) );
     if ( is_wp_error( $rows ) ) { printf( "  FAIL  %s: %s\n", $p, $rows->get_error_message() ); continue; }
-    $ld = isg_jsonld( $rows, "hs_gallery02", false, $p, "https://example.com/g/" );
+    $ld = isgal_jsonld( $rows, "mmgallery01", false, $p, "https://example.com/g/" );
     $sizes[ $p ] = strlen( $ld );
     printf( "  ....  %-11s %7d bytes  %6d gzipped\n", $p, strlen( $ld ), strlen( gzencode( $ld, 6 ) ) );
 }
@@ -262,7 +262,7 @@ head_ "Freshness plumbing"
 # Assert on the sync lock rather than on the cron array. wp_schedule_single_event
 # de-duplicates identical events, so an event left pending by an earlier run makes
 # the count stay flat even when this render did queue one. The lock is taken by
-# isg_schedule_sync itself, so it is direct evidence rather than a side effect.
+# isgal_schedule_sync itself, so it is direct evidence rather than a side effect.
 fixture age gallery >/dev/null
 fetch >/dev/null   # a render past the interval should queue the sync
 assert "a stale gallery queues a background sync" "held" \
@@ -282,23 +282,11 @@ assert "stalled cron falls back to a synchronous sync" "fresh" "$STALLED"
 
 head_ "WP-CLI"
 
-assert "wp isg status lists the gallery" "hs_gallery02" "$(wp isg status --format=csv | awk -F, 'NR==2{print $1}' | tr -d '\r')"
-assert "wp isg sync reports counts" "1" "$(wp isg sync hs_gallery02 | grep -c 'images (+' )"
-
-head_ "Update channel"
-
-# The plugin is GitHub-hosted, so the update notice comes from our own checker,
-# not wordpress.org. Ask it directly what the latest release resolves to: it
-# must be a release *asset* zip, never GitHub's source archive, which lacks
-# build/ and would install a block that cannot register.
-PKG="$(wp eval '$c = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker("https://github.com/gchartier/image-snippets-gallery/", WP_PLUGIN_DIR."/image-snippets-gallery/image-snippets-gallery.php", "isg-verify"); $c->getVcsApi()->enableReleaseAssets("/^image-snippets-gallery-.*\.zip$/", YahnisElsts\PluginUpdateChecker\v5p7\Vcs\Api::REQUIRE_RELEASE_ASSETS); $u = $c->requestUpdate(); echo $u ? $u->download_url : "none";' | tr -d '\r')"
-assert "latest GitHub release offers a release-asset zip" "releases/download/" \
-    "$(grep -o 'releases/download/' <<<"$PKG" | head -1)"
-assert "only the release strategy is allowed (no tag/branch fallback)" "latest_release" \
-    "$(wp eval 'echo implode(",", array_keys(apply_filters("puc_vcs_update_detection_strategies-image-snippets-gallery", ["latest_release"=>1,"latest_tag"=>1,"branch"=>1])));' | tr -d '\r')"
+assert "wp isgal status lists the gallery" "mmgallery01" "$(wp isgal status --format=csv | awk -F, 'NR==2{print $1}' | tr -d '\r')"
+assert "wp isgal sync reports counts" "1" "$(wp isgal sync mmgallery01 | grep -c 'images (+' )"
 
 head_ "Sync status"
-wp isg status | sed 's/^/       /'
+wp isgal status | sed 's/^/       /'
 
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

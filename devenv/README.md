@@ -71,7 +71,7 @@ so anything stale is stale because a purge did not happen.
 This is the path that has never been exercised in a browser.
 
 The honest version is "add an image on ImageSnippets, watch the site pick it
-up", and it needs a collection you can write to — `hs_gallery02` (Henry
+up", and it needs a collection you can write to — `mmgallery01` (Henry
 Sautter's, the default) can be read but not added to. If you have one, pass it
 to setup: `./devenv/setup.sh my_gallery`, and use it below.
 
@@ -120,7 +120,7 @@ The plugin has no universal purge API to call, so it detects what is installed.
 Check that detection lands:
 
 ```bash
-./devenv/wp eval "print_r( isg_purge_page_cache( array( 4 ) ) );"
+./devenv/wp eval "print_r( isgal_purge_page_cache( array( 4 ) ) );"
 ```
 
 Expected: `Cache Enabler` and `Cache Enabler (by URL)`. An empty array means the
@@ -135,8 +135,8 @@ any site running it, Margaret's included. Fixed in `includes/cache-purge.php`,
 which now resolves `Class::method` targets too.
 
 Worth keeping in mind for the call with her: the Nexcess fork may have renamed
-things again. If `isg_purge_page_cache()` returns an empty array on her site,
-that is the answer, and the `isg_gallery_changed` action is the escape hatch.
+things again. If `isgal_purge_page_cache()` returns an empty array on her site,
+that is the answer, and the `isgal_gallery_changed` action is the escape hatch.
 
 ---
 
@@ -148,14 +148,14 @@ is roughly the granularity a managed host gives you. To watch it:
 ```bash
 docker compose -f devenv/docker-compose.yml logs -f cron
 ./devenv/wp cron event list                      # what is scheduled
-./devenv/wp isg status                           # what the mirror holds, last sync, errors
+./devenv/wp isgal status                           # what the mirror holds, last sync, errors
 ```
 
 To iterate faster, shorten the interval — but change it back before drawing any
 conclusion about how fast her site will update:
 
 ```bash
-ISG_CRON_INTERVAL=60 docker compose -f devenv/docker-compose.yml up -d cron
+ISGAL_CRON_INTERVAL=60 docker compose -f devenv/docker-compose.yml up -d cron
 ```
 
 Because `DISABLE_WP_CRON` is set, nothing runs on page loads. That is deliberate:
@@ -169,16 +169,16 @@ gallery still eventually updates for a visitor.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `ISG_PORT` | `8080` | Host port |
-| `ISG_CRON_INTERVAL` | `900` | Seconds between cron runs |
+| `ISGAL_PORT` | `8080` | Host port |
+| `ISGAL_CRON_INTERVAL` | `900` | Seconds between cron runs |
 
 ```bash
 ./devenv/verify.sh                       # all automated checks
 ./devenv/simulate-change.sh              # make the mirror disagree with source
 ./devenv/wp <any wp-cli command>
-./devenv/wp isg sync [gallery] [--cron]  # sync now; --cron = purge only on change
-./devenv/wp isg status                   # the mirror, per gallery
-./devenv/wp isg reset --yes              # empty the mirror; next view rebuilds it
+./devenv/wp isgal sync [gallery] [--cron]  # sync now; --cron = purge only on change
+./devenv/wp isgal status                   # the mirror, per gallery
+./devenv/wp isgal reset --yes              # empty the mirror; next view rebuilds it
 ./devenv/wp cache-enabler clear          # empty the page cache by hand
 ./devenv/wp redis status                 # object cache health
 docker compose -f devenv/docker-compose.yml logs -f wordpress
@@ -203,7 +203,7 @@ the block on the page so it acts on what the page renders:
 The mirror is one hidden post per image. `verify.sh` checks it is absent from
 the REST index, the sitemap, the admin menu, and generic `post_type => any`
 queries. If you add a plugin that enumerates post types (an SEO plugin, a
-search plugin, a backup tool), look for `isg_image` in its screens — that is
+search plugin, a backup tool), look for `isgal_image` in its screens — that is
 the one place a leak would show up.
 
 ---

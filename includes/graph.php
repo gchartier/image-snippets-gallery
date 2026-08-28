@@ -35,7 +35,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * @return array Prefix to namespace IRI.
  */
-function isg_jsonld_prefixes() {
+function isgal_jsonld_prefixes() {
 	return array(
 		// schema.org is the default vocabulary so its terms can be emitted bare —
 		// "name", "ImageObject" — rather than as CURIEs. Both are correct JSON-LD
@@ -74,7 +74,7 @@ function isg_jsonld_prefixes() {
  *
  * @return array
  */
-function isg_graph_dropped_prefixes() {
+function isgal_graph_dropped_prefixes() {
 	return array(
 		'http://ogp.me/ns#',
 		'https://ogp.me/ns#',
@@ -94,7 +94,7 @@ function isg_graph_dropped_prefixes() {
  *
  * @return array
  */
-function isg_graph_about_predicates() {
+function isgal_graph_about_predicates() {
 	return array(
 		'http://schema.org/about',
 		'http://schema.org/mentions',
@@ -117,7 +117,7 @@ function isg_graph_about_predicates() {
  *
  * @return array
  */
-function isg_jsonld_profiles() {
+function isgal_jsonld_profiles() {
 	return array( 'schema', 'provenance', 'full' );
 }
 
@@ -127,9 +127,9 @@ function isg_jsonld_profiles() {
  * @param string $profile Requested profile.
  * @return string
  */
-function isg_resolve_profile( $profile ) {
+function isgal_resolve_profile( $profile ) {
 	$profile = strtolower( trim( (string) $profile ) );
-	return in_array( $profile, isg_jsonld_profiles(), true ) ? $profile : 'provenance';
+	return in_array( $profile, isgal_jsonld_profiles(), true ) ? $profile : 'provenance';
 }
 
 /**
@@ -137,7 +137,7 @@ function isg_resolve_profile( $profile ) {
  *
  * @return string
  */
-function isg_sparql_prefixes() {
+function isgal_sparql_prefixes() {
 	// Concatenated rather than heredoc: the wp.org review tooling rejects
 	// heredoc outright, so this stays a plain string.
 	return "PREFIX dc: <http://purl.org/dc/elements/1.1/>\n"
@@ -157,8 +157,8 @@ function isg_sparql_prefixes() {
  * @param string $gallery Gallery name (raw; sanitised here).
  * @return string SPARQL fragment binding ?image.
  */
-function isg_sparql_membership( $gallery ) {
-	$dataset = isg_dataset_iri( $gallery );
+function isgal_sparql_membership( $gallery ) {
+	$dataset = isgal_dataset_iri( $gallery );
 	return "?image lio:isIn <{$dataset}>.";
 }
 
@@ -174,16 +174,16 @@ function isg_sparql_membership( $gallery ) {
  * @param string $gallery Gallery name, optionally "owner/gallery" (raw; sanitised here).
  * @return string Dataset IRI.
  */
-function isg_dataset_iri( $gallery ) {
+function isgal_dataset_iri( $gallery ) {
 	$parts = explode( '/', trim( (string) $gallery ), 3 );
 	if ( count( $parts ) >= 2 && '' !== $parts[0] && '' !== $parts[1] ) {
 		$owner = $parts[0];
 		$name  = $parts[1];
 	} else {
-		$owner = ISG_DEFAULT_DATASET_OWNER;
+		$owner = ISGAL_DEFAULT_DATASET_OWNER;
 		$name  = $parts[0];
 	}
-	return ISG_DATASET_BASE . isg_sanitize_iri_segment( $owner ) . '/' . isg_sanitize_iri_segment( $name );
+	return ISGAL_DATASET_BASE . isgal_sanitize_iri_segment( $owner ) . '/' . isgal_sanitize_iri_segment( $name );
 }
 
 /**
@@ -198,8 +198,8 @@ function isg_dataset_iri( $gallery ) {
  *
  * @return string
  */
-function isg_build_sparql_datasets() {
-	return isg_sparql_prefixes()
+function isgal_build_sparql_datasets() {
+	return isgal_sparql_prefixes()
 		. "SELECT ?ds (COUNT(DISTINCT ?image) AS ?n) WHERE {\n"
 		. "  GRAPH ?page {\n"
 		. "    ?image lio:isIn ?ds.\n"
@@ -218,11 +218,11 @@ function isg_build_sparql_datasets() {
  * @param string $gallery Gallery name.
  * @return string
  */
-function isg_build_sparql_list( $gallery ) {
-	$member = isg_sparql_membership( $gallery );
-	$cap    = max( 1, (int) apply_filters( 'isg_sync_max_images', ISG_SYNC_MAX_IMAGES ) );
+function isgal_build_sparql_list( $gallery ) {
+	$member = isgal_sparql_membership( $gallery );
+	$cap    = max( 1, (int) apply_filters( 'isgal_sync_max_images', ISGAL_SYNC_MAX_IMAGES ) );
 
-	return isg_sparql_prefixes()
+	return isgal_sparql_prefixes()
 		. "SELECT ?page ?image (SAMPLE(?d) AS ?date_) (SAMPLE(?t) AS ?title_) WHERE {\n"
 		. "  GRAPH ?page {\n"
 		. "    {$member}\n"
@@ -241,16 +241,16 @@ function isg_build_sparql_list( $gallery ) {
  * Trimming happens at render, per payload profile, so the mirror holds every
  * triple ImageSnippets holds.
  *
- * @param array $pages Graph IRIs. Must already be checked with isg_iri_is_clean().
+ * @param array $pages Graph IRIs. Must already be checked with isgal_iri_is_clean().
  * @return string
  */
-function isg_build_sparql_graphs( array $pages ) {
+function isgal_build_sparql_graphs( array $pages ) {
 	$values = '';
 	foreach ( $pages as $page ) {
 		$values .= '<' . $page . '> ';
 	}
 
-	return isg_sparql_prefixes()
+	return isgal_sparql_prefixes()
 		. "SELECT ?page ?s ?p ?o WHERE {\n"
 		. "  VALUES ?page { {$values}}\n"
 		. "  GRAPH ?page { ?s ?p ?o. }\n"
@@ -263,10 +263,10 @@ function isg_build_sparql_graphs( array $pages ) {
  * @param string $predicate Predicate IRI.
  * @return bool
  */
-function isg_predicate_is_trimmed( $predicate ) {
+function isgal_predicate_is_trimmed( $predicate ) {
 	static $prefixes = null;
 	if ( null === $prefixes ) {
-		$prefixes = isg_graph_dropped_prefixes();
+		$prefixes = isgal_graph_dropped_prefixes();
 	}
 	foreach ( $prefixes as $prefix ) {
 		if ( 0 === strpos( $predicate, $prefix ) ) {
@@ -285,14 +285,14 @@ function isg_predicate_is_trimmed( $predicate ) {
  * @param string $iri IRI.
  * @return string Compacted term, or the IRI unchanged.
  */
-function isg_compact_iri( $iri ) {
+function isgal_compact_iri( $iri ) {
 	static $sorted = null;
 
 	if ( null === $sorted ) {
 		// '@vocab' is a keyword, not a prefix: compacting against it would produce
 		// "@vocab:name", which is not a term at all.
 		$sorted = array_filter(
-			isg_jsonld_prefixes(),
+			isgal_jsonld_prefixes(),
 			static function ( $prefix ) {
 				return '@' !== $prefix[0];
 			},
@@ -325,12 +325,12 @@ function isg_compact_iri( $iri ) {
  * @param array $term SPARQL JSON term ('type', 'value', maybe 'xml:lang'/'datatype').
  * @return mixed
  */
-function isg_term_to_jsonld( array $term ) {
+function isgal_term_to_jsonld( array $term ) {
 	$type  = isset( $term['type'] ) ? $term['type'] : 'literal';
 	$value = isset( $term['value'] ) ? $term['value'] : '';
 
 	if ( 'uri' === $type ) {
-		return array( '@id' => isg_compact_iri( $value ) );
+		return array( '@id' => isgal_compact_iri( $value ) );
 	}
 
 	if ( 'bnode' === $type ) {
@@ -348,7 +348,7 @@ function isg_term_to_jsonld( array $term ) {
 	if ( ! empty( $term['datatype'] ) && 'http://www.w3.org/2001/XMLSchema#string' !== $term['datatype'] ) {
 		return array(
 			'@value' => $value,
-			'@type'  => isg_compact_iri( $term['datatype'] ),
+			'@type'  => isgal_compact_iri( $term['datatype'] ),
 		);
 	}
 
@@ -367,7 +367,7 @@ function isg_term_to_jsonld( array $term ) {
  *                        the list query.
  * @return array
  */
-function isg_parse_graph_bindings( array $bindings, array $meta = array() ) {
+function isgal_parse_graph_bindings( array $bindings, array $meta = array() ) {
 	$graphs = array();
 
 	foreach ( $bindings as $binding ) {
@@ -400,7 +400,7 @@ function isg_parse_graph_bindings( array $bindings, array $meta = array() ) {
 
 	$rows = array();
 	foreach ( $graphs as $page => $graph ) {
-		$rows[] = isg_graph_to_row( $page, $graph );
+		$rows[] = isgal_graph_to_row( $page, $graph );
 	}
 
 	// Canonical order, not display order. Display order is a query on the
@@ -423,7 +423,7 @@ function isg_parse_graph_bindings( array $bindings, array $meta = array() ) {
  * @param array  $graph Parsed graph.
  * @return array
  */
-function isg_graph_to_row( $page, array $graph ) {
+function isgal_graph_to_row( $page, array $graph ) {
 	$image = $graph['image'];
 
 	// Only statements whose subject is the image itself describe the image. The
@@ -459,7 +459,7 @@ function isg_graph_to_row( $page, array $graph ) {
 	// entities with a resolved name; plain literals become keywords.
 	$abouts   = array();
 	$keywords = array();
-	foreach ( isg_graph_about_predicates() as $predicate ) {
+	foreach ( isgal_graph_about_predicates() as $predicate ) {
 		if ( empty( $props[ $predicate ] ) ) {
 			continue;
 		}
@@ -513,7 +513,7 @@ function isg_graph_to_row( $page, array $graph ) {
  * @param bool  $use_filename Filename fallback for names.
  * @return array
  */
-function isg_schema_node( array $row, $use_filename ) {
+function isgal_schema_node( array $row, $use_filename ) {
 	$node = array(
 		'@id'          => $row['image'],
 		'@type'        => 'ImageObject',
@@ -521,7 +521,7 @@ function isg_schema_node( array $row, $use_filename ) {
 		'thumbnailUrl' => $row['thumb'],
 	);
 
-	$name = isg_row_title( $row, $use_filename );
+	$name = isgal_row_title( $row, $use_filename );
 	if ( '' !== $name ) {
 		$node['name'] = $name;
 	}
@@ -552,7 +552,7 @@ function isg_schema_node( array $row, $use_filename ) {
 	}
 
 	if ( '' !== $row['location'] ) {
-		$node['contentLocation'] = array( '@id' => isg_compact_iri( $row['location'] ) );
+		$node['contentLocation'] = array( '@id' => isgal_compact_iri( $row['location'] ) );
 	}
 
 	// Every entity carries the name resolved from its own graph, so none of this
@@ -560,7 +560,7 @@ function isg_schema_node( array $row, $use_filename ) {
 	if ( ! empty( $row['abouts'] ) ) {
 		$about = array();
 		foreach ( $row['abouts'] as $entity ) {
-			$item = array( '@id' => isg_compact_iri( $entity['id'] ) );
+			$item = array( '@id' => isgal_compact_iri( $entity['id'] ) );
 			if ( '' !== $entity['label'] ) {
 				$item['name'] = $entity['label'];
 			}
@@ -587,23 +587,23 @@ function isg_schema_node( array $row, $use_filename ) {
  * @param string $profile Resolved payload profile.
  * @return array
  */
-function isg_named_graph_node( array $row, $profile = 'provenance' ) {
+function isgal_named_graph_node( array $row, $profile = 'provenance' ) {
 	$subjects = array();
 	$trim     = ( 'full' !== $profile );
 
 	foreach ( $row['triples'] as $triple ) {
 		list( $subject, $predicate, $object ) = $triple;
 
-		if ( $trim && isg_predicate_is_trimmed( $predicate ) ) {
+		if ( $trim && isgal_predicate_is_trimmed( $predicate ) ) {
 			continue;
 		}
 
 		if ( ! isset( $subjects[ $subject ] ) ) {
-			$subjects[ $subject ] = array( '@id' => isg_compact_iri( $subject ) );
+			$subjects[ $subject ] = array( '@id' => isgal_compact_iri( $subject ) );
 		}
 
-		$term  = isg_compact_iri( $predicate );
-		$value = isg_term_to_jsonld( $object );
+		$term  = isgal_compact_iri( $predicate );
+		$value = isgal_term_to_jsonld( $object );
 
 		// rdf:type is @type in JSON-LD, and its object is always an identifier.
 		if ( 'rdf:type' === $term ) {
@@ -634,7 +634,7 @@ function isg_named_graph_node( array $row, $profile = 'provenance' ) {
  *
  * @return string
  */
-function isg_current_permalink() {
+function isgal_current_permalink() {
 	if ( is_singular() ) {
 		$permalink = get_permalink();
 		return $permalink ? $permalink : '';
@@ -652,12 +652,12 @@ function isg_current_permalink() {
  * @param string $base_id      IRI to hang the gallery node on.
  * @return string <script> tag, or empty string.
  */
-function isg_jsonld( array $rows, $gallery, $use_filename, $profile = 'provenance', $base_id = '' ) {
+function isgal_jsonld( array $rows, $gallery, $use_filename, $profile = 'provenance', $base_id = '' ) {
 	if ( empty( $rows ) ) {
 		return '';
 	}
 
-	$profile = isg_resolve_profile( $profile );
+	$profile = isgal_resolve_profile( $profile );
 
 	$gallery_node = array(
 		'@type' => 'ImageGallery',
@@ -676,10 +676,10 @@ function isg_jsonld( array $rows, $gallery, $use_filename, $profile = 'provenanc
 			continue;
 		}
 		$images[] = array( '@id' => $row['image'] );
-		$nodes[]  = isg_schema_node( $row, $use_filename );
+		$nodes[]  = isgal_schema_node( $row, $use_filename );
 
 		if ( 'schema' !== $profile ) {
-			$named[] = isg_named_graph_node( $row, $profile );
+			$named[] = isgal_named_graph_node( $row, $profile );
 		}
 	}
 
@@ -689,7 +689,7 @@ function isg_jsonld( array $rows, $gallery, $use_filename, $profile = 'provenanc
 	// beside it. A consumer that only knows schema.org reads the first part and
 	// ignores the rest; an RDF consumer gets both, with attribution intact.
 	$payload = array(
-		'@context' => isg_jsonld_prefixes(),
+		'@context' => isgal_jsonld_prefixes(),
 		'@graph'   => array_merge( array( $gallery_node ), $nodes, $named ),
 	);
 
@@ -700,7 +700,7 @@ function isg_jsonld( array $rows, $gallery, $use_filename, $profile = 'provenanc
 	 * @param array  $rows    Rows it was built from.
 	 * @param string $profile Resolved profile.
 	 */
-	$payload = apply_filters( 'isg_jsonld_payload', $payload, $rows, $profile );
+	$payload = apply_filters( 'isgal_jsonld_payload', $payload, $rows, $profile );
 
 	return '<script type="application/ld+json">'
 		. wp_json_encode( $payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE )

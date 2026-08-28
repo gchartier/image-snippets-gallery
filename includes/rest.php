@@ -15,14 +15,14 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * @return void
  */
-function isg_register_rest_routes() {
+function isgal_register_rest_routes() {
 	register_rest_route(
 		'imagesnippets/v1',
 		'/galleries',
 		array(
 			'methods'             => WP_REST_Server::READABLE,
-			'callback'            => 'isg_rest_galleries',
-			'permission_callback' => 'isg_rest_can_refresh',
+			'callback'            => 'isgal_rest_galleries',
+			'permission_callback' => 'isgal_rest_can_refresh',
 			'args'                => array(
 				'endpoint' => array(
 					'type'              => 'string',
@@ -42,8 +42,8 @@ function isg_register_rest_routes() {
 		'/refresh',
 		array(
 			'methods'             => WP_REST_Server::CREATABLE,
-			'callback'            => 'isg_rest_refresh',
-			'permission_callback' => 'isg_rest_can_refresh',
+			'callback'            => 'isgal_rest_refresh',
+			'permission_callback' => 'isgal_rest_can_refresh',
 			'args'                => array(
 				'attributes' => array(
 					'type'     => 'object',
@@ -58,16 +58,16 @@ function isg_register_rest_routes() {
 		array(
 			array(
 				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => 'isg_rest_order_get',
-				'permission_callback' => 'isg_rest_can_refresh',
-				'args'                => isg_rest_order_args(),
+				'callback'            => 'isgal_rest_order_get',
+				'permission_callback' => 'isgal_rest_can_refresh',
+				'args'                => isgal_rest_order_args(),
 			),
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
-				'callback'            => 'isg_rest_order_set',
-				'permission_callback' => 'isg_rest_can_refresh',
+				'callback'            => 'isgal_rest_order_set',
+				'permission_callback' => 'isgal_rest_can_refresh',
 				'args'                => array_merge(
-					isg_rest_order_args(),
+					isgal_rest_order_args(),
 					array(
 						'pages' => array(
 							'type'     => 'array',
@@ -80,7 +80,7 @@ function isg_register_rest_routes() {
 		)
 	);
 }
-add_action( 'rest_api_init', 'isg_register_rest_routes' );
+add_action( 'rest_api_init', 'isgal_register_rest_routes' );
 
 /**
  * The gallery name a term stands for, as the blocks spell it.
@@ -88,8 +88,8 @@ add_action( 'rest_api_init', 'isg_register_rest_routes' );
  * @param WP_Term $term Gallery term.
  * @return string
  */
-function isg_term_gallery_name( WP_Term $term ) {
-	$name = (string) get_term_meta( $term->term_id, ISG_TERM_GALLERY, true );
+function isgal_term_gallery_name( WP_Term $term ) {
+	$name = (string) get_term_meta( $term->term_id, ISGAL_TERM_GALLERY, true );
 	return '' !== $name ? $name : (string) $term->name;
 }
 
@@ -98,7 +98,7 @@ function isg_term_gallery_name( WP_Term $term ) {
  *
  * @return array
  */
-function isg_rest_order_args() {
+function isgal_rest_order_args() {
 	return array(
 		'gallery'  => array(
 			'type'              => 'string',
@@ -120,26 +120,26 @@ function isg_rest_order_args() {
  * @param WP_REST_Request $request Request.
  * @return WP_Term|WP_Error
  */
-function isg_rest_order_term( WP_REST_Request $request ) {
+function isgal_rest_order_term( WP_REST_Request $request ) {
 	$gallery  = trim( (string) $request->get_param( 'gallery' ) );
 	$endpoint = (string) $request->get_param( 'endpoint' );
 	if ( '' === $endpoint ) {
-		$endpoint = isg_default_endpoint();
+		$endpoint = isgal_default_endpoint();
 	}
 	if ( '' === $gallery ) {
-		return new WP_Error( 'isg_no_gallery', __( 'No gallery name.', 'image-snippets-gallery' ), array( 'status' => 400 ) );
+		return new WP_Error( 'isgal_no_gallery', __( 'No gallery name.', 'image-snippets-gallery' ), array( 'status' => 400 ) );
 	}
-	$term = isg_gallery_term( $endpoint, $gallery );
+	$term = isgal_gallery_term( $endpoint, $gallery );
 	if ( ! $term instanceof WP_Term ) {
-		$result = isg_sync_gallery( $endpoint, $gallery, array( 'timeout' => 20 ) );
+		$result = isgal_sync_gallery( $endpoint, $gallery, array( 'timeout' => 20 ) );
 		if ( is_wp_error( $result ) ) {
 			$result->add_data( array( 'status' => 502 ) );
 			return $result;
 		}
-		$term = isg_gallery_term( $endpoint, $gallery );
+		$term = isgal_gallery_term( $endpoint, $gallery );
 	}
 	if ( ! $term instanceof WP_Term ) {
-		return new WP_Error( 'isg_no_mirror', __( 'Gallery has not been synchronised yet.', 'image-snippets-gallery' ), array( 'status' => 404 ) );
+		return new WP_Error( 'isgal_no_mirror', __( 'Gallery has not been synchronised yet.', 'image-snippets-gallery' ), array( 'status' => 404 ) );
 	}
 	return $term;
 }
@@ -151,18 +151,18 @@ function isg_rest_order_term( WP_REST_Request $request ) {
  * @param WP_REST_Request $request Request.
  * @return WP_REST_Response|WP_Error
  */
-function isg_rest_order_get( WP_REST_Request $request ) {
-	$term = isg_rest_order_term( $request );
+function isgal_rest_order_get( WP_REST_Request $request ) {
+	$term = isgal_rest_order_term( $request );
 	if ( is_wp_error( $term ) ) {
 		return $term;
 	}
 
-	$order = isg_gallery_manual_order( $term );
-	$rows  = isg_mirror_query_rows(
+	$order = isgal_gallery_manual_order( $term );
+	$rows  = isgal_mirror_query_rows(
 		$term,
-		isg_resolve_attributes(
+		isgal_resolve_attributes(
 			array(
-				'gallery' => isg_term_gallery_name( $term ),
+				'gallery' => isgal_term_gallery_name( $term ),
 				'orderBy' => 'manual',
 				'limit'   => 200,
 			)
@@ -178,8 +178,8 @@ function isg_rest_order_get( WP_REST_Request $request ) {
 		}
 		$items[] = array(
 			'page'     => $row['page'],
-			'title'    => isg_row_title( $row, true ),
-			'thumb'    => '' !== $source ? isg_flickr_sized( $source, 'n' ) : $row['thumb'],
+			'title'    => isgal_row_title( $row, true ),
+			'thumb'    => '' !== $source ? isgal_flickr_sized( $source, 'n' ) : $row['thumb'],
 			'fallback' => $row['thumb'],
 			'arranged' => isset( $rank[ $row['page'] ] ),
 		);
@@ -187,7 +187,7 @@ function isg_rest_order_get( WP_REST_Request $request ) {
 
 	return rest_ensure_response(
 		array(
-			'gallery'  => isg_term_gallery_name( $term ),
+			'gallery'  => isgal_term_gallery_name( $term ),
 			'arranged' => ! empty( $order ),
 			'items'    => $items,
 		)
@@ -203,21 +203,21 @@ function isg_rest_order_get( WP_REST_Request $request ) {
  * @param WP_REST_Request $request Request.
  * @return WP_REST_Response|WP_Error
  */
-function isg_rest_order_set( WP_REST_Request $request ) {
-	$term = isg_rest_order_term( $request );
+function isgal_rest_order_set( WP_REST_Request $request ) {
+	$term = isgal_rest_order_term( $request );
 	if ( is_wp_error( $term ) ) {
 		return $term;
 	}
 
 	$pages   = array_map( 'strval', (array) $request->get_param( 'pages' ) );
-	$known   = isg_mirror_posts_for_pages( $pages );
+	$known   = isgal_mirror_posts_for_pages( $pages );
 	$pages   = array_values( array_filter( $pages, static fn( $p ) => isset( $known[ $p ] ) ) );
-	$members = array_flip( array_map( 'intval', (array) get_objects_in_term( $term->term_id, ISG_TAXONOMY ) ) );
+	$members = array_flip( array_map( 'intval', (array) get_objects_in_term( $term->term_id, ISGAL_TAXONOMY ) ) );
 	$pages   = array_values( array_filter( $pages, static fn( $p ) => isset( $members[ (int) $known[ $p ] ] ) ) );
 
-	isg_set_gallery_manual_order( $term, $pages );
+	isgal_set_gallery_manual_order( $term, $pages );
 
-	$purged = isg_purge_page_cache( isg_posts_for_gallery( isg_term_gallery_name( $term ) ) );
+	$purged = isgal_purge_page_cache( isgal_posts_for_gallery( isgal_term_gallery_name( $term ) ) );
 
 	return rest_ensure_response(
 		array(
@@ -234,7 +234,7 @@ function isg_rest_order_set( WP_REST_Request $request ) {
  *
  * @return bool
  */
-function isg_rest_can_refresh() {
+function isgal_rest_can_refresh() {
 	return current_user_can( 'edit_posts' );
 }
 
@@ -247,16 +247,16 @@ function isg_rest_can_refresh() {
  * @param WP_REST_Request $request Request.
  * @return WP_REST_Response|WP_Error
  */
-function isg_rest_galleries( WP_REST_Request $request ) {
+function isgal_rest_galleries( WP_REST_Request $request ) {
 	$endpoint = (string) $request->get_param( 'endpoint' );
 	if ( '' === $endpoint ) {
-		$endpoint = isg_default_endpoint();
+		$endpoint = isgal_default_endpoint();
 	}
 
-	$list = isg_list_galleries( $endpoint, (bool) $request->get_param( 'fresh' ) );
+	$list = isgal_list_galleries( $endpoint, (bool) $request->get_param( 'fresh' ) );
 	if ( is_wp_error( $list ) ) {
 		return new WP_Error(
-			'isg_list_failed',
+			'isgal_list_failed',
 			sprintf(
 				/* translators: %s: error message from the SPARQL endpoint */
 				__( 'ImageSnippets did not respond: %s', 'image-snippets-gallery' ),
@@ -280,22 +280,22 @@ function isg_rest_galleries( WP_REST_Request $request ) {
  * @param WP_REST_Request $request Request.
  * @return WP_REST_Response|WP_Error
  */
-function isg_rest_refresh( WP_REST_Request $request ) {
-	$a = isg_resolve_attributes( (array) $request->get_param( 'attributes' ) );
+function isgal_rest_refresh( WP_REST_Request $request ) {
+	$a = isgal_resolve_attributes( (array) $request->get_param( 'attributes' ) );
 
 	if ( '' === trim( (string) $a['gallery'] ) ) {
 		return new WP_Error(
-			'isg_no_gallery',
+			'isgal_no_gallery',
 			__( 'Set a gallery name before refreshing.', 'image-snippets-gallery' ),
 			array( 'status' => 400 )
 		);
 	}
 
-	$result = isg_refresh_gallery( isg_resolve_endpoint( $a ), $a['gallery'] );
+	$result = isgal_refresh_gallery( isgal_resolve_endpoint( $a ), $a['gallery'] );
 
 	if ( is_wp_error( $result ) ) {
 		return new WP_Error(
-			'isg_refresh_failed',
+			'isgal_refresh_failed',
 			sprintf(
 				/* translators: %s: error message from the SPARQL endpoint */
 				__( 'ImageSnippets did not respond: %s', 'image-snippets-gallery' ),

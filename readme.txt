@@ -4,7 +4,7 @@ Tags: gallery, block, media, provenance, rdf
 Requires at least: 6.4
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 0.6.0
+Stable tag: 0.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -56,9 +56,9 @@ From ImageSnippets. Any image tagged as being in the named gallery entity is sho
 
 = How quickly do changes on ImageSnippets reach my site? =
 
-Each gallery is re-fetched every ten minutes by default. Change the default under Tools &rarr; ImageSnippets &rarr; Defaults, or give one gallery its own rate under the block's Advanced &rarr; "Custom refetch rate for this gallery". Set it to 0 to re-fetch on every page view. When a fetch finds changes, the affected pages are cleared from any page cache. Developers can change the default with the `isg_cache_ttl` filter.
+Each gallery is re-fetched every ten minutes by default. Change the default under Tools &rarr; ImageSnippets &rarr; Defaults, or give one gallery its own rate under the block's Advanced &rarr; "Custom refetch rate for this gallery". Set it to 0 to re-fetch on every page view. When a fetch finds changes, the affected pages are cleared from any page cache. Developers can change the default with the `isgal_cache_ttl` filter.
 
-The Tools &rarr; ImageSnippets screen shows when each gallery was last fetched; the "Refresh" buttons there and in the block settings fetch immediately. There is also a WP-CLI command: `wp isg sync`.
+The Tools &rarr; ImageSnippets screen shows when each gallery was last fetched; the "Refresh" buttons there and in the block settings fetch immediately. There is also a WP-CLI command: `wp isgal sync`.
 
 = Does this create posts on my site? =
 
@@ -72,14 +72,15 @@ If that screen says a page cache is active but has not been cleared by this plug
 
 = Does this work with caching plugins? =
 
-Yes. When a gallery's contents change, the plugin clears the affected pages from WP Rocket, W3 Total Cache, WP Super Cache, Cache Enabler, LiteSpeed Cache, Cachify, and SG Optimizer, and signals WordPress so other caches following core conventions clear themselves. For anything else, hook the `isg_gallery_changed` action.
+Yes. When a gallery's contents change, the plugin clears the affected pages from WP Rocket, W3 Total Cache, WP Super Cache, Cache Enabler, LiteSpeed Cache, Cachify, and SG Optimizer, and signals WordPress so other caches following core conventions clear themselves. For anything else, hook the `isgal_gallery_changed` action.
 
 == Changelog ==
 
-= Unreleased =
+= 0.7.0 =
 
 * Galleries can now be arranged by hand. Tools → ImageSnippets lists an Arrange button per gallery: drag the images into order (or use the earlier/later buttons), save, and set the block's Sort by to Manual. The order is kept on this site by image, so refreshing from ImageSnippets keeps it; images added on ImageSnippets later appear after the arranged ones, newest first, until they are placed.
-* Updates now arrive the way they do for any other plugin: when a new version is published, the Plugins screen shows the usual update notice and a one-click Update, with the changelog behind "View details". Until now the plugin had no way to learn a newer version existed, so every site stayed on whatever zip had been uploaded by hand. Updates come from the plugin's GitHub releases; no account or key is needed.
+* Internal: everything the plugin stores and every hook and class it exposes now uses the `isgal` prefix instead of `isg` (a wordpress.org requirement). Existing settings and arranged orders carry over; mirrored galleries are rebuilt from ImageSnippets on the next visit. If you had hooked `isg_gallery_changed` or `isg_cache_ttl`, rename them. WP-CLI is now `wp isgal`.
+* Deactivating the plugin now cancels its scheduled background refreshes.
 
 = 0.6.0 =
 
@@ -88,7 +89,7 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 * Fixed: images in site search results rendered at their natural size and overlapped the result title. The thumbnail a mirrored image supplies now carries everything WordPress would have supplied for a real featured image — the theme's requested size and layout, the standard image classes, real width and height, and a srcset where the source offers one — so themes lay these out exactly as they lay out any other post's featured image.
 * Search results now show the image's description instead of the list of keywords and entity labels the search index is built from. Those keywords still match: searching one finds the image as before, it is just no longer printed as the result text.
 * Site search results for images now link to the image that matched, not just to the gallery page it sits on. A search matching several images in one gallery used to return several results that all led to the same page, leaving the visitor to find the image among hundreds; each result now scrolls to its own image and marks it briefly.
-* The Structured data dropdown (schema.org only / Provenance / Full graph) is now a single toggle, "Include full JSON-LD for images", on by default. Off embeds only the schema.org description. The Full graph profile — which added only the ImageSnippets page's Open Graph and Twitter tags — is no longer offered in the editor; the `isg_jsonld_payload` filter still receives the full graph. Blocks already saved with a profile keep working.
+* The Structured data dropdown (schema.org only / Provenance / Full graph) is now a single toggle, "Include full JSON-LD for images", on by default. Off embeds only the schema.org description. The Full graph profile — which added only the ImageSnippets page's Open Graph and Twitter tags — is no longer offered in the editor; the `isgal_jsonld_payload` filter still receives the full graph. Blocks already saved with a profile keep working.
 * The Gallery setting is now a picker: it lists every gallery on ImageSnippets with its image count, searchable as you type. Galleries outside the main Imagesnippets datasets appear as owner/gallery. A name that is not on the list can still be typed. The list is fetched when the block settings open and cached for 15 minutes.
 
 = 0.5.2 =
@@ -127,7 +128,7 @@ Galleries are now mirrored into WordPress rather than fetched and cached per que
 * WordPress site search finds mirrored images by title, description, and the entities they depict, and links each hit to the page that shows the gallery.
 * A gallery that has never been fetched is fetched the first time its page is viewed, so existing pages upgrade with no action.
 * Fetches diff against the stored copy: unchanged images are left alone, images that left a gallery are unlabelled, and images that belong to no gallery are deleted. A fetch that fails, or that returns nothing for a gallery that had images, changes nothing.
-* Added `wp isg sync`, `wp isg status`, `wp isg prune`, `wp isg reindex`, and `wp isg reset` for WP-CLI.
+* Added `wp isgal sync`, `wp isgal status`, `wp isgal prune`, `wp isgal reindex`, and `wp isgal reset` for WP-CLI.
 * Tools &rarr; ImageSnippets gains a per-gallery Refresh button, the number of images stored, and "Clear stored copies".
 * Site Health now flags galleries that are on published pages but have never been fetched, and galleries well past their interval.
 * The mirror is removed completely on uninstall.
@@ -139,7 +140,7 @@ Galleries now update on their own, and the metadata embedded in the page is far 
 
 Freshness:
 
-* Galleries clear the page cache when their contents change, so updates reach visitors instead of sitting behind stored HTML. Works with the common caching plugins by detection, and exposes an `isg_gallery_changed` action for anything else.
+* Galleries clear the page cache when their contents change, so updates reach visitors instead of sitting behind stored HTML. Works with the common caching plugins by detection, and exposes an `isgal_gallery_changed` action for anything else.
 * Added a "Refresh from ImageSnippets" button to the block settings, which pulls the gallery again and reports how many images it found.
 * Added Tools &rarr; ImageSnippets: every gallery, when it last updated, how many images, which pages show it, and any error. Includes "Refresh all galleries".
 * Added Site Health reporting for gallery freshness, cron status, and page-cache detection.

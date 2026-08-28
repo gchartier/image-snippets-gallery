@@ -32,7 +32,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * @return array
  */
-function isg_page_cache_adapters_post() {
+function isgal_page_cache_adapters_post() {
 	return array(
 		array( 'WP Rocket', 'fn', 'rocket_clean_post' ),
 		array( 'W3 Total Cache', 'fn', 'w3tc_flush_post' ),
@@ -48,7 +48,7 @@ function isg_page_cache_adapters_post() {
  *
  * @return array
  */
-function isg_page_cache_adapters_site() {
+function isgal_page_cache_adapters_site() {
 	return array(
 		array( 'WP Super Cache', 'fn', 'wp_cache_clear_cache' ),
 		array( 'W3 Total Cache', 'fn', 'w3tc_flush_all' ),
@@ -67,7 +67,7 @@ function isg_page_cache_adapters_site() {
  * @param int|string $arg     Post ID, or permalink for 'url' adapters.
  * @return string
  */
-function isg_run_page_cache_adapter( array $adapter, $arg = null ) {
+function isgal_run_page_cache_adapter( array $adapter, $arg = null ) {
 	list( $label, $kind, $target ) = $adapter;
 
 	if ( 'action' === $kind ) {
@@ -104,7 +104,7 @@ function isg_run_page_cache_adapter( array $adapter, $arg = null ) {
  * @param array $post_ids Posts whose rendered HTML is now out of date.
  * @return array Labels of the adapters that fired.
  */
-function isg_purge_page_cache( array $post_ids ) {
+function isgal_purge_page_cache( array $post_ids ) {
 	$post_ids = array_values( array_unique( array_filter( array_map( 'absint', $post_ids ) ) ) );
 
 	$fired = array();
@@ -117,9 +117,9 @@ function isg_purge_page_cache( array $post_ids ) {
 
 	// Layer 2a: targeted purges.
 	foreach ( $post_ids as $post_id ) {
-		foreach ( isg_page_cache_adapters_post() as $adapter ) {
+		foreach ( isgal_page_cache_adapters_post() as $adapter ) {
 			$arg   = ( 'url' === $adapter[1] ) ? get_permalink( $post_id ) : $post_id;
-			$label = $arg ? isg_run_page_cache_adapter( $adapter, $arg ) : '';
+			$label = $arg ? isgal_run_page_cache_adapter( $adapter, $arg ) : '';
 			if ( '' !== $label ) {
 				$fired[ $label ] = true;
 			}
@@ -129,8 +129,8 @@ function isg_purge_page_cache( array $post_ids ) {
 	// Layer 2b: only if nothing could be purged precisely. Flushing a whole
 	// site cache is a blunt instrument and should stay the last resort.
 	if ( empty( $fired ) ) {
-		foreach ( isg_page_cache_adapters_site() as $adapter ) {
-			$label = isg_run_page_cache_adapter( $adapter );
+		foreach ( isgal_page_cache_adapters_site() as $adapter ) {
+			$label = isgal_run_page_cache_adapter( $adapter );
 			if ( '' !== $label ) {
 				$fired[ $label ] = true;
 			}
@@ -147,10 +147,10 @@ function isg_purge_page_cache( array $post_ids ) {
 	 * @param array $post_ids Posts whose rendered HTML is now out of date.
 	 * @param array $fired    Labels of the adapters that already ran.
 	 */
-	do_action( 'isg_gallery_changed', $post_ids, $fired );
+	do_action( 'isgal_gallery_changed', $post_ids, $fired );
 
 	if ( ! empty( $fired ) ) {
-		update_option( 'isg_purge_adapters', $fired, false );
+		update_option( 'isgal_purge_adapters', $fired, false );
 	}
 
 	return $fired;
@@ -165,7 +165,7 @@ function isg_purge_page_cache( array $post_ids ) {
  *
  * @return bool
  */
-function isg_page_cache_detected() {
+function isgal_page_cache_detected() {
 	if ( defined( 'WP_CACHE' ) && WP_CACHE ) {
 		return true;
 	}
@@ -177,7 +177,7 @@ function isg_page_cache_detected() {
  *
  * @return array
  */
-function isg_known_purge_adapters() {
-	$stored = get_option( 'isg_purge_adapters', array() );
+function isgal_known_purge_adapters() {
+	$stored = get_option( 'isgal_purge_adapters', array() );
 	return is_array( $stored ) ? $stored : array();
 }

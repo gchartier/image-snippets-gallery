@@ -3,20 +3,10 @@
 How to cut a new release of **ImageSnippets Gallery** and publish an installable
 zip to GitHub Releases. Replace `X.Y.Z` with the new version throughout.
 
-> **The release is the update channel.** Installed sites run Plugin Update
-> Checker (`includes/updates.php`), which asks GitHub for the *latest release*
-> and offers its attached `image-snippets-gallery-*.zip` as a one-click update
-> in wp-admin — the same notice wordpress.org plugins get. Two consequences:
->
-> - **The zip asset is mandatory.** A release without one (or with a differently
->   named asset) offers no update at all — by design, it never falls back to
->   GitHub's source archive, which lacks `build/`. So step 5 is not optional,
->   and a fix to a shipped release is `gh release upload --clobber`, not a new tag.
-> - **The release notes are user-facing.** Their Markdown is rendered in the
->   "View version X.Y.Z details" modal on the Plugins screen (alongside the
->   readme.txt changelog), so write them for a site owner.
-> - Mark a release as **pre-release** on GitHub and it is skipped: handy for a
->   zip you want Margaret to install by hand without pushing it to every site.
+> GitHub Releases is where testers download the zip until the plugin is on
+> wordpress.org; installed sites do not check it for updates. Once the
+> wordpress.org listing exists, releases are deployed to its SVN and updates
+> arrive the normal way.
 
 ## 1. Bump the version
 
@@ -24,7 +14,7 @@ The version string lives in **four** places — keep them in sync:
 
 | File | What to change |
 | --- | --- |
-| `image-snippets-gallery.php` | the `* Version:` header **and** `define( 'ISG_VERSION', '…' )` |
+| `image-snippets-gallery.php` | the `* Version:` header **and** `define( 'ISGAL_VERSION', '…' )` |
 | `package.json` | `"version"` |
 | `src/block.json` | `"version"` |
 | `readme.txt` | `Stable tag:` — and add a `== Changelog ==` entry (plus an `== Upgrade Notice ==` line) |
@@ -109,11 +99,9 @@ gh release create vX.Y.Z image-snippets-gallery-X.Y.Z.zip \
 ```
 
 New users install via **Plugins → Add New → Upload Plugin** in wp-admin.
-Existing sites see the update within 12 hours (WordPress's check interval), or
-immediately on **Dashboard → Updates → Check again**.
+Existing sites update by uploading the new zip over the old one (WordPress
+offers "Replace current with uploaded") until the wordpress.org listing exists.
 
-To confirm the channel resolved correctly, `./devenv/verify.sh` ends with an
-"Update channel" section that asks the checker what the latest release offers.
 
 ## Fixing a release after the fact
 

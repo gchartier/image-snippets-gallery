@@ -10,7 +10,7 @@ The original renders entirely in the browser, so search engines, social scrapers
 
 ## Features
 
-- **Server-side rendering from a local mirror.** Galleries are re-fetched on a per-block interval (`isg_cache_ttl` filter), diffed, and the affected pages are cleared from any page cache when something changed. WP-CLI: `wp isg sync|status|prune|reindex|reset`.
+- **Server-side rendering from a local mirror.** Galleries are re-fetched on a per-block interval (`isgal_cache_ttl` filter), diffed, and the affected pages are cleared from any page cache when something changed. WP-CLI: `wp isgal sync|status|prune|reindex|reset`.
 - **Site search** finds mirrored images by title, description, and depicted entities, linking to the gallery page.
 - **Rich JSON-LD**: an `ImageGallery` of `ImageObject`s, each linked to its canonical entity (`about`) and scene location (`contentLocation`) from the ImageSnippets graph.
 - **Smart text fallbacks**: alt text resolves `alt → description → title`; an optional filename fallback; an editor-only warning when images lack titles/alt text.

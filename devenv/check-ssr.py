@@ -27,7 +27,7 @@ except Exception as exc:
     check("editor preview route responds", False, f"{exc}: {raw[:160]}")
     sys.exit(1)
 
-figures = html.count('<figure class="isg-item"')
+figures = html.count('<figure class="isgal-item"')
 check("editor preview rendered figures", figures > 0, f"{figures} figures")
 check("editor preview carries JSON-LD", "application/ld+json" in html)
 

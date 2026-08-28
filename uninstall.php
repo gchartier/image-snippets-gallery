@@ -17,31 +17,33 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 global $wpdb;
 
 // Mirrored images and gallery labels.
-$isg_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'isg_image'" );
-foreach ( (array) $isg_ids as $isg_id ) {
-	wp_delete_post( (int) $isg_id, true );
+$isgal_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'isgal_image'" );
+foreach ( (array) $isgal_ids as $isgal_id ) {
+	wp_delete_post( (int) $isgal_id, true );
 }
-$isg_terms = $wpdb->get_results(
-	"SELECT tt.term_id, tt.term_taxonomy_id FROM {$wpdb->term_taxonomy} tt WHERE tt.taxonomy = 'isg_gallery'"
+$isgal_terms = $wpdb->get_results(
+	"SELECT tt.term_id, tt.term_taxonomy_id FROM {$wpdb->term_taxonomy} tt WHERE tt.taxonomy = 'isgal_gallery'"
 );
-foreach ( (array) $isg_terms as $isg_term ) {
+foreach ( (array) $isgal_terms as $isgal_term ) {
 	// The taxonomy is not registered during uninstall, so go direct.
-	$wpdb->delete( $wpdb->term_relationships, array( 'term_taxonomy_id' => (int) $isg_term->term_taxonomy_id ) );
-	$wpdb->delete( $wpdb->term_taxonomy, array( 'term_taxonomy_id' => (int) $isg_term->term_taxonomy_id ) );
-	$wpdb->delete( $wpdb->termmeta, array( 'term_id' => (int) $isg_term->term_id ) );
-	$wpdb->delete( $wpdb->terms, array( 'term_id' => (int) $isg_term->term_id ) );
+	$wpdb->delete( $wpdb->term_relationships, array( 'term_taxonomy_id' => (int) $isgal_term->term_taxonomy_id ) );
+	$wpdb->delete( $wpdb->term_taxonomy, array( 'term_taxonomy_id' => (int) $isgal_term->term_taxonomy_id ) );
+	$wpdb->delete( $wpdb->termmeta, array( 'term_id' => (int) $isgal_term->term_id ) );
+	$wpdb->delete( $wpdb->terms, array( 'term_id' => (int) $isgal_term->term_id ) );
 }
 
 // The block index.
-delete_post_meta_by_key( '_isg_gallery' );
+delete_post_meta_by_key( '_isgal_gallery' );
 
 // Options and transients.
-delete_option( 'isg_sync_status' );
-delete_option( 'isg_purge_adapters' );
-delete_option( 'isg_default_endpoint' );
-delete_option( 'isg_default_ttl' );
-$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_isg%' OR option_name LIKE '\\_transient\\_timeout\\_isg%'" );
+delete_option( 'isgal_sync_status' );
+delete_option( 'isgal_purge_adapters' );
+delete_option( 'isgal_default_endpoint' );
+delete_option( 'isgal_default_ttl' );
+delete_option( 'isgal_schema' );
+delete_option( 'isgal_pending_orders' );
+$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_isgal%' OR option_name LIKE '\\_transient\\_timeout\\_isgal%'" );
 
 // Scheduled syncs.
-wp_unschedule_hook( 'isg_sync_gallery' );
-wp_unschedule_hook( 'isg_refresh_cache' );
+wp_unschedule_hook( 'isgal_sync_gallery' );
+wp_unschedule_hook( 'isgal_refresh_cache' );

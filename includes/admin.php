@@ -21,16 +21,16 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * @return void
  */
-function isg_admin_menu() {
+function isgal_admin_menu() {
 	add_management_page(
 		__( 'ImageSnippets Galleries', 'image-snippets-gallery' ),
 		__( 'ImageSnippets', 'image-snippets-gallery' ),
 		'edit_posts',
-		'isg-galleries',
-		'isg_render_admin_page'
+		'isgal-galleries',
+		'isgal_render_admin_page'
 	);
 }
-add_action( 'admin_menu', 'isg_admin_menu' );
+add_action( 'admin_menu', 'isgal_admin_menu' );
 
 /**
  * Add a "Galleries" link to this plugin's row on the Plugins screen, first in
@@ -41,35 +41,35 @@ add_action( 'admin_menu', 'isg_admin_menu' );
  * @param string[] $links Existing action links (Deactivate, etc.).
  * @return string[]
  */
-function isg_plugin_action_links( $links ) {
+function isgal_plugin_action_links( $links ) {
 	if ( ! current_user_can( 'edit_posts' ) ) {
 		return $links;
 	}
 	$galleries = sprintf(
 		'<a href="%s">%s</a>',
-		esc_url( admin_url( 'tools.php?page=isg-galleries' ) ),
+		esc_url( admin_url( 'tools.php?page=isgal-galleries' ) ),
 		esc_html__( 'Galleries', 'image-snippets-gallery' )
 	);
 	// Keyed, not array_unshift(): WordPress uses the key as the <span> class.
 	return array_merge( array( 'galleries' => $galleries ), $links );
 }
-add_filter( 'plugin_action_links_' . ISG_PLUGIN_BASENAME, 'isg_plugin_action_links' );
+add_filter( 'plugin_action_links_' . ISGAL_PLUGIN_BASENAME, 'isgal_plugin_action_links' );
 
 /**
  * Handle the screen's two actions before anything renders.
  *
  * @return void
  */
-function isg_handle_admin_actions() {
-	if ( ! isset( $_POST['isg_action'] ) || ! current_user_can( 'edit_posts' ) ) {
+function isgal_handle_admin_actions() {
+	if ( ! isset( $_POST['isgal_action'] ) || ! current_user_can( 'edit_posts' ) ) {
 		return;
 	}
 
-	$action = sanitize_key( wp_unslash( $_POST['isg_action'] ) );
-	check_admin_referer( 'isg_admin_' . $action );
+	$action = sanitize_key( wp_unslash( $_POST['isgal_action'] ) );
+	check_admin_referer( 'isgal_admin_' . $action );
 
 	if ( 'refresh_all' === $action ) {
-		$results = isg_refresh_all_galleries();
+		$results = isgal_refresh_all_galleries();
 		$failed  = 0;
 		foreach ( $results as $result ) {
 			if ( is_wp_error( $result ) ) {
@@ -77,8 +77,8 @@ function isg_handle_admin_actions() {
 			}
 		}
 		add_settings_error(
-			'isg',
-			'isg_refreshed',
+			'isgal',
+			'isgal_refreshed',
 			$failed
 				? sprintf(
 					/* translators: 1: number refreshed, 2: number that failed */
@@ -96,15 +96,15 @@ function isg_handle_admin_actions() {
 	}
 
 	if ( 'sync_one' === $action ) {
-		$gallery  = isset( $_POST['isg_gallery'] ) ? sanitize_text_field( wp_unslash( $_POST['isg_gallery'] ) ) : '';
-		$endpoint = isset( $_POST['isg_endpoint'] ) ? esc_url_raw( wp_unslash( $_POST['isg_endpoint'] ) ) : isg_default_endpoint();
-		$result   = isg_refresh_gallery( $endpoint ? $endpoint : isg_default_endpoint(), $gallery );
+		$gallery  = isset( $_POST['isgal_gallery'] ) ? sanitize_text_field( wp_unslash( $_POST['isgal_gallery'] ) ) : '';
+		$endpoint = isset( $_POST['isgal_endpoint'] ) ? esc_url_raw( wp_unslash( $_POST['isgal_endpoint'] ) ) : isgal_default_endpoint();
+		$result   = isgal_refresh_gallery( $endpoint ? $endpoint : isgal_default_endpoint(), $gallery );
 		if ( is_wp_error( $result ) ) {
-			add_settings_error( 'isg', 'isg_synced', sprintf( '%s: %s', $gallery, $result->get_error_message() ), 'error' );
+			add_settings_error( 'isgal', 'isgal_synced', sprintf( '%s: %s', $gallery, $result->get_error_message() ), 'error' );
 		} else {
 			add_settings_error(
-				'isg',
-				'isg_synced',
+				'isgal',
+				'isgal_synced',
 				sprintf(
 					/* translators: 1: gallery name, 2: images, 3: added, 4: updated, 5: removed */
 					__( 'Synced %1$s: %2$d images (%3$d added, %4$d updated, %5$d removed).', 'image-snippets-gallery' ),
@@ -120,10 +120,10 @@ function isg_handle_admin_actions() {
 	}
 
 	if ( 'reset_mirror' === $action ) {
-		$count = isg_mirror_drop_all();
+		$count = isgal_mirror_drop_all();
 		add_settings_error(
-			'isg',
-			'isg_reset',
+			'isgal',
+			'isgal_reset',
 			sprintf(
 				/* translators: %d: number of images */
 				__( 'Cleared the stored copy of every gallery (%d images). Each gallery is fetched again the next time its page is viewed.', 'image-snippets-gallery' ),
@@ -134,10 +134,10 @@ function isg_handle_admin_actions() {
 	}
 
 	if ( 'rebuild_index' === $action ) {
-		$count = isg_rebuild_index();
+		$count = isgal_rebuild_index();
 		add_settings_error(
-			'isg',
-			'isg_reindexed',
+			'isgal',
+			'isgal_reindexed',
 			sprintf(
 				/* translators: %d: number of posts */
 				__( 'Rebuilt the index. %d posts contain a gallery.', 'image-snippets-gallery' ),
@@ -151,28 +151,28 @@ function isg_handle_admin_actions() {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		$endpoint = isset( $_POST['isg_default_endpoint'] ) ? esc_url_raw( wp_unslash( $_POST['isg_default_endpoint'] ) ) : '';
-		$ttl      = isset( $_POST['isg_default_ttl'] ) ? absint( wp_unslash( $_POST['isg_default_ttl'] ) ) : 10;
+		$endpoint = isset( $_POST['isgal_default_endpoint'] ) ? esc_url_raw( wp_unslash( $_POST['isgal_default_endpoint'] ) ) : '';
+		$ttl      = isset( $_POST['isgal_default_ttl'] ) ? absint( wp_unslash( $_POST['isgal_default_ttl'] ) ) : 10;
 		$endpoint = trim( $endpoint );
 		// The built-in endpoint is represented by an empty option, so clearing
 		// the field returns to it and a future change to the constant applies.
-		if ( ISG_DEFAULT_ENDPOINT === $endpoint ) {
+		if ( ISGAL_DEFAULT_ENDPOINT === $endpoint ) {
 			$endpoint = '';
 		}
-		update_option( 'isg_default_endpoint', $endpoint, false );
-		update_option( 'isg_default_ttl', max( 0, min( 1440, $ttl ) ), false );
-		add_settings_error( 'isg', 'isg_defaults', __( 'Defaults saved. Galleries without their own override use them from now on.', 'image-snippets-gallery' ), 'success' );
+		update_option( 'isgal_default_endpoint', $endpoint, false );
+		update_option( 'isgal_default_ttl', max( 0, min( 1440, $ttl ) ), false );
+		add_settings_error( 'isgal', 'isgal_defaults', __( 'Defaults saved. Galleries without their own override use them from now on.', 'image-snippets-gallery' ), 'success' );
 	}
 
 	if ( 'reset_overrides' === $action ) {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
-		$count = isg_reset_block_overrides();
-		isg_rebuild_index();
+		$count = isgal_reset_block_overrides();
+		isgal_rebuild_index();
 		add_settings_error(
-			'isg',
-			'isg_overrides_reset',
+			'isgal',
+			'isgal_overrides_reset',
 			sprintf(
 				/* translators: %d: number of gallery blocks changed */
 				__( 'Removed the endpoint and refetch overrides from %d gallery blocks. They now follow the site defaults.', 'image-snippets-gallery' ),
@@ -193,7 +193,7 @@ function isg_handle_admin_actions() {
  *
  * @return int Number of blocks changed.
  */
-function isg_reset_block_overrides() {
+function isgal_reset_block_overrides() {
 	global $wpdb;
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- one-off admin action; a LIKE over post_content has no WP_Query equivalent.
@@ -248,21 +248,21 @@ function isg_reset_block_overrides() {
  *
  * @return void
  */
-function isg_editor_defaults_script() {
+function isgal_editor_defaults_script() {
 	wp_add_inline_script(
 		generate_block_asset_handle( 'imagesnippets/gallery', 'editorScript' ),
-		'window.isgEditorDefaults = ' . wp_json_encode(
+		'window.isgalEditorDefaults = ' . wp_json_encode(
 			array(
-				'endpoint'   => isg_default_endpoint(),
-				'ttl'        => isg_default_ttl_minutes(),
-				'reorderUrl' => admin_url( 'tools.php?page=isg-galleries' ),
+				'endpoint'   => isgal_default_endpoint(),
+				'ttl'        => isgal_default_ttl_minutes(),
+				'reorderUrl' => admin_url( 'tools.php?page=isgal-galleries' ),
 			)
 		) . ';',
 		'before'
 	);
 }
-add_action( 'enqueue_block_editor_assets', 'isg_editor_defaults_script' );
-add_action( 'load-tools_page_isg-galleries', 'isg_handle_admin_actions' );
+add_action( 'enqueue_block_editor_assets', 'isgal_editor_defaults_script' );
+add_action( 'load-tools_page_isgal-galleries', 'isgal_handle_admin_actions' );
 
 /**
  * A submit button wrapped in its own form and nonce.
@@ -273,11 +273,11 @@ add_action( 'load-tools_page_isg-galleries', 'isg_handle_admin_actions' );
  * @param array  $fields Extra hidden fields.
  * @return void
  */
-function isg_action_button( $action, $label, $css_class = 'button', array $fields = array() ) {
+function isgal_action_button( $action, $label, $css_class = 'button', array $fields = array() ) {
 	?>
 	<form method="post" style="display:inline-block;margin-right:.5em;">
-		<?php wp_nonce_field( 'isg_admin_' . $action ); ?>
-		<input type="hidden" name="isg_action" value="<?php echo esc_attr( $action ); ?>">
+		<?php wp_nonce_field( 'isgal_admin_' . $action ); ?>
+		<input type="hidden" name="isgal_action" value="<?php echo esc_attr( $action ); ?>">
 		<?php foreach ( $fields as $name => $value ) : ?>
 			<input type="hidden" name="<?php echo esc_attr( $name ); ?>" value="<?php echo esc_attr( $value ); ?>">
 		<?php endforeach; ?>
@@ -293,17 +293,17 @@ function isg_action_button( $action, $label, $css_class = 'button', array $field
  * @param string $gallery Gallery name.
  * @return string
  */
-function isg_gallery_endpoint_in_use( $gallery ) {
+function isgal_gallery_endpoint_in_use( $gallery ) {
 	static $blocks = null;
 	if ( null === $blocks ) {
-		$blocks = isg_indexed_gallery_blocks();
+		$blocks = isgal_indexed_gallery_blocks();
 	}
 	foreach ( $blocks as $block ) {
 		if ( $block['gallery'] === $gallery ) {
-			return isg_resolve_endpoint( isg_resolve_attributes( $block['attrs'] ) );
+			return isgal_resolve_endpoint( isgal_resolve_attributes( $block['attrs'] ) );
 		}
 	}
-	return isg_default_endpoint();
+	return isgal_default_endpoint();
 }
 
 /**
@@ -311,31 +311,31 @@ function isg_gallery_endpoint_in_use( $gallery ) {
  *
  * @return void
  */
-function isg_render_admin_page() {
-	if ( isset( $_GET['isg_reorder'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only screen selection; saves go through the REST route with its own nonce.
-		isg_render_reorder_page(
-			sanitize_text_field( wp_unslash( $_GET['isg_reorder'] ) ), // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			isset( $_GET['isg_endpoint'] ) ? esc_url_raw( wp_unslash( $_GET['isg_endpoint'] ) ) : '' // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+function isgal_render_admin_page() {
+	if ( isset( $_GET['isgal_reorder'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only screen selection; saves go through the REST route with its own nonce.
+		isgal_render_reorder_page(
+			sanitize_text_field( wp_unslash( $_GET['isgal_reorder'] ) ), // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			isset( $_GET['isgal_endpoint'] ) ? esc_url_raw( wp_unslash( $_GET['isgal_endpoint'] ) ) : '' // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		);
 		return;
 	}
 
-	$galleries = isg_indexed_galleries();
-	$status    = isg_sync_status();
-	$adapters  = isg_known_purge_adapters();
+	$galleries = isgal_indexed_galleries();
+	$status    = isgal_sync_status();
+	$adapters  = isgal_known_purge_adapters();
 	?>
 	<div class="wrap">
 		<h1><?php esc_html_e( 'ImageSnippets Galleries', 'image-snippets-gallery' ); ?></h1>
 
-		<?php settings_errors( 'isg' ); ?>
+		<?php settings_errors( 'isgal' ); ?>
 
 		<p>
 			<?php esc_html_e( 'Each gallery is fetched from ImageSnippets on a schedule and stored on this site, so pages render without waiting on the network and WordPress search can find the images. Refresh pulls the latest from ImageSnippets now.', 'image-snippets-gallery' ); ?>
 		</p>
 		<p>
-			<?php isg_action_button( 'refresh_all', __( 'Refresh all galleries', 'image-snippets-gallery' ), 'button button-primary' ); ?>
-			<?php isg_action_button( 'rebuild_index', __( 'Rebuild index', 'image-snippets-gallery' ) ); ?>
-			<?php isg_action_button( 'reset_mirror', __( 'Clear stored copies', 'image-snippets-gallery' ) ); ?>
+			<?php isgal_action_button( 'refresh_all', __( 'Refresh all galleries', 'image-snippets-gallery' ), 'button button-primary' ); ?>
+			<?php isgal_action_button( 'rebuild_index', __( 'Rebuild index', 'image-snippets-gallery' ) ); ?>
+			<?php isgal_action_button( 'reset_mirror', __( 'Clear stored copies', 'image-snippets-gallery' ) ); ?>
 		</p>
 
 		<?php if ( empty( $galleries ) ) : ?>
@@ -356,11 +356,11 @@ function isg_render_admin_page() {
 				<?php foreach ( $galleries as $gallery ) : ?>
 					<?php
 					$row      = isset( $status[ $gallery ] ) ? $status[ $gallery ] : array();
-					$posts    = isg_posts_for_gallery( $gallery );
+					$posts    = isgal_posts_for_gallery( $gallery );
 					$error    = isset( $row['error'] ) ? (string) $row['error'] : '';
-					$endpoint = isg_gallery_endpoint_in_use( $gallery );
-					$term     = isg_gallery_term( $endpoint, $gallery );
-					$synced   = isg_gallery_synced_at( $term );
+					$endpoint = isgal_gallery_endpoint_in_use( $gallery );
+					$term     = isgal_gallery_term( $endpoint, $gallery );
+					$synced   = isgal_gallery_synced_at( $term );
 					?>
 					<tr>
 						<td><strong><?php echo esc_html( $gallery ); ?></strong></td>
@@ -404,19 +404,19 @@ function isg_render_admin_page() {
 						</td>
 						<td>
 							<?php
-							isg_action_button(
+							isgal_action_button(
 								'sync_one',
 								__( 'Refresh', 'image-snippets-gallery' ),
 								'button button-small',
 								array(
-									'isg_gallery'  => $gallery,
-									'isg_endpoint' => $endpoint,
+									'isgal_gallery'  => $gallery,
+									'isgal_endpoint' => $endpoint,
 								)
 							);
 							?>
-							<a class="button button-small" href="<?php echo esc_url( isg_reorder_url( $gallery, $endpoint ) ); ?>">
+							<a class="button button-small" href="<?php echo esc_url( isgal_reorder_url( $gallery, $endpoint ) ); ?>">
 								<?php
-								if ( ! empty( isg_gallery_manual_order( $term ) ) ) {
+								if ( ! empty( isgal_gallery_manual_order( $term ) ) ) {
 									esc_html_e( 'Edit order', 'image-snippets-gallery' );
 								} else {
 									esc_html_e( 'Arrange', 'image-snippets-gallery' );
@@ -434,23 +434,23 @@ function isg_render_admin_page() {
 		<h2><?php esc_html_e( 'Defaults', 'image-snippets-gallery' ); ?></h2>
 		<p><?php esc_html_e( 'Every gallery block uses these unless it sets its own values under Advanced in the block settings.', 'image-snippets-gallery' ); ?></p>
 		<form method="post">
-			<?php wp_nonce_field( 'isg_admin_save_defaults' ); ?>
-			<input type="hidden" name="isg_action" value="save_defaults">
+			<?php wp_nonce_field( 'isgal_admin_save_defaults' ); ?>
+			<input type="hidden" name="isgal_action" value="save_defaults">
 			<table class="form-table" role="presentation">
 				<tr>
-					<th scope="row"><label for="isg_default_endpoint"><?php esc_html_e( 'Default SPARQL endpoint', 'image-snippets-gallery' ); ?></label></th>
+					<th scope="row"><label for="isgal_default_endpoint"><?php esc_html_e( 'Default SPARQL endpoint', 'image-snippets-gallery' ); ?></label></th>
 					<td>
-						<input type="url" class="regular-text code" id="isg_default_endpoint" name="isg_default_endpoint"
-							value="<?php echo esc_attr( (string) get_option( 'isg_default_endpoint', '' ) ); ?>"
-							placeholder="<?php echo esc_attr( ISG_DEFAULT_ENDPOINT ); ?>">
+						<input type="url" class="regular-text code" id="isgal_default_endpoint" name="isgal_default_endpoint"
+							value="<?php echo esc_attr( (string) get_option( 'isgal_default_endpoint', '' ) ); ?>"
+							placeholder="<?php echo esc_attr( ISGAL_DEFAULT_ENDPOINT ); ?>">
 						<p class="description"><?php esc_html_e( 'Leave blank for the ImageSnippets endpoint.', 'image-snippets-gallery' ); ?></p>
 					</td>
 				</tr>
 				<tr>
-					<th scope="row"><label for="isg_default_ttl"><?php esc_html_e( 'Default refetch rate', 'image-snippets-gallery' ); ?></label></th>
+					<th scope="row"><label for="isgal_default_ttl"><?php esc_html_e( 'Default refetch rate', 'image-snippets-gallery' ); ?></label></th>
 					<td>
-						<input type="number" class="small-text" id="isg_default_ttl" name="isg_default_ttl" min="0" max="1440" step="1"
-							value="<?php echo esc_attr( (string) isg_default_ttl_minutes() ); ?>">
+						<input type="number" class="small-text" id="isgal_default_ttl" name="isgal_default_ttl" min="0" max="1440" step="1"
+							value="<?php echo esc_attr( (string) isgal_default_ttl_minutes() ); ?>">
 						<?php esc_html_e( 'minutes', 'image-snippets-gallery' ); ?>
 						<p class="description"><?php esc_html_e( 'How often each gallery is checked against ImageSnippets and the stored copy updated. 0 checks on every page view.', 'image-snippets-gallery' ); ?></p>
 					</td>
@@ -461,13 +461,13 @@ function isg_render_admin_page() {
 			</p>
 		</form>
 		<p>
-			<?php isg_action_button( 'reset_overrides', __( 'Reset all galleries to defaults', 'image-snippets-gallery' ) ); ?>
+			<?php isgal_action_button( 'reset_overrides', __( 'Reset all galleries to defaults', 'image-snippets-gallery' ) ); ?>
 			<span class="description"><?php esc_html_e( 'Removes any per-gallery endpoint or refetch override so every block follows the defaults above.', 'image-snippets-gallery' ); ?></span>
 		</p>
 		<?php endif; ?>
 
 		<h2><?php esc_html_e( 'Caching', 'image-snippets-gallery' ); ?></h2>
-		<?php if ( ! isg_page_cache_detected() ) : ?>
+		<?php if ( ! isgal_page_cache_detected() ) : ?>
 			<p><?php esc_html_e( 'No page cache detected. Gallery changes appear as soon as they are refreshed.', 'image-snippets-gallery' ); ?></p>
 		<?php elseif ( ! empty( $adapters ) ) : ?>
 			<p>
@@ -496,13 +496,13 @@ function isg_render_admin_page() {
  * @param string $endpoint SPARQL endpoint URL.
  * @return string
  */
-function isg_reorder_url( $gallery, $endpoint = '' ) {
+function isgal_reorder_url( $gallery, $endpoint = '' ) {
 	$args = array(
-		'page'        => 'isg-galleries',
-		'isg_reorder' => $gallery,
+		'page'          => 'isgal-galleries',
+		'isgal_reorder' => $gallery,
 	);
-	if ( '' !== $endpoint && isg_default_endpoint() !== $endpoint ) {
-		$args['isg_endpoint'] = $endpoint;
+	if ( '' !== $endpoint && isgal_default_endpoint() !== $endpoint ) {
+		$args['isgal_endpoint'] = $endpoint;
 	}
 	return add_query_arg( $args, admin_url( 'tools.php' ) );
 }
@@ -516,13 +516,13 @@ function isg_reorder_url( $gallery, $endpoint = '' ) {
  * @param string $endpoint SPARQL endpoint URL, or '' for the default.
  * @return void
  */
-function isg_render_reorder_page( $gallery, $endpoint = '' ) {
+function isgal_render_reorder_page( $gallery, $endpoint = '' ) {
 	$gallery = trim( (string) $gallery );
 	if ( '' === $endpoint ) {
-		$endpoint = isg_gallery_endpoint_in_use( $gallery );
+		$endpoint = isgal_gallery_endpoint_in_use( $gallery );
 	}
 	?>
-	<div class="wrap isg-reorder">
+	<div class="wrap isgal-reorder">
 		<h1>
 			<?php
 			printf(
@@ -533,24 +533,24 @@ function isg_render_reorder_page( $gallery, $endpoint = '' ) {
 			?>
 		</h1>
 		<p>
-			<a href="<?php echo esc_url( admin_url( 'tools.php?page=isg-galleries' ) ); ?>">&larr; <?php esc_html_e( 'All galleries', 'image-snippets-gallery' ); ?></a>
+			<a href="<?php echo esc_url( admin_url( 'tools.php?page=isgal-galleries' ) ); ?>">&larr; <?php esc_html_e( 'All galleries', 'image-snippets-gallery' ); ?></a>
 		</p>
 		<p>
 			<?php esc_html_e( 'Drag images into the order you want. Blocks showing this gallery use it when their Sort by is set to Manual. Images added on ImageSnippets later appear after the ones you arranged until you place them.', 'image-snippets-gallery' ); ?>
 		</p>
-		<p class="isg-reorder__actions">
-			<button type="button" class="button button-primary" id="isg-reorder-save" disabled><?php esc_html_e( 'Save order', 'image-snippets-gallery' ); ?></button>
-			<button type="button" class="button" id="isg-reorder-clear"><?php esc_html_e( 'Clear arrangement', 'image-snippets-gallery' ); ?></button>
-			<span class="isg-reorder__status" id="isg-reorder-status" role="status" aria-live="polite"></span>
+		<p class="isgal-reorder__actions">
+			<button type="button" class="button button-primary" id="isgal-reorder-save" disabled><?php esc_html_e( 'Save order', 'image-snippets-gallery' ); ?></button>
+			<button type="button" class="button" id="isgal-reorder-clear"><?php esc_html_e( 'Clear arrangement', 'image-snippets-gallery' ); ?></button>
+			<span class="isgal-reorder__status" id="isgal-reorder-status" role="status" aria-live="polite"></span>
 		</p>
-		<ol class="isg-reorder__grid" id="isg-reorder-grid" aria-label="<?php esc_attr_e( 'Images, first to last', 'image-snippets-gallery' ); ?>">
-			<li class="isg-reorder__loading"><?php esc_html_e( 'Loading images…', 'image-snippets-gallery' ); ?></li>
+		<ol class="isgal-reorder__grid" id="isgal-reorder-grid" aria-label="<?php esc_attr_e( 'Images, first to last', 'image-snippets-gallery' ); ?>">
+			<li class="isgal-reorder__loading"><?php esc_html_e( 'Loading images…', 'image-snippets-gallery' ); ?></li>
 		</ol>
 	</div>
 	<?php
 	wp_add_inline_script(
-		'isg-reorder',
-		'window.isgReorder = ' . wp_json_encode(
+		'isgal-reorder',
+		'window.isgalReorder = ' . wp_json_encode(
 			array(
 				'gallery'  => $gallery,
 				'endpoint' => $endpoint,
@@ -583,14 +583,14 @@ function isg_render_reorder_page( $gallery, $endpoint = '' ) {
  * @param string $hook Current admin page hook.
  * @return void
  */
-function isg_reorder_assets( $hook ) {
-	if ( 'tools_page_isg-galleries' !== $hook || ! isset( $_GET['isg_reorder'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+function isgal_reorder_assets( $hook ) {
+	if ( 'tools_page_isgal-galleries' !== $hook || ! isset( $_GET['isgal_reorder'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		return;
 	}
-	wp_enqueue_script( 'isg-reorder', plugins_url( 'assets/reorder.js', ISG_PLUGIN_FILE ), array(), ISG_VERSION, true );
-	wp_enqueue_style( 'isg-reorder', plugins_url( 'assets/reorder.css', ISG_PLUGIN_FILE ), array(), ISG_VERSION );
+	wp_enqueue_script( 'isgal-reorder', plugins_url( 'assets/reorder.js', ISGAL_PLUGIN_FILE ), array(), ISGAL_VERSION, true );
+	wp_enqueue_style( 'isgal-reorder', plugins_url( 'assets/reorder.css', ISGAL_PLUGIN_FILE ), array(), ISGAL_VERSION );
 }
-add_action( 'admin_enqueue_scripts', 'isg_reorder_assets' );
+add_action( 'admin_enqueue_scripts', 'isgal_reorder_assets' );
 
 /**
  * How old a gallery's last sync may be before Site Health calls it stale.
@@ -602,11 +602,11 @@ add_action( 'admin_enqueue_scripts', 'isg_reorder_assets' );
  * @param string $gallery Gallery name.
  * @return int Seconds.
  */
-function isg_stale_after( $gallery ) {
+function isgal_stale_after( $gallery ) {
 	$max = 0;
-	foreach ( isg_indexed_gallery_blocks() as $block ) {
+	foreach ( isgal_indexed_gallery_blocks() as $block ) {
 		if ( $block['gallery'] === $gallery ) {
-			$max = max( $max, isg_configured_ttl( isg_resolve_attributes( $block['attrs'] ) ) );
+			$max = max( $max, isgal_configured_ttl( isgal_resolve_attributes( $block['attrs'] ) ) );
 		}
 	}
 	return max( HOUR_IN_SECONDS, 3 * $max );
@@ -619,21 +619,21 @@ function isg_stale_after( $gallery ) {
  * @param array $tests Registered tests.
  * @return array
  */
-function isg_site_health_tests( $tests ) {
-	$tests['direct']['isg_galleries'] = array(
+function isgal_site_health_tests( $tests ) {
+	$tests['direct']['isgal_galleries'] = array(
 		'label' => __( 'ImageSnippets galleries are up to date', 'image-snippets-gallery' ),
-		'test'  => 'isg_site_health_check',
+		'test'  => 'isgal_site_health_check',
 	);
 	return $tests;
 }
-add_filter( 'site_status_tests', 'isg_site_health_tests' );
+add_filter( 'site_status_tests', 'isgal_site_health_tests' );
 
 /**
  * Report the oldest sync, any endpoint errors, and the page-cache situation.
  *
  * @return array
  */
-function isg_site_health_check() {
+function isgal_site_health_check() {
 	$result = array(
 		'label'       => __( 'ImageSnippets galleries are up to date', 'image-snippets-gallery' ),
 		'status'      => 'good',
@@ -644,13 +644,13 @@ function isg_site_health_check() {
 		'description' => '',
 		'actions'     => sprintf(
 			'<p><a href="%s">%s</a></p>',
-			esc_url( admin_url( 'tools.php?page=isg-galleries' ) ),
+			esc_url( admin_url( 'tools.php?page=isgal-galleries' ) ),
 			esc_html__( 'Review ImageSnippets galleries', 'image-snippets-gallery' )
 		),
-		'test'        => 'isg_galleries',
+		'test'        => 'isgal_galleries',
 	);
 
-	$galleries = isg_indexed_galleries();
+	$galleries = isgal_indexed_galleries();
 	if ( empty( $galleries ) ) {
 		$result['label']       = __( 'No ImageSnippets galleries are published', 'image-snippets-gallery' );
 		$result['description'] = '<p>' . esc_html__( 'Nothing to check yet.', 'image-snippets-gallery' ) . '</p>';
@@ -658,7 +658,7 @@ function isg_site_health_check() {
 	}
 
 	$notes  = array();
-	$status = isg_sync_status();
+	$status = isgal_sync_status();
 
 	$errors = array();
 	$stale  = array();
@@ -669,9 +669,9 @@ function isg_site_health_check() {
 		if ( ! empty( $row['error'] ) ) {
 			$errors[] = $gallery;
 		}
-		$synced = isg_gallery_synced_at( isg_gallery_term( isg_gallery_endpoint_in_use( $gallery ), $gallery ) );
+		$synced = isgal_gallery_synced_at( isgal_gallery_term( isgal_gallery_endpoint_in_use( $gallery ), $gallery ) );
 		if ( ! $synced ) {
-			if ( ! empty( isg_posts_for_gallery( $gallery ) ) ) {
+			if ( ! empty( isgal_posts_for_gallery( $gallery ) ) ) {
 				$never[] = $gallery;
 			}
 			continue;
@@ -679,7 +679,7 @@ function isg_site_health_check() {
 		if ( null === $oldest || $synced < $oldest ) {
 			$oldest = $synced;
 		}
-		if ( ( time() - $synced ) > isg_stale_after( $gallery ) ) {
+		if ( ( time() - $synced ) > isgal_stale_after( $gallery ) ) {
 			$stale[] = $gallery;
 		}
 	}
@@ -725,8 +725,8 @@ function isg_site_health_check() {
 		$notes[] = esc_html__( 'WP-Cron is disabled on this site. Galleries still update, but the refresh happens during a page view rather than in the background.', 'image-snippets-gallery' );
 	}
 
-	if ( isg_page_cache_detected() ) {
-		$adapters = isg_known_purge_adapters();
+	if ( isgal_page_cache_detected() ) {
+		$adapters = isgal_known_purge_adapters();
 		if ( empty( $adapters ) ) {
 			$result['status'] = 'recommended';
 			$result['label']  = __( 'A page cache may be holding old ImageSnippets galleries', 'image-snippets-gallery' );

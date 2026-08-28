@@ -24,29 +24,29 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-const ISG_POST_TYPE = 'isg_image';
-const ISG_TAXONOMY  = 'isg_gallery';
+const ISGAL_POST_TYPE = 'isgal_image';
+const ISGAL_TAXONOMY  = 'isgal_gallery';
 // Object-cache group for decoded rows. Registered non-persistent in
-// isg_register_mirror_types(): this is a per-request memo, not a second store.
-const ISG_ROW_CACHE_GROUP = 'isg_rows';
+// isgal_register_mirror_types(): this is a per-request memo, not a second store.
+const ISGAL_ROW_CACHE_GROUP = 'isgal_rows';
 
-const ISG_META_PAGE     = '_isg_page';     // Named-graph IRI: the identity of the mirrored image.
-const ISG_META_IMAGE    = '_isg_image';    // Image IRI.
-const ISG_META_HASH     = '_isg_hash';     // Fingerprint of the stored graph, for the diff.
-const ISG_META_ROW      = '_isg_row';      // The full row: display fields, triples, labels. JSON.
-const ISG_META_DATE     = '_isg_date';     // Sort key: photoshop:DateCreated as stored.
-const ISG_META_TITLE    = '_isg_title';    // Sort key: dc:title.
-const ISG_META_CREATOR  = '_isg_creator';  // dcterms:creator of the graph, for the user filter. Repeatable.
-const ISG_TERM_ENDPOINT = 'isg_endpoint';  // Term meta: which SPARQL endpoint the gallery lives on.
-const ISG_TERM_GALLERY  = 'isg_gallery';   // Term meta: the gallery name, verbatim.
-const ISG_TERM_SYNCED   = 'isg_last_sync'; // Term meta: unix time of the last successful sync.
-const ISG_TERM_ORDER    = 'isg_manual_order'; // Term meta: page IRIs in the order a person arranged them. JSON.
+const ISGAL_META_PAGE     = '_isgal_page';     // Named-graph IRI: the identity of the mirrored image.
+const ISGAL_META_IMAGE    = '_isgal_image';    // Image IRI.
+const ISGAL_META_HASH     = '_isgal_hash';     // Fingerprint of the stored graph, for the diff.
+const ISGAL_META_ROW      = '_isgal_row';      // The full row: display fields, triples, labels. JSON.
+const ISGAL_META_DATE     = '_isgal_date';     // Sort key: photoshop:DateCreated as stored.
+const ISGAL_META_TITLE    = '_isgal_title';    // Sort key: dc:title.
+const ISGAL_META_CREATOR  = '_isgal_creator';  // dcterms:creator of the graph, for the user filter. Repeatable.
+const ISGAL_TERM_ENDPOINT = 'isgal_endpoint';  // Term meta: which SPARQL endpoint the gallery lives on.
+const ISGAL_TERM_GALLERY  = 'isgal_gallery';   // Term meta: the gallery name, verbatim.
+const ISGAL_TERM_SYNCED   = 'isgal_last_sync'; // Term meta: unix time of the last successful sync.
+const ISGAL_TERM_ORDER    = 'isgal_manual_order'; // Term meta: page IRIs in the order a person arranged them. JSON.
 
 // Images per graph-fetch request. ~1.4s per 40 against the live endpoint.
-const ISG_SYNC_BATCH = 40;
+const ISGAL_SYNC_BATCH = 40;
 // Ceiling on images listed for one gallery. Well beyond any real gallery; the
 // point is that a runaway result cannot exhaust memory. Filterable.
-const ISG_SYNC_MAX_IMAGES = 2000;
+const ISGAL_SYNC_MAX_IMAGES = 2000;
 
 /**
  * Register the post type and the gallery taxonomy.
@@ -57,11 +57,11 @@ const ISG_SYNC_MAX_IMAGES = 2000;
  *
  * @return void
  */
-function isg_register_mirror_types() {
-	wp_cache_add_non_persistent_groups( array( ISG_ROW_CACHE_GROUP ) );
+function isgal_register_mirror_types() {
+	wp_cache_add_non_persistent_groups( array( ISGAL_ROW_CACHE_GROUP ) );
 
 	register_post_type(
-		ISG_POST_TYPE,
+		ISGAL_POST_TYPE,
 		array(
 			'label'               => __( 'ImageSnippets images', 'image-snippets-gallery' ),
 			'public'              => false,
@@ -79,13 +79,13 @@ function isg_register_mirror_types() {
 			'can_export'          => false,
 			'delete_with_user'    => false,
 			'supports'            => array( 'title', 'editor', 'excerpt' ),
-			'taxonomies'          => array( ISG_TAXONOMY ),
+			'taxonomies'          => array( ISGAL_TAXONOMY ),
 		)
 	);
 
 	register_taxonomy(
-		ISG_TAXONOMY,
-		ISG_POST_TYPE,
+		ISGAL_TAXONOMY,
+		ISGAL_POST_TYPE,
 		array(
 			'label'              => __( 'ImageSnippets galleries', 'image-snippets-gallery' ),
 			'public'             => false,
@@ -102,7 +102,7 @@ function isg_register_mirror_types() {
 		)
 	);
 }
-add_action( 'init', 'isg_register_mirror_types', 5 );
+add_action( 'init', 'isgal_register_mirror_types', 5 );
 
 /**
  * Term slug for a gallery on an endpoint.
@@ -114,12 +114,12 @@ add_action( 'init', 'isg_register_mirror_types', 5 );
  * @param string $gallery  Gallery name.
  * @return string
  */
-function isg_gallery_term_slug( $endpoint, $gallery ) {
+function isgal_gallery_term_slug( $endpoint, $gallery ) {
 	$slug = sanitize_title( $gallery );
 	if ( '' === $slug ) {
 		$slug = 'gallery-' . substr( md5( $gallery ), 0, 8 );
 	}
-	if ( ISG_DEFAULT_ENDPOINT !== $endpoint ) {
+	if ( ISGAL_DEFAULT_ENDPOINT !== $endpoint ) {
 		$slug .= '-' . substr( md5( $endpoint ), 0, 8 );
 	}
 	return $slug;
@@ -133,14 +133,14 @@ function isg_gallery_term_slug( $endpoint, $gallery ) {
  * @param bool   $create   Create it if missing.
  * @return WP_Term|null
  */
-function isg_gallery_term( $endpoint, $gallery, $create = false ) {
+function isgal_gallery_term( $endpoint, $gallery, $create = false ) {
 	$gallery = trim( (string) $gallery );
 	if ( '' === $gallery ) {
 		return null;
 	}
 
-	$slug = isg_gallery_term_slug( $endpoint, $gallery );
-	$term = get_term_by( 'slug', $slug, ISG_TAXONOMY );
+	$slug = isgal_gallery_term_slug( $endpoint, $gallery );
+	$term = get_term_by( 'slug', $slug, ISGAL_TAXONOMY );
 	if ( $term instanceof WP_Term ) {
 		return $term;
 	}
@@ -148,17 +148,31 @@ function isg_gallery_term( $endpoint, $gallery, $create = false ) {
 		return null;
 	}
 
-	$inserted = wp_insert_term( $gallery, ISG_TAXONOMY, array( 'slug' => $slug ) );
+	$inserted = wp_insert_term( $gallery, ISGAL_TAXONOMY, array( 'slug' => $slug ) );
 	if ( is_wp_error( $inserted ) ) {
 		// A race with a concurrent sync: the term now exists, so read it back.
-		$term = get_term_by( 'slug', $slug, ISG_TAXONOMY );
+		$term = get_term_by( 'slug', $slug, ISGAL_TAXONOMY );
 		return $term instanceof WP_Term ? $term : null;
 	}
 
-	update_term_meta( $inserted['term_id'], ISG_TERM_ENDPOINT, $endpoint );
-	update_term_meta( $inserted['term_id'], ISG_TERM_GALLERY, $gallery );
+	update_term_meta( $inserted['term_id'], ISGAL_TERM_ENDPOINT, $endpoint );
+	update_term_meta( $inserted['term_id'], ISGAL_TERM_GALLERY, $gallery );
 
-	$term = get_term( $inserted['term_id'], ISG_TAXONOMY );
+	// An order arranged before the 0.7 prefix migration, waiting for this term.
+	$pending = get_option( 'isgal_pending_orders', array() );
+	foreach ( (array) $pending as $i => $entry ) {
+		if ( isset( $entry[1] ) && $entry[1] === $gallery ) {
+			update_term_meta( $inserted['term_id'], ISGAL_TERM_ORDER, $entry[2] );
+			unset( $pending[ $i ] );
+		}
+	}
+	if ( empty( $pending ) ) {
+		delete_option( 'isgal_pending_orders' );
+	} else {
+		update_option( 'isgal_pending_orders', array_values( $pending ), false );
+	}
+
+	$term = get_term( $inserted['term_id'], ISGAL_TAXONOMY );
 	return $term instanceof WP_Term ? $term : null;
 }
 
@@ -168,11 +182,11 @@ function isg_gallery_term( $endpoint, $gallery, $create = false ) {
  * @param WP_Term|null $term Gallery term.
  * @return int
  */
-function isg_gallery_synced_at( $term ) {
+function isgal_gallery_synced_at( $term ) {
 	if ( ! $term instanceof WP_Term ) {
 		return 0;
 	}
-	return (int) get_term_meta( $term->term_id, ISG_TERM_SYNCED, true );
+	return (int) get_term_meta( $term->term_id, ISGAL_TERM_SYNCED, true );
 }
 
 /**
@@ -184,7 +198,7 @@ function isg_gallery_synced_at( $term ) {
  * @param array $row Row.
  * @return string
  */
-function isg_row_hash( array $row ) {
+function isgal_row_hash( array $row ) {
 	$lines = array();
 	foreach ( $row['triples'] as $triple ) {
 		list( $s, $p, $o ) = $triple;
@@ -204,7 +218,7 @@ function isg_row_hash( array $row ) {
  * @param array $row Row.
  * @return string
  */
-function isg_row_search_text( array $row ) {
+function isgal_row_search_text( array $row ) {
 	$parts = array(
 		$row['title'],
 		$row['name'],
@@ -233,7 +247,7 @@ function isg_row_search_text( array $row ) {
  * @param array $row Row.
  * @return array
  */
-function isg_row_graph_creators( array $row ) {
+function isgal_row_graph_creators( array $row ) {
 	$creators = array();
 	foreach ( $row['triples'] as $triple ) {
 		list( $s, $p, $o ) = $triple;
@@ -254,7 +268,7 @@ function isg_row_graph_creators( array $row ) {
  * @param array $pages Graph IRIs.
  * @return array Map of graph IRI to post ID.
  */
-function isg_mirror_posts_for_pages( array $pages ) {
+function isgal_mirror_posts_for_pages( array $pages ) {
 	global $wpdb;
 
 	$pages = array_values( array_unique( array_filter( array_map( 'strval', $pages ) ) ) );
@@ -274,7 +288,7 @@ function isg_mirror_posts_for_pages( array $pages ) {
 				  WHERE pm.meta_key = %s
 				    AND p.post_type = %s
 				    AND pm.meta_value IN ({$placeholders})", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				array_merge( array( ISG_META_PAGE, ISG_POST_TYPE ), $chunk )
+				array_merge( array( ISGAL_META_PAGE, ISGAL_POST_TYPE ), $chunk )
 			)
 		);
 		foreach ( (array) $rows as $r ) {
@@ -297,7 +311,7 @@ function isg_mirror_posts_for_pages( array $pages ) {
  * @param string $raw photoshop:DateCreated as stored.
  * @return int Unix timestamp, or 0.
  */
-function isg_mirror_date_ts( $raw ) {
+function isgal_mirror_date_ts( $raw ) {
 	$raw = trim( (string) $raw );
 	if ( '' === $raw ) {
 		return 0;
@@ -321,25 +335,25 @@ function isg_mirror_date_ts( $raw ) {
  * @param int|null $post_id Existing post ID, or null to create.
  * @return int|WP_Error Post ID.
  */
-function isg_mirror_write_row( array $row, $post_id = null ) {
-	$title = isg_row_title( $row, true );
+function isgal_mirror_write_row( array $row, $post_id = null ) {
+	$title = isgal_row_title( $row, true );
 	if ( '' === $title ) {
 		$title = $row['image'];
 	}
 
 	$date = '';
-	$ts   = isg_mirror_date_ts( $row['date'] );
+	$ts   = isgal_mirror_date_ts( $row['date'] );
 	if ( $ts ) {
 		$date = gmdate( 'Y-m-d H:i:s', $ts );
 	}
 
 	$postarr = array(
-		'post_type'      => ISG_POST_TYPE,
+		'post_type'      => ISGAL_POST_TYPE,
 		'post_status'    => 'publish',
 		'post_title'     => $title,
 		'post_name'      => md5( $row['page'] ),
-		'post_content'   => isg_row_search_text( $row ),
-		'post_excerpt'   => isg_first( array( $row['desc'], $row['alt'] ) ),
+		'post_content'   => isgal_row_search_text( $row ),
+		'post_excerpt'   => isgal_first( array( $row['desc'], $row['alt'] ) ),
 		'comment_status' => 'closed',
 		'ping_status'    => 'closed',
 	);
@@ -360,17 +374,17 @@ function isg_mirror_write_row( array $row, $post_id = null ) {
 	}
 	$post_id = (int) $result;
 
-	update_post_meta( $post_id, ISG_META_PAGE, wp_slash( $row['page'] ) );
-	update_post_meta( $post_id, ISG_META_IMAGE, wp_slash( $row['image'] ) );
-	update_post_meta( $post_id, ISG_META_HASH, isg_row_hash( $row ) );
-	update_post_meta( $post_id, ISG_META_ROW, wp_slash( wp_json_encode( $row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ) );
-	isg_mirror_forget_row( $post_id );
-	update_post_meta( $post_id, ISG_META_DATE, wp_slash( $row['date'] ) );
-	update_post_meta( $post_id, ISG_META_TITLE, wp_slash( $row['title'] ) );
+	update_post_meta( $post_id, ISGAL_META_PAGE, wp_slash( $row['page'] ) );
+	update_post_meta( $post_id, ISGAL_META_IMAGE, wp_slash( $row['image'] ) );
+	update_post_meta( $post_id, ISGAL_META_HASH, isgal_row_hash( $row ) );
+	update_post_meta( $post_id, ISGAL_META_ROW, wp_slash( wp_json_encode( $row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) ) );
+	isgal_mirror_forget_row( $post_id );
+	update_post_meta( $post_id, ISGAL_META_DATE, wp_slash( $row['date'] ) );
+	update_post_meta( $post_id, ISGAL_META_TITLE, wp_slash( $row['title'] ) );
 
-	delete_post_meta( $post_id, ISG_META_CREATOR );
-	foreach ( isg_row_graph_creators( $row ) as $creator ) {
-		add_post_meta( $post_id, ISG_META_CREATOR, wp_slash( $creator ) );
+	delete_post_meta( $post_id, ISGAL_META_CREATOR );
+	foreach ( isgal_row_graph_creators( $row ) as $creator ) {
+		add_post_meta( $post_id, ISGAL_META_CREATOR, wp_slash( $creator ) );
 	}
 
 	return $post_id;
@@ -393,17 +407,17 @@ function isg_mirror_write_row( array $row, $post_id = null ) {
  * @param int $post_id Post ID.
  * @return array|null
  */
-function isg_mirror_read_row( $post_id ) {
+function isgal_mirror_read_row( $post_id ) {
 	$post_id = (int) $post_id;
 
 	$found = false;
-	$row   = wp_cache_get( $post_id, ISG_ROW_CACHE_GROUP, false, $found );
+	$row   = wp_cache_get( $post_id, ISGAL_ROW_CACHE_GROUP, false, $found );
 	if ( $found ) {
 		return $row;
 	}
 
 	$row  = null;
-	$json = get_post_meta( $post_id, ISG_META_ROW, true );
+	$json = get_post_meta( $post_id, ISGAL_META_ROW, true );
 	if ( is_string( $json ) && '' !== $json ) {
 		$decoded = json_decode( $json, true );
 		if ( is_array( $decoded ) && isset( $decoded['image'], $decoded['page'], $decoded['triples'] ) ) {
@@ -413,7 +427,7 @@ function isg_mirror_read_row( $post_id ) {
 
 	// null is cached too: a post with no readable row is asked the same four
 	// questions as any other, and should not re-read meta for each of them.
-	wp_cache_set( $post_id, $row, ISG_ROW_CACHE_GROUP );
+	wp_cache_set( $post_id, $row, ISGAL_ROW_CACHE_GROUP );
 	return $row;
 }
 
@@ -425,8 +439,8 @@ function isg_mirror_read_row( $post_id ) {
  * @param int $post_id Post ID.
  * @return void
  */
-function isg_mirror_forget_row( $post_id ) {
-	wp_cache_delete( (int) $post_id, ISG_ROW_CACHE_GROUP );
+function isgal_mirror_forget_row( $post_id ) {
+	wp_cache_delete( (int) $post_id, ISGAL_ROW_CACHE_GROUP );
 }
 
 /**
@@ -435,7 +449,7 @@ function isg_mirror_forget_row( $post_id ) {
  * @param string $iri IRI.
  * @return bool
  */
-function isg_iri_is_clean( $iri ) {
+function isgal_iri_is_clean( $iri ) {
 	return is_string( $iri ) && '' !== $iri && ! preg_match( '/[\s<>"{}|\\\\^`]/', $iri );
 }
 
@@ -453,15 +467,15 @@ function isg_iri_is_clean( $iri ) {
  * @param int    $timeout  Per-request timeout in seconds.
  * @return array|WP_Error  Rows, or WP_Error.
  */
-function isg_sync_fetch_gallery( $endpoint, $gallery, $timeout = 20 ) {
-	$listing = isg_sparql_json( $endpoint, isg_build_sparql_list( $gallery ), $timeout );
+function isgal_sync_fetch_gallery( $endpoint, $gallery, $timeout = 20 ) {
+	$listing = isgal_sparql_json( $endpoint, isgal_build_sparql_list( $gallery ), $timeout );
 	if ( is_wp_error( $listing ) ) {
 		return $listing;
 	}
 
 	$meta = array();
 	foreach ( $listing as $b ) {
-		if ( ! isset( $b['page']['value'], $b['image']['value'] ) || ! isg_iri_is_clean( $b['page']['value'] ) ) {
+		if ( ! isset( $b['page']['value'], $b['image']['value'] ) || ! isgal_iri_is_clean( $b['page']['value'] ) ) {
 			continue;
 		}
 		$meta[ $b['page']['value'] ] = array(
@@ -478,16 +492,16 @@ function isg_sync_fetch_gallery( $endpoint, $gallery, $timeout = 20 ) {
 	 * @param string $endpoint SPARQL endpoint URL.
 	 * @param string $gallery  Gallery name.
 	 */
-	$meta = apply_filters( 'isg_sync_image_list', $meta, $endpoint, $gallery );
+	$meta = apply_filters( 'isgal_sync_image_list', $meta, $endpoint, $gallery );
 
 	if ( empty( $meta ) ) {
 		return array();
 	}
 
 	$bindings = array();
-	$batch    = max( 1, (int) apply_filters( 'isg_sync_batch_size', ISG_SYNC_BATCH ) );
+	$batch    = max( 1, (int) apply_filters( 'isgal_sync_batch_size', ISGAL_SYNC_BATCH ) );
 	foreach ( array_chunk( array_keys( $meta ), $batch ) as $pages ) {
-		$part = isg_sparql_json( $endpoint, isg_build_sparql_graphs( $pages ), $timeout );
+		$part = isgal_sparql_json( $endpoint, isgal_build_sparql_graphs( $pages ), $timeout );
 		if ( is_wp_error( $part ) ) {
 			return $part;
 		}
@@ -496,7 +510,7 @@ function isg_sync_fetch_gallery( $endpoint, $gallery, $timeout = 20 ) {
 		}
 	}
 
-	return isg_parse_graph_bindings( $bindings, $meta );
+	return isgal_parse_graph_bindings( $bindings, $meta );
 }
 
 /**
@@ -519,44 +533,44 @@ function isg_sync_fetch_gallery( $endpoint, $gallery, $timeout = 20 ) {
  * }
  * @return array|WP_Error Summary: images, added, updated, removed, changed, purged.
  */
-function isg_sync_gallery( $endpoint, $gallery, array $opts = array() ) {
+function isgal_sync_gallery( $endpoint, $gallery, array $opts = array() ) {
 	$gallery = trim( (string) $gallery );
 	$force   = ! empty( $opts['force'] );
 	$timeout = isset( $opts['timeout'] ) ? (int) $opts['timeout'] : 20;
 
 	if ( '' === $gallery ) {
-		return new WP_Error( 'isg_no_gallery', __( 'No gallery name.', 'image-snippets-gallery' ) );
+		return new WP_Error( 'isgal_no_gallery', __( 'No gallery name.', 'image-snippets-gallery' ) );
 	}
 
-	$rows = isg_sync_fetch_gallery( $endpoint, $gallery, $timeout );
+	$rows = isgal_sync_fetch_gallery( $endpoint, $gallery, $timeout );
 	if ( is_wp_error( $rows ) ) {
-		isg_record_sync( $gallery, array( 'error' => $rows->get_error_message() ) );
+		isgal_record_sync( $gallery, array( 'error' => $rows->get_error_message() ) );
 		return $rows;
 	}
 
 	// Only now create the label: a gallery that could not be fetched leaves
 	// nothing behind.
-	$term = isg_gallery_term( $endpoint, $gallery, true );
+	$term = isgal_gallery_term( $endpoint, $gallery, true );
 	if ( ! $term instanceof WP_Term ) {
-		return new WP_Error( 'isg_term', __( 'Could not create the gallery label.', 'image-snippets-gallery' ) );
+		return new WP_Error( 'isgal_term', __( 'Could not create the gallery label.', 'image-snippets-gallery' ) );
 	}
 
-	$before = array_map( 'intval', (array) get_objects_in_term( $term->term_id, ISG_TAXONOMY ) );
+	$before = array_map( 'intval', (array) get_objects_in_term( $term->term_id, ISGAL_TAXONOMY ) );
 
 	if ( empty( $rows ) && ! empty( $before ) && ! $force ) {
 		$error = new WP_Error(
-			'isg_empty',
+			'isgal_empty',
 			sprintf(
 				/* translators: %d: number of images previously mirrored */
 				__( 'ImageSnippets returned no images for a gallery that had %d; keeping the stored copy.', 'image-snippets-gallery' ),
 				count( $before )
 			)
 		);
-		isg_record_sync( $gallery, array( 'error' => $error->get_error_message() ) );
+		isgal_record_sync( $gallery, array( 'error' => $error->get_error_message() ) );
 		return $error;
 	}
 
-	$existing = isg_mirror_posts_for_pages( wp_list_pluck( $rows, 'page' ) );
+	$existing = isgal_mirror_posts_for_pages( wp_list_pluck( $rows, 'page' ) );
 
 	$added   = 0;
 	$updated = 0;
@@ -568,12 +582,12 @@ function isg_sync_gallery( $endpoint, $gallery, array $opts = array() ) {
 		// An unchanged row is kept as is — unless its post is not published,
 		// which an earlier version could cause with a future post date. Rewriting
 		// republishes it.
-		if ( $post_id && 'publish' === get_post_status( $post_id ) && get_post_meta( $post_id, ISG_META_HASH, true ) === isg_row_hash( $row ) ) {
+		if ( $post_id && 'publish' === get_post_status( $post_id ) && get_post_meta( $post_id, ISGAL_META_HASH, true ) === isgal_row_hash( $row ) ) {
 			$kept[] = $post_id;
 		} else {
-			$written = isg_mirror_write_row( $row, $post_id ? $post_id : null );
+			$written = isgal_mirror_write_row( $row, $post_id ? $post_id : null );
 			if ( is_wp_error( $written ) ) {
-				isg_record_sync( $gallery, array( 'error' => $written->get_error_message() ) );
+				isgal_record_sync( $gallery, array( 'error' => $written->get_error_message() ) );
 				return $written;
 			}
 			if ( $post_id ) {
@@ -590,7 +604,7 @@ function isg_sync_gallery( $endpoint, $gallery, array $opts = array() ) {
 	$attached = 0;
 	foreach ( $kept as $post_id ) {
 		if ( ! in_array( $post_id, $before, true ) ) {
-			wp_set_object_terms( $post_id, array( (int) $term->term_id ), ISG_TAXONOMY, true );
+			wp_set_object_terms( $post_id, array( (int) $term->term_id ), ISGAL_TAXONOMY, true );
 			++$attached;
 		}
 	}
@@ -600,25 +614,25 @@ function isg_sync_gallery( $endpoint, $gallery, array $opts = array() ) {
 	// cannot see.
 	$removed = 0;
 	foreach ( array_diff( $before, $kept ) as $post_id ) {
-		wp_remove_object_terms( $post_id, array( (int) $term->term_id ), ISG_TAXONOMY );
+		wp_remove_object_terms( $post_id, array( (int) $term->term_id ), ISGAL_TAXONOMY );
 		++$removed;
-		$left = wp_get_object_terms( $post_id, ISG_TAXONOMY, array( 'fields' => 'ids' ) );
+		$left = wp_get_object_terms( $post_id, ISGAL_TAXONOMY, array( 'fields' => 'ids' ) );
 		if ( empty( $left ) || is_wp_error( $left ) ) {
 			wp_delete_post( $post_id, true );
 		}
 	}
 
 	// A curated order only ever names images the gallery still holds.
-	isg_prune_manual_order( $term, wp_list_pluck( $rows, 'page' ) );
+	isgal_prune_manual_order( $term, wp_list_pluck( $rows, 'page' ) );
 
 	$changed = ( $added + $updated + $removed + $attached ) > 0;
 
-	update_term_meta( $term->term_id, ISG_TERM_SYNCED, time() );
-	delete_transient( isg_lock_key( $endpoint, $gallery ) );
+	update_term_meta( $term->term_id, ISGAL_TERM_SYNCED, time() );
+	delete_transient( isgal_lock_key( $endpoint, $gallery ) );
 	// The taxonomy count is what the Tools screen shows; make sure it is current.
-	wp_update_term_count_now( array( (int) $term->term_id ), ISG_TAXONOMY );
+	wp_update_term_count_now( array( (int) $term->term_id ), ISGAL_TAXONOMY );
 
-	isg_record_sync(
+	isgal_record_sync(
 		$gallery,
 		array(
 			'last_sync' => time(),
@@ -630,7 +644,7 @@ function isg_sync_gallery( $endpoint, $gallery, array $opts = array() ) {
 
 	$purged = array();
 	if ( $changed || $force ) {
-		$purged = isg_purge_page_cache( isg_posts_for_gallery( $gallery ) );
+		$purged = isgal_purge_page_cache( isgal_posts_for_gallery( $gallery ) );
 	}
 
 	/**
@@ -648,11 +662,11 @@ function isg_sync_gallery( $endpoint, $gallery, array $opts = array() ) {
 		'changed' => $changed,
 		'purged'  => $purged,
 	);
-	do_action( 'isg_gallery_synced', $gallery, $endpoint, $summary );
+	do_action( 'isgal_gallery_synced', $gallery, $endpoint, $summary );
 
 	return $summary;
 }
-add_action( 'isg_sync_gallery', 'isg_cron_sync_gallery', 10, 2 );
+add_action( 'isgal_sync_gallery', 'isgal_cron_sync_gallery', 10, 2 );
 
 /**
  * Cron entry point. Long timeouts are fine here; nobody is waiting.
@@ -661,8 +675,8 @@ add_action( 'isg_sync_gallery', 'isg_cron_sync_gallery', 10, 2 );
  * @param string $gallery  Gallery name.
  * @return void
  */
-function isg_cron_sync_gallery( $endpoint, $gallery ) {
-	isg_sync_gallery( $endpoint, $gallery, array( 'timeout' => 20 ) );
+function isgal_cron_sync_gallery( $endpoint, $gallery ) {
+	isgal_sync_gallery( $endpoint, $gallery, array( 'timeout' => 20 ) );
 }
 
 /**
@@ -673,16 +687,16 @@ function isg_cron_sync_gallery( $endpoint, $gallery ) {
  * @param WP_Term $term Gallery term.
  * @return int Images that were detached.
  */
-function isg_mirror_drop_gallery( WP_Term $term ) {
-	$posts = array_map( 'intval', (array) get_objects_in_term( $term->term_id, ISG_TAXONOMY ) );
+function isgal_mirror_drop_gallery( WP_Term $term ) {
+	$posts = array_map( 'intval', (array) get_objects_in_term( $term->term_id, ISGAL_TAXONOMY ) );
 	foreach ( $posts as $post_id ) {
-		wp_remove_object_terms( $post_id, array( (int) $term->term_id ), ISG_TAXONOMY );
-		$left = wp_get_object_terms( $post_id, ISG_TAXONOMY, array( 'fields' => 'ids' ) );
+		wp_remove_object_terms( $post_id, array( (int) $term->term_id ), ISGAL_TAXONOMY );
+		$left = wp_get_object_terms( $post_id, ISGAL_TAXONOMY, array( 'fields' => 'ids' ) );
 		if ( empty( $left ) || is_wp_error( $left ) ) {
 			wp_delete_post( $post_id, true );
 		}
 	}
-	wp_delete_term( $term->term_id, ISG_TAXONOMY );
+	wp_delete_term( $term->term_id, ISGAL_TAXONOMY );
 	return count( $posts );
 }
 
@@ -694,11 +708,11 @@ function isg_mirror_drop_gallery( WP_Term $term ) {
  *
  * @return array Gallery names dropped.
  */
-function isg_prune_mirror() {
-	$in_use  = array_fill_keys( isg_indexed_galleries(), true );
+function isgal_prune_mirror() {
+	$in_use  = array_fill_keys( isgal_indexed_galleries(), true );
 	$terms   = get_terms(
 		array(
-			'taxonomy'   => ISG_TAXONOMY,
+			'taxonomy'   => ISGAL_TAXONOMY,
 			'hide_empty' => false,
 		)
 	);
@@ -708,14 +722,14 @@ function isg_prune_mirror() {
 		return $dropped;
 	}
 	foreach ( $terms as $term ) {
-		$gallery = (string) get_term_meta( $term->term_id, ISG_TERM_GALLERY, true );
+		$gallery = (string) get_term_meta( $term->term_id, ISGAL_TERM_GALLERY, true );
 		if ( '' === $gallery ) {
 			$gallery = $term->name;
 		}
 		if ( isset( $in_use[ $gallery ] ) ) {
 			continue;
 		}
-		isg_mirror_drop_gallery( $term );
+		isgal_mirror_drop_gallery( $term );
 		$dropped[] = $gallery;
 	}
 	return $dropped;
@@ -726,24 +740,24 @@ function isg_prune_mirror() {
  *
  * @return int Posts deleted.
  */
-function isg_mirror_drop_all() {
+function isgal_mirror_drop_all() {
 	global $wpdb;
 
 	// Direct query on purpose: bulk teardown; wp_delete_post() below does the cache invalidation.
-	$ids = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = %s", ISG_POST_TYPE ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	$ids = $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = %s", ISGAL_POST_TYPE ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 	foreach ( (array) $ids as $id ) {
 		wp_delete_post( (int) $id, true );
 	}
 
 	$terms = get_terms(
 		array(
-			'taxonomy'   => ISG_TAXONOMY,
+			'taxonomy'   => ISGAL_TAXONOMY,
 			'hide_empty' => false,
 		)
 	);
 	if ( ! is_wp_error( $terms ) ) {
 		foreach ( $terms as $term ) {
-			wp_delete_term( $term->term_id, ISG_TAXONOMY );
+			wp_delete_term( $term->term_id, ISGAL_TAXONOMY );
 		}
 	}
 	return count( (array) $ids );
@@ -756,7 +770,7 @@ function isg_mirror_drop_all() {
  * @param array   $a    Resolved block attributes.
  * @return array Rows.
  */
-function isg_mirror_query_rows( WP_Term $term, array $a ) {
+function isgal_mirror_query_rows( WP_Term $term, array $a ) {
 	$order_by  = strtolower( (string) $a['orderBy'] );
 	$by_title  = ( 'title' === $order_by );
 	$ascending = ( 'asc' === strtolower( (string) $a['order'] ) );
@@ -767,7 +781,7 @@ function isg_mirror_query_rows( WP_Term $term, array $a ) {
 	// to the limit. Done in PHP rather than with post__in so an image the
 	// order does not name is still shown.
 	if ( 'manual' === $order_by ) {
-		$all = isg_mirror_query_rows(
+		$all = isgal_mirror_query_rows(
 			$term,
 			array_merge(
 				$a,
@@ -778,11 +792,11 @@ function isg_mirror_query_rows( WP_Term $term, array $a ) {
 				)
 			)
 		);
-		return array_slice( isg_apply_manual_order( $all, isg_gallery_manual_order( $term ) ), 0, $limit );
+		return array_slice( isgal_apply_manual_order( $all, isgal_gallery_manual_order( $term ) ), 0, $limit );
 	}
 
 	$args = array(
-		'post_type'              => ISG_POST_TYPE,
+		'post_type'              => ISGAL_POST_TYPE,
 		'post_status'            => 'publish',
 		'posts_per_page'         => $limit,
 		'no_found_rows'          => true,
@@ -790,29 +804,29 @@ function isg_mirror_query_rows( WP_Term $term, array $a ) {
 		'update_post_term_cache' => false,
 		'tax_query'              => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 			array(
-				'taxonomy' => ISG_TAXONOMY,
+				'taxonomy' => ISGAL_TAXONOMY,
 				'field'    => 'term_id',
 				'terms'    => (int) $term->term_id,
 			),
 		),
-		'meta_key'               => $by_title ? ISG_META_TITLE : ISG_META_DATE, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+		'meta_key'               => $by_title ? ISGAL_META_TITLE : ISGAL_META_DATE, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
 		'orderby'                => array(
 			'meta_value' => $ascending ? 'ASC' : 'DESC', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- bounded to one gallery's own mirror posts.
 			'ID'         => 'ASC',
 		),
 	);
 
-	$user_id = isg_sanitize_iri_segment( $a['userId'] );
+	$user_id = isgal_sanitize_iri_segment( $a['userId'] );
 	if ( '' !== $user_id ) {
 		$args['meta_query'] = array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 			'relation' => 'AND',
 			array(
-				'key'     => $by_title ? ISG_META_TITLE : ISG_META_DATE,
+				'key'     => $by_title ? ISGAL_META_TITLE : ISGAL_META_DATE,
 				'compare' => 'EXISTS',
 			),
 			array(
-				'key'   => ISG_META_CREATOR,
-				'value' => ISG_USER_BASE . $user_id,
+				'key'   => ISGAL_META_CREATOR,
+				'value' => ISGAL_USER_BASE . $user_id,
 			),
 		);
 	}
@@ -820,7 +834,7 @@ function isg_mirror_query_rows( WP_Term $term, array $a ) {
 	$query = new WP_Query( $args );
 	$rows  = array();
 	foreach ( $query->posts as $post ) {
-		$row = isg_mirror_read_row( $post->ID );
+		$row = isgal_mirror_read_row( $post->ID );
 		if ( null !== $row ) {
 			$row['_post_id'] = (int) $post->ID;
 			$rows[]          = $row;
@@ -835,11 +849,11 @@ function isg_mirror_query_rows( WP_Term $term, array $a ) {
  * @param WP_Term|null $term Gallery term.
  * @return string[] Page IRIs; empty when nothing has been arranged.
  */
-function isg_gallery_manual_order( $term ) {
+function isgal_gallery_manual_order( $term ) {
 	if ( ! $term instanceof WP_Term ) {
 		return array();
 	}
-	$raw = get_term_meta( $term->term_id, ISG_TERM_ORDER, true );
+	$raw = get_term_meta( $term->term_id, ISGAL_TERM_ORDER, true );
 	if ( ! is_string( $raw ) || '' === $raw ) {
 		return array();
 	}
@@ -860,13 +874,13 @@ function isg_gallery_manual_order( $term ) {
  * @param string[] $pages Page IRIs, first to last.
  * @return void
  */
-function isg_set_gallery_manual_order( WP_Term $term, array $pages ) {
+function isgal_set_gallery_manual_order( WP_Term $term, array $pages ) {
 	$pages = array_values( array_unique( array_filter( array_map( 'strval', $pages ) ) ) );
 	if ( empty( $pages ) ) {
-		delete_term_meta( $term->term_id, ISG_TERM_ORDER );
+		delete_term_meta( $term->term_id, ISGAL_TERM_ORDER );
 		return;
 	}
-	update_term_meta( $term->term_id, ISG_TERM_ORDER, wp_json_encode( $pages ) );
+	update_term_meta( $term->term_id, ISGAL_TERM_ORDER, wp_json_encode( $pages ) );
 }
 
 /**
@@ -879,15 +893,15 @@ function isg_set_gallery_manual_order( WP_Term $term, array $pages ) {
  * @param string[] $pages Page IRIs the gallery holds now.
  * @return void
  */
-function isg_prune_manual_order( WP_Term $term, array $pages ) {
-	$order = isg_gallery_manual_order( $term );
+function isgal_prune_manual_order( WP_Term $term, array $pages ) {
+	$order = isgal_gallery_manual_order( $term );
 	if ( empty( $order ) ) {
 		return;
 	}
 	$present = array_fill_keys( array_map( 'strval', $pages ), true );
 	$kept    = array_values( array_filter( $order, static fn( $p ) => isset( $present[ $p ] ) ) );
 	if ( $kept !== $order ) {
-		isg_set_gallery_manual_order( $term, $kept );
+		isgal_set_gallery_manual_order( $term, $kept );
 	}
 }
 
@@ -899,7 +913,7 @@ function isg_prune_manual_order( WP_Term $term, array $pages ) {
  * @param string[] $order Page IRIs, first to last.
  * @return array
  */
-function isg_apply_manual_order( array $rows, array $order ) {
+function isgal_apply_manual_order( array $rows, array $order ) {
 	if ( empty( $order ) ) {
 		return $rows;
 	}
@@ -926,17 +940,17 @@ function isg_apply_manual_order( array $rows, array $order ) {
  * @param WP_Query $query Query.
  * @return void
  */
-function isg_scope_mirror_queries( WP_Query $query ) {
+function isgal_scope_mirror_queries( WP_Query $query ) {
 	if ( $query->is_search() && ! is_admin() ) {
 		return;
 	}
 	$type = $query->get( 'post_type' );
 	if ( 'any' === $type ) {
-		$types = array_values( array_diff( get_post_types( array( 'exclude_from_search' => false ) ), array( ISG_POST_TYPE ) ) );
+		$types = array_values( array_diff( get_post_types( array( 'exclude_from_search' => false ) ), array( ISGAL_POST_TYPE ) ) );
 		$query->set( 'post_type', $types );
 	}
 }
-add_action( 'pre_get_posts', 'isg_scope_mirror_queries' );
+add_action( 'pre_get_posts', 'isgal_scope_mirror_queries' );
 
 /**
  * Whether a post is one of ours. The block index skips these on save_post:
@@ -945,6 +959,6 @@ add_action( 'pre_get_posts', 'isg_scope_mirror_queries' );
  * @param mixed $post Post.
  * @return bool
  */
-function isg_is_mirror_post( $post ) {
-	return $post instanceof WP_Post && ISG_POST_TYPE === $post->post_type;
+function isgal_is_mirror_post( $post ) {
+	return $post instanceof WP_Post && ISGAL_POST_TYPE === $post->post_type;
 }

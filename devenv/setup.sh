@@ -3,13 +3,13 @@
 # Bring up the managed-host simulation and put it in a known state.
 # Safe to re-run; it skips anything already done.
 #
-# Usage:  ./devenv/setup.sh [gallery-name]      (default: hs_gallery02)
+# Usage:  ./devenv/setup.sh [gallery-name]      (default: mmgallery01)
 
 set -euo pipefail
 cd "$(dirname "$0")"
 
-GALLERY="${1:-hs_gallery02}"
-PORT="${ISG_PORT:-8080}"
+GALLERY="${1:-mmgallery01}"
+PORT="${ISGAL_PORT:-8080}"
 SITE="http://localhost:${PORT}"
 
 wp() { docker compose run --rm -T cli wp --path=/var/www/html "$@"; }

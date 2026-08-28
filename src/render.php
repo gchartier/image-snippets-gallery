@@ -12,8 +12,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-if ( ! function_exists( 'isg_render_gallery' ) ) {
+if ( ! function_exists( 'isgal_render_gallery' ) ) {
 	return;
 }
 
-echo isg_render_gallery( $attributes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped within renderer.
+echo isgal_render_gallery( $attributes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped within renderer.

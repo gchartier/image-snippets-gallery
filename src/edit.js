@@ -49,8 +49,8 @@ const HEADING_ICONS = [
 	headingLevel6,
 ];
 
-// Mirror of isg_block_gap_css() in includes/query.php: turn the stored
-// "Block spacing" value into a CSS length for the --isg-gap custom property.
+// Mirror of isgal_block_gap_css() in includes/query.php: turn the stored
+// "Block spacing" value into a CSS length for the --isgal-gap custom property.
 function blockGapStyle( gap ) {
 	if ( gap && typeof gap === 'object' ) {
 		gap = gap.top;
@@ -66,7 +66,7 @@ function blockGapStyle( gap ) {
 			.toLowerCase();
 		gap = `var(--wp--preset--spacing--${ slug })`;
 	}
-	return { '--isg-gap': gap };
+	return { '--isgal-gap': gap };
 }
 
 export default function Edit( { attributes, setAttributes, clientId } ) {
@@ -92,7 +92,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 	// to this wrapper by useBlockProps. The server-side preview inside it is
 	// asked to skip them (skipBlockSupportAttributes below) so they are not
 	// applied twice. blockGap is the exception: core emits it only for blocks
-	// with `layout` support, so we bridge it to --isg-gap here as render does.
+	// with `layout` support, so we bridge it to --isgal-gap here as render does.
 	const blockProps = useBlockProps( {
 		style: blockGapStyle( attributes?.style?.spacing?.blockGap ),
 	} );
@@ -222,17 +222,17 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 	};
 
 	// Site-wide defaults from Tools → ImageSnippets, injected by
-	// isg_editor_defaults_script() ahead of this bundle.
-	const siteDefaults = window.isgEditorDefaults ?? {};
+	// isgal_editor_defaults_script() ahead of this bundle.
+	const siteDefaults = window.isgalEditorDefaults ?? {};
 	const reorderUrl = ( () => {
 		const base = siteDefaults.reorderUrl ?? '';
 		if ( ! base ) {
 			return '#';
 		}
 		const url = new URL( base, window.location.href );
-		url.searchParams.set( 'isg_reorder', gallery ?? '' );
+		url.searchParams.set( 'isgal_reorder', gallery ?? '' );
 		if ( endpoint ) {
-			url.searchParams.set( 'isg_endpoint', endpoint );
+			url.searchParams.set( 'isgal_endpoint', endpoint );
 		}
 		return url.toString();
 	} )();
@@ -578,7 +578,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 					block="imagesnippets/gallery"
 					attributes={ attributes }
 					skipBlockSupportAttributes
-					urlQueryArgs={ { isg_refresh: String( refreshKey ) } }
+					urlQueryArgs={ { isgal_refresh: String( refreshKey ) } }
 				/>
 			</div>
 		</>

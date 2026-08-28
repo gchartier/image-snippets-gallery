@@ -38,7 +38,7 @@ except Exception as exc:
 graph = doc.get("@graph", [])
 images = [n for n in graph if n.get("@type") == "ImageObject"]
 named = [n for n in graph if "@graph" in n]
-figures = html.count('<figure class="isg-item"')
+figures = html.count('<figure class="isgal-item"')
 
 check(
     "schema.org is the default vocabulary",

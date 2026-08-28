@@ -1,5 +1,5 @@
 /* Tools → ImageSnippets → Arrange: the drag-to-order grid. */
-.isg-reorder__grid {
+.isgal-reorder__grid {
 	display: grid;
 	grid-template-columns: repeat( auto-fill, minmax( 150px, 1fr ) );
 	gap: 12px;
@@ -8,7 +8,7 @@
 	padding: 0;
 	max-width: 1400px;
 }
-.isg-reorder__item {
+.isgal-reorder__item {
 	position: relative;
 	margin: 0;
 	background: #fff;
@@ -19,17 +19,17 @@
 	user-select: none;
 	transition: box-shadow 0.12s, transform 0.12s;
 }
-.isg-reorder__item:focus-within {
+.isgal-reorder__item:focus-within {
 	outline: 2px solid #2271b1;
 	outline-offset: 1px;
 }
-.isg-reorder__item.is-dragging {
+.isgal-reorder__item.is-dragging {
 	opacity: 0.4;
 }
-.isg-reorder__item.is-over {
+.isgal-reorder__item.is-over {
 	box-shadow: 0 0 0 3px #2271b1;
 }
-.isg-reorder__thumb {
+.isgal-reorder__thumb {
 	display: block;
 	width: 100%;
 	aspect-ratio: 4 / 3;
@@ -38,7 +38,7 @@
 	border-radius: 2px;
 	pointer-events: none;
 }
-.isg-reorder__title {
+.isgal-reorder__title {
 	display: block;
 	margin-top: 6px;
 	font-size: 12px;
@@ -47,7 +47,7 @@
 	overflow: hidden;
 	color: #1d2327;
 }
-.isg-reorder__pos {
+.isgal-reorder__pos {
 	position: absolute;
 	top: 10px;
 	left: 10px;
@@ -61,7 +61,7 @@
 	text-align: center;
 	pointer-events: none;
 }
-.isg-reorder__new {
+.isgal-reorder__new {
 	position: absolute;
 	top: 10px;
 	right: 10px;
@@ -73,12 +73,12 @@
 	line-height: 20px;
 	pointer-events: none;
 }
-.isg-reorder__nudge {
+.isgal-reorder__nudge {
 	display: flex;
 	justify-content: space-between;
 	margin-top: 4px;
 }
-.isg-reorder__nudge button {
+.isgal-reorder__nudge button {
 	border: 0;
 	background: none;
 	color: #2271b1;
@@ -86,19 +86,19 @@
 	padding: 2px 4px;
 	font-size: 12px;
 }
-.isg-reorder__nudge button:disabled {
+.isgal-reorder__nudge button:disabled {
 	color: #a7aaad;
 	cursor: default;
 }
-.isg-reorder__status {
+.isgal-reorder__status {
 	margin-left: 8px;
 	color: #50575e;
 }
-.isg-reorder__status.is-error {
+.isgal-reorder__status.is-error {
 	color: #b32d2e;
 }
-.isg-reorder__loading,
-.isg-reorder__empty {
+.isgal-reorder__loading,
+.isgal-reorder__empty {
 	grid-column: 1 / -1;
 	color: #50575e;
 }

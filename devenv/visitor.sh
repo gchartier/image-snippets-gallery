@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-PORT="${ISG_PORT:-8080}"
+PORT="${ISGAL_PORT:-8080}"
 PATH_="${1:-/gallery/}"
 URL="http://localhost:${PORT}${PATH_}"
 
@@ -26,7 +26,7 @@ BODY="$(curl -sS --compressed \
     "$URL")"
 
 echo "URL            $URL"
-echo "images in HTML $(grep -o '<figure class="isg-item"' <<<"$BODY" | wc -l)"
+echo "images in HTML $(grep -o '<figure class="isgal-item"' <<<"$BODY" | wc -l)"
 echo "JSON-LD block  $(grep -c 'application/ld+json' <<<"$BODY" || true)"
 
 # Cache Enabler stamps a signature comment into pages it served from disk.

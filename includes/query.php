@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @param string $value Raw value.
  * @return string Sanitized value.
  */
-function isg_sanitize_iri_segment( $value ) {
+function isgal_sanitize_iri_segment( $value ) {
 	return preg_replace( '/[^\w@.\-]/', '', (string) $value );
 }
 
@@ -31,7 +31,7 @@ function isg_sanitize_iri_segment( $value ) {
  * @param string $url Image IRI or contentUrl.
  * @return string
  */
-function isg_humanize_filename( $url ) {
+function isgal_humanize_filename( $url ) {
 	$base = rawurldecode( basename( (string) $url ) );
 	$base = preg_replace( '/\.[a-z0-9]{2,4}$/i', '', $base ); // strip extension
 	$base = preg_replace( '/[ _-]+\d{6,}.*$/', '', $base );    // strip trailing date/id runs
@@ -45,7 +45,7 @@ function isg_humanize_filename( $url ) {
  * @param array $candidates Ordered candidates.
  * @return string
  */
-function isg_first( array $candidates ) {
+function isgal_first( array $candidates ) {
 	foreach ( $candidates as $c ) {
 		if ( '' !== trim( (string) $c ) ) {
 			return (string) $c;
@@ -64,7 +64,7 @@ function isg_first( array $candidates ) {
  * @param string $url Image URL.
  * @return array{base:string,ext:string}|null
  */
-function isg_flickr_base( $url ) {
+function isgal_flickr_base( $url ) {
 	$parts = wp_parse_url( (string) $url );
 	if ( empty( $parts['host'] ) || ! preg_match( '/(^|\.)staticflickr\.com$/i', $parts['host'] ) ) {
 		return null;
@@ -94,8 +94,8 @@ function isg_flickr_base( $url ) {
  * @param string $code Flickr size code (e.g. n=320, z=640, c=800, b=1024).
  * @return string
  */
-function isg_flickr_sized( $url, $code ) {
-	$f = isg_flickr_base( $url );
+function isgal_flickr_sized( $url, $code ) {
+	$f = isgal_flickr_base( $url );
 	if ( null === $f ) {
 		return $url;
 	}
@@ -108,7 +108,7 @@ function isg_flickr_sized( $url, $code ) {
  *
  * @return int[] Suffix code => pixel width of the long edge.
  */
-function isg_flickr_widths() {
+function isgal_flickr_widths() {
 	return array(
 		'n' => 320,
 		'z' => 640,
@@ -123,12 +123,12 @@ function isg_flickr_widths() {
  * @param int $width Requested width in pixels; 0 means unconstrained.
  * @return string Suffix code, or '' for the original.
  */
-function isg_flickr_code_for_width( $width ) {
+function isgal_flickr_code_for_width( $width ) {
 	$width = (int) $width;
 	if ( $width < 1 ) {
 		return '';
 	}
-	foreach ( isg_flickr_widths() as $code => $rendition ) {
+	foreach ( isgal_flickr_widths() as $code => $rendition ) {
 		if ( $width <= $rendition ) {
 			return $code;
 		}
@@ -144,15 +144,15 @@ function isg_flickr_code_for_width( $width ) {
  * @param string $url Image URL (the full-res source / contentUrl).
  * @return string
  */
-function isg_flickr_srcset( $url ) {
-	if ( null === isg_flickr_base( $url ) ) {
+function isgal_flickr_srcset( $url ) {
+	if ( null === isgal_flickr_base( $url ) ) {
 		return '';
 	}
 	$out = array();
-	foreach ( isg_flickr_widths() as $code => $w ) {
+	foreach ( isgal_flickr_widths() as $code => $w ) {
 		// esc_url_raw, not esc_url: this is escaped once where it is printed,
 		// and entity-encoding it here would be encoded again on the way out.
-		$out[] = esc_url_raw( isg_flickr_sized( $url, $code ) ) . ' ' . $w . 'w';
+		$out[] = esc_url_raw( isgal_flickr_sized( $url, $code ) ) . ' ' . $w . 'w';
 	}
 	return implode( ', ', $out );
 }
@@ -166,7 +166,7 @@ function isg_flickr_srcset( $url ) {
  *
  * @return bool
  */
-function isg_is_editor_preview() {
+function isgal_is_editor_preview() {
 	return defined( 'REST_REQUEST' ) && REST_REQUEST && current_user_can( 'edit_posts' );
 }
 
@@ -178,8 +178,8 @@ function isg_is_editor_preview() {
  * @param string $gallery  Gallery name.
  * @return string
  */
-function isg_lock_key( $endpoint, $gallery ) {
-	return 'isg3lock_' . md5( $endpoint . '|' . $gallery );
+function isgal_lock_key( $endpoint, $gallery ) {
+	return 'isgal_lock_' . md5( $endpoint . '|' . $gallery );
 }
 
 /**
@@ -193,9 +193,9 @@ function isg_lock_key( $endpoint, $gallery ) {
  * @param array $a Resolved attributes.
  * @return int Seconds.
  */
-function isg_configured_ttl( array $a ) {
+function isgal_configured_ttl( array $a ) {
 	// null / '' = no per-block override: use the site default from Tools.
-	$minutes = ( isset( $a['cacheTtl'] ) && '' !== $a['cacheTtl'] ) ? (int) $a['cacheTtl'] : isg_default_ttl_minutes();
+	$minutes = ( isset( $a['cacheTtl'] ) && '' !== $a['cacheTtl'] ) ? (int) $a['cacheTtl'] : isgal_default_ttl_minutes();
 	return max( 0, min( 1440, $minutes ) ) * MINUTE_IN_SECONDS;
 }
 
@@ -205,11 +205,11 @@ function isg_configured_ttl( array $a ) {
  * @param array $a Resolved attributes.
  * @return int Seconds.
  */
-function isg_resolve_ttl( array $a ) {
-	$ttl = isg_configured_ttl( $a );
+function isgal_resolve_ttl( array $a ) {
+	$ttl = isgal_configured_ttl( $a );
 
-	if ( isg_is_editor_preview() ) {
-		$ttl = min( $ttl, ISG_EDITOR_TTL );
+	if ( isgal_is_editor_preview() ) {
+		$ttl = min( $ttl, ISGAL_EDITOR_TTL );
 	}
 
 	/**
@@ -218,21 +218,21 @@ function isg_resolve_ttl( array $a ) {
 	 * @param int   $ttl Resolved interval in seconds.
 	 * @param array $a   Resolved block attributes.
 	 */
-	return max( 0, (int) apply_filters( 'isg_cache_ttl', $ttl, $a ) );
+	return max( 0, (int) apply_filters( 'isgal_cache_ttl', $ttl, $a ) );
 }
 
 /**
  * Queue a background sync for a gallery that is past its interval.
  *
  * The lock stores the time it was taken, not a flag, so a later read can tell
- * whether the scheduled job ever ran. See isg_cron_stalled().
+ * whether the scheduled job ever ran. See isgal_cron_stalled().
  *
  * @param string $endpoint SPARQL endpoint URL.
  * @param string $gallery  Gallery name.
  * @return void
  */
-function isg_schedule_sync( $endpoint, $gallery ) {
-	$lock = isg_lock_key( $endpoint, $gallery );
+function isgal_schedule_sync( $endpoint, $gallery ) {
+	$lock = isgal_lock_key( $endpoint, $gallery );
 	if ( false !== get_transient( $lock ) ) {
 		return;
 	}
@@ -240,7 +240,7 @@ function isg_schedule_sync( $endpoint, $gallery ) {
 	// until it expires, which rate-limits retries against a struggling endpoint.
 	set_transient( $lock, time(), 5 * MINUTE_IN_SECONDS );
 
-	wp_schedule_single_event( time(), 'isg_sync_gallery', array( $endpoint, (string) $gallery ) );
+	wp_schedule_single_event( time(), 'isgal_sync_gallery', array( $endpoint, (string) $gallery ) );
 
 	if ( ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ) ) {
 		spawn_cron();
@@ -260,13 +260,13 @@ function isg_schedule_sync( $endpoint, $gallery ) {
  * @param string $gallery  Gallery name.
  * @return bool
  */
-function isg_cron_stalled( $endpoint, $gallery ) {
-	$queued_at = get_transient( isg_lock_key( $endpoint, $gallery ) );
+function isgal_cron_stalled( $endpoint, $gallery ) {
+	$queued_at = get_transient( isgal_lock_key( $endpoint, $gallery ) );
 	if ( ! $queued_at ) {
 		return false; // Nothing queued yet, so nothing has failed to run.
 	}
 
-	$margin = max( 30, (int) apply_filters( 'isg_cron_stall_margin', ISG_CRON_STALL_MARGIN ) );
+	$margin = max( 30, (int) apply_filters( 'isgal_cron_stall_margin', ISGAL_CRON_STALL_MARGIN ) );
 	return ( time() - (int) $queued_at ) > $margin;
 }
 
@@ -277,13 +277,13 @@ function isg_cron_stalled( $endpoint, $gallery ) {
  * @param array  $fields  Fields to merge into that gallery's status.
  * @return void
  */
-function isg_record_sync( $gallery, array $fields ) {
+function isgal_record_sync( $gallery, array $fields ) {
 	$gallery = trim( (string) $gallery );
 	if ( '' === $gallery ) {
 		return;
 	}
 
-	$status = get_option( 'isg_sync_status', array() );
+	$status = get_option( 'isgal_sync_status', array() );
 	if ( ! is_array( $status ) ) {
 		$status = array();
 	}
@@ -292,7 +292,7 @@ function isg_record_sync( $gallery, array $fields ) {
 	$status[ $gallery ]                 = array_merge( $existing, $fields );
 	$status[ $gallery ]['last_attempt'] = time();
 
-	update_option( 'isg_sync_status', $status, false );
+	update_option( 'isgal_sync_status', $status, false );
 }
 
 /**
@@ -301,8 +301,8 @@ function isg_record_sync( $gallery, array $fields ) {
  * @param string $gallery Gallery name, or '' for the whole map.
  * @return array
  */
-function isg_sync_status( $gallery = '' ) {
-	$status = get_option( 'isg_sync_status', array() );
+function isgal_sync_status( $gallery = '' ) {
+	$status = get_option( 'isgal_sync_status', array() );
 	if ( ! is_array( $status ) ) {
 		$status = array();
 	}
@@ -326,9 +326,9 @@ function isg_sync_status( $gallery = '' ) {
  * @param string $gallery  Gallery name.
  * @return array|WP_Error Sync summary.
  */
-function isg_refresh_gallery( $endpoint, $gallery ) {
-	delete_transient( isg_lock_key( $endpoint, $gallery ) );
-	return isg_sync_gallery(
+function isgal_refresh_gallery( $endpoint, $gallery ) {
+	delete_transient( isgal_lock_key( $endpoint, $gallery ) );
+	return isgal_sync_gallery(
 		$endpoint,
 		$gallery,
 		array(
@@ -348,17 +348,17 @@ function isg_refresh_gallery( $endpoint, $gallery ) {
  *
  * @return array Map of gallery name to sync summary, or WP_Error per gallery.
  */
-function isg_refresh_all_galleries() {
+function isgal_refresh_all_galleries() {
 	$results = array();
 	$done    = array();
 
 	// The sync unit is (endpoint, gallery). Two blocks showing the same gallery
 	// with different limits or sorting read the same mirror, so one sync serves
 	// them both.
-	foreach ( isg_indexed_gallery_blocks() as $block ) {
-		$a        = isg_resolve_attributes( $block['attrs'] );
+	foreach ( isgal_indexed_gallery_blocks() as $block ) {
+		$a        = isgal_resolve_attributes( $block['attrs'] );
 		$gallery  = $block['gallery'];
-		$endpoint = isg_resolve_endpoint( $a );
+		$endpoint = isgal_resolve_endpoint( $a );
 
 		$key = $endpoint . '|' . $gallery;
 		if ( isset( $done[ $key ] ) ) {
@@ -366,7 +366,7 @@ function isg_refresh_all_galleries() {
 		}
 		$done[ $key ] = true;
 
-		$result = isg_refresh_gallery( $endpoint, $gallery );
+		$result = isgal_refresh_gallery( $endpoint, $gallery );
 
 		// Keyed by gallery for display; a gallery can appear on more than one
 		// endpoint, so a later success must not silently replace an error.
@@ -375,7 +375,7 @@ function isg_refresh_all_galleries() {
 		}
 	}
 
-	isg_prune_mirror();
+	isgal_prune_mirror();
 
 	return $results;
 }
@@ -399,35 +399,35 @@ function isg_refresh_all_galleries() {
  * @param string $endpoint SPARQL endpoint URL.
  * @return array|WP_Error Rows, or WP_Error when nothing could be shown.
  */
-function isg_gallery_rows( array $a, $endpoint ) {
+function isgal_gallery_rows( array $a, $endpoint ) {
 	$gallery = trim( (string) $a['gallery'] );
-	$ttl     = isg_resolve_ttl( $a );
-	$term    = isg_gallery_term( $endpoint, $gallery );
-	$synced  = isg_gallery_synced_at( $term );
+	$ttl     = isgal_resolve_ttl( $a );
+	$term    = isgal_gallery_term( $endpoint, $gallery );
+	$synced  = isgal_gallery_synced_at( $term );
 
 	// Inline syncs run inside someone's page load. Shorter ceiling than cron.
-	$inline = array( 'timeout' => (int) apply_filters( 'isg_inline_sync_timeout', 10 ) );
+	$inline = array( 'timeout' => (int) apply_filters( 'isgal_inline_sync_timeout', 10 ) );
 
 	if ( 0 === $synced ) {
-		$result = isg_sync_gallery( $endpoint, $gallery, $inline );
+		$result = isgal_sync_gallery( $endpoint, $gallery, $inline );
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
-		$term = isg_gallery_term( $endpoint, $gallery );
+		$term = isgal_gallery_term( $endpoint, $gallery );
 	} elseif ( ( time() - $synced ) >= $ttl ) {
-		if ( 0 === $ttl || isg_is_editor_preview() || isg_cron_stalled( $endpoint, $gallery ) ) {
+		if ( 0 === $ttl || isgal_is_editor_preview() || isgal_cron_stalled( $endpoint, $gallery ) ) {
 			// Failure here is not fatal: the mirror still holds the last good copy.
-			isg_sync_gallery( $endpoint, $gallery, $inline );
+			isgal_sync_gallery( $endpoint, $gallery, $inline );
 		} else {
-			isg_schedule_sync( $endpoint, $gallery );
+			isgal_schedule_sync( $endpoint, $gallery );
 		}
 	}
 
 	if ( ! $term instanceof WP_Term ) {
-		return new WP_Error( 'isg_no_mirror', __( 'Gallery has not been synchronised yet.', 'image-snippets-gallery' ) );
+		return new WP_Error( 'isgal_no_mirror', __( 'Gallery has not been synchronised yet.', 'image-snippets-gallery' ) );
 	}
 
-	return isg_mirror_query_rows( $term, $a );
+	return isgal_mirror_query_rows( $term, $a );
 }
 
 /**
@@ -438,7 +438,7 @@ function isg_gallery_rows( array $a, $endpoint ) {
  * @param int    $timeout  Seconds.
  * @return array|WP_Error  Bindings, or WP_Error.
  */
-function isg_sparql_json( $endpoint, $query, $timeout = 20 ) {
+function isgal_sparql_json( $endpoint, $query, $timeout = 20 ) {
 	// add_query_arg does NOT url-encode values, so encode the query ourselves.
 	$url = add_query_arg( 'query', rawurlencode( $query ), $endpoint );
 
@@ -456,12 +456,12 @@ function isg_sparql_json( $endpoint, $query, $timeout = 20 ) {
 
 	$code = (int) wp_remote_retrieve_response_code( $response );
 	if ( 200 !== $code ) {
-		return new WP_Error( 'isg_http', sprintf( 'SPARQL endpoint returned HTTP %d', $code ) );
+		return new WP_Error( 'isgal_http', sprintf( 'SPARQL endpoint returned HTTP %d', $code ) );
 	}
 
 	$json = json_decode( wp_remote_retrieve_body( $response ), true );
 	if ( ! isset( $json['results']['bindings'] ) || ! is_array( $json['results']['bindings'] ) ) {
-		return new WP_Error( 'isg_parse', 'Unexpected SPARQL response format.' );
+		return new WP_Error( 'isgal_parse', 'Unexpected SPARQL response format.' );
 	}
 
 	return $json['results']['bindings'];
@@ -483,9 +483,9 @@ function isg_sparql_json( $endpoint, $query, $timeout = 20 ) {
  * @param string $page Named-graph IRI of the image.
  * @return string Fragment id, or '' when the row carries no IRI.
  */
-function isg_image_anchor( $page ) {
+function isgal_image_anchor( $page ) {
 	$page = (string) $page;
-	return '' !== $page ? 'isg-' . md5( $page ) : '';
+	return '' !== $page ? 'isgal-' . md5( $page ) : '';
 }
 
 /**
@@ -495,10 +495,10 @@ function isg_image_anchor( $page ) {
  * @param bool  $use_filename Whether to fall back to a humanized filename.
  * @return string
  */
-function isg_row_title( array $row, $use_filename ) {
-	$title = isg_first( array( $row['title'], $row['name'] ) );
+function isgal_row_title( array $row, $use_filename ) {
+	$title = isgal_first( array( $row['title'], $row['name'] ) );
 	if ( '' === $title && $use_filename ) {
-		$title = isg_humanize_filename( $row['image'] ? $row['image'] : $row['content'] );
+		$title = isgal_humanize_filename( $row['image'] ? $row['image'] : $row['content'] );
 	}
 	return $title;
 }
@@ -518,7 +518,7 @@ function isg_row_title( array $row, $use_filename ) {
  * @param array $row Row.
  * @return int[]|null array( width, height ), or null.
  */
-function isg_row_dimensions( array $row ) {
+function isgal_row_dimensions( array $row ) {
 	$width  = 0;
 	$height = 0;
 	$og     = '';
@@ -539,7 +539,7 @@ function isg_row_dimensions( array $row ) {
 	if ( $width < 1 || $height < 1 || '' === $og ) {
 		return null;
 	}
-	$source = isg_first( array( $row['content'], $row['image'] ) );
+	$source = isgal_first( array( $row['content'], $row['image'] ) );
 	// Compared decoded: the same URL reaches us percent-encoded in one triple
 	// and not in another often enough to matter.
 	if ( '' === $source || rawurldecode( $og ) !== rawurldecode( $source ) ) {
@@ -554,8 +554,8 @@ function isg_row_dimensions( array $row ) {
  * @param array $row Row.
  * @return string
  */
-function isg_row_alt( array $row ) {
-	return isg_first( array( $row['alt'], $row['desc'], $row['title'], $row['name'] ) );
+function isgal_row_alt( array $row ) {
+	return isgal_first( array( $row['alt'], $row['desc'], $row['title'], $row['name'] ) );
 }
 
 /**
@@ -565,18 +565,18 @@ function isg_row_alt( array $row ) {
  * @param array $rows Rows.
  * @return string
  */
-function isg_editor_notice( array $rows ) {
-	if ( ! isg_is_editor_preview() || empty( $rows ) ) {
+function isgal_editor_notice( array $rows ) {
+	if ( ! isgal_is_editor_preview() || empty( $rows ) ) {
 		return '';
 	}
 
 	$no_title = 0;
 	$no_alt   = 0;
 	foreach ( $rows as $row ) {
-		if ( '' === isg_first( array( $row['title'], $row['name'] ) ) ) {
+		if ( '' === isgal_first( array( $row['title'], $row['name'] ) ) ) {
 			++$no_title;
 		}
-		if ( '' === isg_first( array( $row['alt'], $row['desc'] ) ) ) {
+		if ( '' === isgal_first( array( $row['alt'], $row['desc'] ) ) ) {
 			++$no_alt;
 		}
 	}
@@ -594,7 +594,7 @@ function isg_editor_notice( array $rows ) {
 		$total
 	);
 
-	return '<p class="isg-editor-notice" style="padding:.5em .75em;border:1px solid #f0b849;background:#fcf9e8;border-radius:4px;font-size:.85em">⚠ '
+	return '<p class="isgal-editor-notice" style="padding:.5em .75em;border:1px solid #f0b849;background:#fcf9e8;border-radius:4px;font-size:.85em">⚠ '
 		. esc_html( $msg ) . '</p>';
 }
 
@@ -603,7 +603,7 @@ function isg_editor_notice( array $rows ) {
  *
  * @return array
  */
-function isg_defaults() {
+function isgal_defaults() {
 	return array(
 		'gallery'        => '',
 		'userId'         => '',
@@ -639,8 +639,8 @@ function isg_defaults() {
  * @param array $attributes Raw block attributes.
  * @return array
  */
-function isg_resolve_attributes( array $attributes ) {
-	return wp_parse_args( $attributes, isg_defaults() );
+function isgal_resolve_attributes( array $attributes ) {
+	return wp_parse_args( $attributes, isgal_defaults() );
 }
 
 /**
@@ -658,15 +658,15 @@ function isg_resolve_attributes( array $attributes ) {
  * picker for the whole cache period; the editor falls back to typing.
  *
  * Each entry: 'value' is what the block stores ("owner/gallery", or the bare
- * name for the default owner — see isg_dataset_iri()), plus 'owner', 'name'
+ * name for the default owner — see isgal_dataset_iri()), plus 'owner', 'name'
  * and 'count'. Sorted with the default owner first, then by owner and name.
  *
  * @param string $endpoint SPARQL endpoint URL.
  * @param bool   $fresh    Bypass and replace the cache.
  * @return array|WP_Error
  */
-function isg_list_galleries( $endpoint, $fresh = false ) {
-	$key = 'isg_galleries_' . md5( (string) $endpoint );
+function isgal_list_galleries( $endpoint, $fresh = false ) {
+	$key = 'isgal_galleries_' . md5( (string) $endpoint );
 	if ( ! $fresh ) {
 		$cached = get_transient( $key );
 		if ( is_array( $cached ) ) {
@@ -674,7 +674,7 @@ function isg_list_galleries( $endpoint, $fresh = false ) {
 		}
 	}
 
-	$rows = isg_sparql_json( $endpoint, isg_build_sparql_datasets(), 15 );
+	$rows = isgal_sparql_json( $endpoint, isgal_build_sparql_datasets(), 15 );
 	if ( is_wp_error( $rows ) ) {
 		return $rows;
 	}
@@ -682,21 +682,21 @@ function isg_list_galleries( $endpoint, $fresh = false ) {
 	$list = array();
 	foreach ( $rows as $row ) {
 		$iri = isset( $row['ds']['value'] ) ? (string) $row['ds']['value'] : '';
-		if ( 0 !== strpos( $iri, ISG_DATASET_BASE ) ) {
+		if ( 0 !== strpos( $iri, ISGAL_DATASET_BASE ) ) {
 			continue;
 		}
-		$parts = explode( '/', substr( $iri, strlen( ISG_DATASET_BASE ) ) );
+		$parts = explode( '/', substr( $iri, strlen( ISGAL_DATASET_BASE ) ) );
 		if ( 2 !== count( $parts ) || '' === $parts[0] || '' === $parts[1] ) {
 			continue;
 		}
 		$owner = rawurldecode( $parts[0] );
 		$name  = rawurldecode( $parts[1] );
 		// Only names the block can store unchanged are offered.
-		if ( isg_sanitize_iri_segment( $owner ) !== $owner || isg_sanitize_iri_segment( $name ) !== $name ) {
+		if ( isgal_sanitize_iri_segment( $owner ) !== $owner || isgal_sanitize_iri_segment( $name ) !== $name ) {
 			continue;
 		}
 		$list[] = array(
-			'value' => ( ISG_DEFAULT_DATASET_OWNER === $owner ? '' : $owner . '/' ) . $name,
+			'value' => ( ISGAL_DEFAULT_DATASET_OWNER === $owner ? '' : $owner . '/' ) . $name,
 			'owner' => $owner,
 			'name'  => $name,
 			'count' => isset( $row['n']['value'] ) ? (int) $row['n']['value'] : 0,
@@ -706,8 +706,8 @@ function isg_list_galleries( $endpoint, $fresh = false ) {
 	usort(
 		$list,
 		function ( $x, $y ) {
-			$xd = ( ISG_DEFAULT_DATASET_OWNER === $x['owner'] ) ? 0 : 1;
-			$yd = ( ISG_DEFAULT_DATASET_OWNER === $y['owner'] ) ? 0 : 1;
+			$xd = ( ISGAL_DEFAULT_DATASET_OWNER === $x['owner'] ) ? 0 : 1;
+			$yd = ( ISGAL_DEFAULT_DATASET_OWNER === $y['owner'] ) ? 0 : 1;
 			if ( $xd !== $yd ) {
 				return $xd - $yd;
 			}
@@ -721,15 +721,15 @@ function isg_list_galleries( $endpoint, $fresh = false ) {
 	 * @param int    $ttl      Seconds. Default 15 minutes.
 	 * @param string $endpoint SPARQL endpoint URL.
 	 */
-	$ttl = (int) apply_filters( 'isg_gallery_list_ttl', 15 * MINUTE_IN_SECONDS, $endpoint );
+	$ttl = (int) apply_filters( 'isgal_gallery_list_ttl', 15 * MINUTE_IN_SECONDS, $endpoint );
 	set_transient( $key, $list, max( 60, $ttl ) );
 
 	return $list;
 }
 
-function isg_default_endpoint() {
-	$url = esc_url_raw( (string) get_option( 'isg_default_endpoint', '' ) );
-	return '' !== $url ? $url : ISG_DEFAULT_ENDPOINT;
+function isgal_default_endpoint() {
+	$url = esc_url_raw( (string) get_option( 'isgal_default_endpoint', '' ) );
+	return '' !== $url ? $url : ISGAL_DEFAULT_ENDPOINT;
 }
 
 /**
@@ -737,8 +737,8 @@ function isg_default_endpoint() {
  *
  * @return int
  */
-function isg_default_ttl_minutes() {
-	$minutes = get_option( 'isg_default_ttl', 10 );
+function isgal_default_ttl_minutes() {
+	$minutes = get_option( 'isgal_default_ttl', 10 );
 	$minutes = is_numeric( $minutes ) ? (int) $minutes : 10;
 	return max( 0, min( 1440, $minutes ) );
 }
@@ -750,8 +750,8 @@ function isg_default_ttl_minutes() {
  * @param array $a Resolved attributes.
  * @return string
  */
-function isg_resolve_endpoint( array $a ) {
-	return ! empty( $a['endpoint'] ) ? esc_url_raw( $a['endpoint'] ) : isg_default_endpoint();
+function isgal_resolve_endpoint( array $a ) {
+	return ! empty( $a['endpoint'] ) ? esc_url_raw( $a['endpoint'] ) : isgal_default_endpoint();
 }
 
 /**
@@ -767,7 +767,7 @@ function isg_resolve_endpoint( array $a ) {
  * @param array $attributes Raw block attributes.
  * @return string CSS length/var, or '' when unset or unsafe.
  */
-function isg_block_gap_css( array $attributes ) {
+function isgal_block_gap_css( array $attributes ) {
 	$gap = $attributes['style']['spacing']['blockGap'] ?? null;
 	if ( is_array( $gap ) ) {
 		$gap = $gap['top'] ?? null;
@@ -793,7 +793,7 @@ function isg_block_gap_css( array $attributes ) {
  * @param mixed $value Raw attribute value.
  * @return string CSS value or ''.
  */
-function isg_css_value( $value ) {
+function isgal_css_value( $value ) {
 	if ( ! is_string( $value ) ) {
 		return '';
 	}
@@ -817,7 +817,7 @@ function isg_css_value( $value ) {
  * @param mixed $border Attribute value.
  * @return array<string,string> Custom property name => value.
  */
-function isg_border_vars( $border ) {
+function isgal_border_vars( $border ) {
 	if ( ! is_array( $border ) ) {
 		return array();
 	}
@@ -825,9 +825,9 @@ function isg_border_vars( $border ) {
 		if ( ! is_array( $b ) ) {
 			return '';
 		}
-		$width = isg_css_value( $b['width'] ?? '' );
-		$style = isg_css_value( $b['style'] ?? '' );
-		$color = isg_css_value( $b['color'] ?? '' );
+		$width = isgal_css_value( $b['width'] ?? '' );
+		$style = isgal_css_value( $b['style'] ?? '' );
+		$color = isgal_css_value( $b['color'] ?? '' );
 		if ( '' === $width && '' === $color ) {
 			return '';
 		}
@@ -840,13 +840,13 @@ function isg_border_vars( $border ) {
 		foreach ( $sides as $side ) {
 			$v = $shorthand( $border[ $side ] ?? null );
 			if ( '' !== $v ) {
-				$vars[ '--isg-img-border-' . $side ] = $v;
+				$vars[ '--isgal-img-border-' . $side ] = $v;
 			}
 		}
 	} else {
 		$v = $shorthand( $border );
 		if ( '' !== $v ) {
-			$vars['--isg-img-border'] = $v;
+			$vars['--isgal-img-border'] = $v;
 		}
 	}
 	return $vars;
@@ -859,17 +859,17 @@ function isg_border_vars( $border ) {
  * @param mixed $radius Attribute value.
  * @return string
  */
-function isg_radius_value( $radius ) {
+function isgal_radius_value( $radius ) {
 	if ( is_array( $radius ) ) {
 		$corners = array( 'topLeft', 'topRight', 'bottomRight', 'bottomLeft' );
 		$out     = array();
 		foreach ( $corners as $c ) {
-			$v     = isg_css_value( $radius[ $c ] ?? '' );
+			$v     = isgal_css_value( $radius[ $c ] ?? '' );
 			$out[] = '' !== $v ? $v : '0';
 		}
 		return implode( ' ', $out );
 	}
-	return isg_css_value( $radius );
+	return isgal_css_value( $radius );
 }
 
 /**
@@ -879,27 +879,27 @@ function isg_radius_value( $radius ) {
  * @param array $a Resolved attributes.
  * @return array{vars: array<string,string>, classes: string[]}
  */
-function isg_style_vars( array $a ) {
-	$vars    = isg_border_vars( $a['imageBorder'] );
+function isgal_style_vars( array $a ) {
+	$vars    = isgal_border_vars( $a['imageBorder'] );
 	$classes = array();
 
-	$radius = isg_radius_value( $a['imageRadius'] );
+	$radius = isgal_radius_value( $a['imageRadius'] );
 	if ( '' !== $radius ) {
-		$vars['--isg-img-radius'] = $radius;
+		$vars['--isgal-img-radius'] = $radius;
 	}
-	$shadow = isg_css_value( $a['imageShadow'] );
+	$shadow = isgal_css_value( $a['imageShadow'] );
 	if ( '' !== $shadow ) {
-		$vars['--isg-img-shadow'] = $shadow;
+		$vars['--isgal-img-shadow'] = $shadow;
 	}
 
 	if ( ! empty( $a['separateText'] ) ) {
 		foreach ( array(
-			'titleColor'   => array( '--isg-title-color', 'isg-has-title-color' ),
-			'titleSize'    => array( '--isg-title-size', 'isg-has-title-size' ),
-			'captionColor' => array( '--isg-caption-color', 'isg-has-caption-color' ),
-			'captionSize'  => array( '--isg-caption-size', 'isg-has-caption-size' ),
+			'titleColor'   => array( '--isgal-title-color', 'isgal-has-title-color' ),
+			'titleSize'    => array( '--isgal-title-size', 'isgal-has-title-size' ),
+			'captionColor' => array( '--isgal-caption-color', 'isgal-has-caption-color' ),
+			'captionSize'  => array( '--isgal-caption-size', 'isgal-has-caption-size' ),
 		) as $key => $target ) {
-			$v = isg_css_value( $a[ $key ] );
+			$v = isgal_css_value( $a[ $key ] );
 			if ( '' !== $v ) {
 				$vars[ $target[0] ] = $v;
 				$classes[]          = $target[1];
@@ -919,10 +919,10 @@ function isg_style_vars( array $a ) {
  * @param array $attributes Block attributes.
  * @return string HTML.
  */
-function isg_render_gallery( array $attributes ) {
-	$a = isg_resolve_attributes( $attributes );
+function isgal_render_gallery( array $attributes ) {
+	$a = isgal_resolve_attributes( $attributes );
 
-	$endpoint = isg_resolve_endpoint( $a );
+	$endpoint = isgal_resolve_endpoint( $a );
 
 	$layout = in_array( $a['layout'], array( 'grid', 'masonry' ), true ) ? $a['layout'] : 'grid';
 	$cols   = max( 1, min( 8, (int) $a['columns'] ) );
@@ -934,17 +934,17 @@ function isg_render_gallery( array $attributes ) {
 		$ratio = 'original';
 	}
 
-	$style   = isg_style_vars( $a );
-	$classes = implode( ' ', array_merge( array( 'isg-gallery', 'isg-layout-' . $layout, 'isg-ratio-' . $ratio ), $style['classes'] ) );
+	$style   = isgal_style_vars( $a );
+	$classes = implode( ' ', array_merge( array( 'isgal-gallery', 'isgal-layout-' . $layout, 'isgal-ratio-' . $ratio ), $style['classes'] ) );
 	$extra   = array( 'class' => $classes );
 
 	// Column count, and the count phones get (never more than two).
-	$style['vars']['--isg-cols']    = (string) $cols;
-	$style['vars']['--isg-cols-sm'] = (string) min( 2, $cols );
+	$style['vars']['--isgal-cols']    = (string) $cols;
+	$style['vars']['--isgal-cols-sm'] = (string) min( 2, $cols );
 
-	$gap = isg_block_gap_css( $attributes );
+	$gap = isgal_block_gap_css( $attributes );
 	if ( '' !== $gap ) {
-		$style['vars']['--isg-gap'] = $gap;
+		$style['vars']['--isgal-gap'] = $gap;
 	}
 	if ( $style['vars'] ) {
 		$decls = array();
@@ -957,17 +957,17 @@ function isg_render_gallery( array $attributes ) {
 
 	if ( '' === trim( (string) $a['gallery'] ) ) {
 		return sprintf(
-			'<div %s><p class="isg-message">%s</p></div>',
+			'<div %s><p class="isgal-message">%s</p></div>',
 			$wrapper_attributes,
 			esc_html__( 'Enter an ImageSnippets gallery name in the block settings.', 'image-snippets-gallery' )
 		);
 	}
 
-	$rows = isg_gallery_rows( $a, $endpoint );
+	$rows = isgal_gallery_rows( $a, $endpoint );
 
 	if ( is_wp_error( $rows ) ) {
 		return sprintf(
-			'<div %s><p class="isg-message isg-error">%s</p></div>',
+			'<div %s><p class="isgal-message isgal-error">%s</p></div>',
 			$wrapper_attributes,
 			esc_html__( 'Unable to load gallery right now.', 'image-snippets-gallery' )
 		);
@@ -979,27 +979,27 @@ function isg_render_gallery( array $attributes ) {
 	ob_start();
 	?>
 	<div <?php echo $wrapper_attributes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
-		<?php echo isg_editor_notice( $rows ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+		<?php echo isgal_editor_notice( $rows ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 
 		<?php
 		if ( $a['displayTitle'] ) :
-			$isg_level = (int) $a['titleLevel'];
-			$isg_tag   = 'h' . ( $isg_level >= 1 && $isg_level <= 6 ? $isg_level : 2 );
+			$isgal_level = (int) $a['titleLevel'];
+			$isgal_tag   = 'h' . ( $isgal_level >= 1 && $isgal_level <= 6 ? $isgal_level : 2 );
 			?>
-			<<?php echo $isg_tag; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- h1..h6 only. ?> class="isg-title"><?php echo esc_html( $a['gallery'] ); ?></<?php echo $isg_tag; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+			<<?php echo $isgal_tag; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- h1..h6 only. ?> class="isgal-title"><?php echo esc_html( $a['gallery'] ); ?></<?php echo $isgal_tag; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 		<?php endif; ?>
 
 		<?php if ( empty( $rows ) ) : ?>
-			<p class="isg-message"><?php echo esc_html( sprintf( /* translators: %s: gallery name */ __( '%s — no images available.', 'image-snippets-gallery' ), $a['gallery'] ) ); ?></p>
+			<p class="isgal-message"><?php echo esc_html( sprintf( /* translators: %s: gallery name */ __( '%s — no images available.', 'image-snippets-gallery' ), $a['gallery'] ) ); ?></p>
 		<?php else : ?>
-			<div class="isg-grid">
+			<div class="isgal-grid">
 				<?php
 				foreach ( $rows as $row ) :
 					++$position;
-					$title = isg_row_title( $row, $use_filename );
-					$alt   = isg_row_alt( $row );
+					$title = isgal_row_title( $row, $use_filename );
+					$alt   = isgal_row_alt( $row );
 					// Always give the link an accessible name, even when alt is empty.
-					$label = isg_first(
+					$label = isgal_first(
 						array(
 							$alt,
 							$title,
@@ -1007,9 +1007,9 @@ function isg_render_gallery( array $attributes ) {
 						)
 					);
 					// Anchor for search results, which link here with #fragment.
-					$isg_anchor = isg_image_anchor( $row['page'] );
+					$isgal_anchor = isgal_image_anchor( $row['page'] );
 					?>
-					<figure class="isg-item"<?php echo '' !== $isg_anchor ? ' id="' . esc_attr( $isg_anchor ) . '"' : ''; ?> vocab="https://schema.org/" typeof="ImageObject">
+					<figure class="isgal-item"<?php echo '' !== $isgal_anchor ? ' id="' . esc_attr( $isgal_anchor ) . '"' : ''; ?> vocab="https://schema.org/" typeof="ImageObject">
 						<a href="<?php echo esc_url( $row['page'] ? $row['page'] : '#' ); ?>" aria-label="<?php echo esc_attr( $label ); ?>" target="_blank" rel="noopener">
 							<?php
 							// The source URL (contentUrl) is the full-res original; for Flickr it
@@ -1019,31 +1019,31 @@ function isg_render_gallery( array $attributes ) {
 							// as an onerror fallback for link-rotted 2013-era source URLs.
 							// Prefer the explicit contentUrl, else the image IRI (itself the full-res
 							// source URL), and only fall back to the 128px thumbnail as a last resort.
-							$isg_source = $row['content'];
-							if ( '' === $isg_source && preg_match( '#^https?://#i', $row['image'] ) ) {
-								$isg_source = $row['image'];
+							$isgal_source = $row['content'];
+							if ( '' === $isgal_source && preg_match( '#^https?://#i', $row['image'] ) ) {
+								$isgal_source = $row['image'];
 							}
-							if ( '' === $isg_source ) {
-								$isg_source = $row['thumb'];
+							if ( '' === $isgal_source ) {
+								$isgal_source = $row['thumb'];
 							}
-							$isg_src_map = array(
+							$isgal_src_map = array(
 								'small'  => 'n',
 								'medium' => 'z',
 								'large'  => 'c',
 							);
-							$isg_code    = isset( $isg_src_map[ $size ] ) ? $isg_src_map[ $size ] : 'z';
-							$isg_src     = isg_flickr_sized( $isg_source, $isg_code );
-							$isg_srcset  = isg_flickr_srcset( $isg_source );
+							$isgal_code    = isset( $isgal_src_map[ $size ] ) ? $isgal_src_map[ $size ] : 'z';
+							$isgal_src     = isgal_flickr_sized( $isgal_source, $isgal_code );
+							$isgal_srcset  = isgal_flickr_srcset( $isgal_source );
 							// One column's share of the viewport; phones cap at two columns.
-							$isg_sizes = sprintf( '(max-width: 600px) %dvw, %dvw', (int) ( 100 / min( 2, $cols ) ), (int) ceil( 100 / $cols ) );
+							$isgal_sizes = sprintf( '(max-width: 600px) %dvw, %dvw', (int) ( 100 / min( 2, $cols ) ), (int) ceil( 100 / $cols ) );
 							?>
 							<img
-								src="<?php echo esc_url( $isg_src ); ?>"
-								<?php if ( '' !== $isg_srcset ) : ?>
-								srcset="<?php echo esc_attr( $isg_srcset ); ?>"
-								sizes="<?php echo esc_attr( $isg_sizes ); ?>"
+								src="<?php echo esc_url( $isgal_src ); ?>"
+								<?php if ( '' !== $isgal_srcset ) : ?>
+								srcset="<?php echo esc_attr( $isgal_srcset ); ?>"
+								sizes="<?php echo esc_attr( $isgal_sizes ); ?>"
 								<?php endif; ?>
-								<?php if ( $row['thumb'] && $row['thumb'] !== $isg_src ) : ?>
+								<?php if ( $row['thumb'] && $row['thumb'] !== $isgal_src ) : ?>
 								onerror='this.onerror=null;this.removeAttribute("srcset");this.src="<?php echo esc_url( $row['thumb'] ); ?>";'
 								<?php endif; ?>
 								alt="<?php echo esc_attr( $alt ); ?>"
@@ -1059,7 +1059,7 @@ function isg_render_gallery( array $attributes ) {
 							<span property="acquireLicensePage" hidden><?php echo esc_html( $row['licurl'] ); ?></span>
 						<?php endif; ?>
 						<?php if ( $a['displayCaption'] && '' !== $title ) : ?>
-							<figcaption class="isg-caption" property="name"><?php echo esc_html( $title ); ?></figcaption>
+							<figcaption class="isgal-caption" property="name"><?php echo esc_html( $title ); ?></figcaption>
 						<?php endif; ?>
 					</figure>
 				<?php endforeach; ?>
@@ -1067,12 +1067,12 @@ function isg_render_gallery( array $attributes ) {
 			<?php
 			// One rights line for the whole gallery, but only when it is true of
 			// every image shown; otherwise it would misattribute someone's work.
-			$isg_rights = array_unique( array_map( 'strval', wp_list_pluck( $rows, 'rights' ) ) );
-			if ( 1 === count( $isg_rights ) && '' !== reset( $isg_rights ) ) :
+			$isgal_rights = array_unique( array_map( 'strval', wp_list_pluck( $rows, 'rights' ) ) );
+			if ( 1 === count( $isgal_rights ) && '' !== reset( $isgal_rights ) ) :
 				?>
-				<p class="isg-footer"><?php echo esc_html( sprintf( /* translators: %s: rights statement */ __( 'Images %s', 'image-snippets-gallery' ), reset( $isg_rights ) ) ); ?></p>
+				<p class="isgal-footer"><?php echo esc_html( sprintf( /* translators: %s: rights statement */ __( 'Images %s', 'image-snippets-gallery' ), reset( $isgal_rights ) ) ); ?></p>
 			<?php endif; ?>
-			<?php echo isg_jsonld( $rows, $a['gallery'], $use_filename, $a['jsonldProfile'], isg_current_permalink() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php echo isgal_jsonld( $rows, $a['gallery'], $use_filename, $a['jsonldProfile'], isgal_current_permalink() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 		<?php endif; ?>
 	</div>
 	<?php

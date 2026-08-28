@@ -1,6 +1,6 @@
 <?php
 /**
- * WP-CLI: `wp isg`.
+ * WP-CLI: `wp isgal`.
  *
  * For hosts where cron is unreliable, for scripting a sync after a bulk change
  * on ImageSnippets, and for seeing what the mirror holds without opening
@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Manage the ImageSnippets gallery mirror.
  */
-class ISG_CLI_Command {
+class ISGAL_CLI_Command {
 
 	/**
 	 * Synchronise galleries from ImageSnippets into the mirror.
@@ -36,8 +36,8 @@ class ISG_CLI_Command {
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     wp isg sync
-	 *     wp isg sync hs_gallery02
+	 *     wp isgal sync
+	 *     wp isgal sync hs_gallery02
 	 *
 	 * @param array $args       Positional args.
 	 * @param array $assoc_args Flags.
@@ -46,32 +46,32 @@ class ISG_CLI_Command {
 		$force = empty( $assoc_args['cron'] );
 
 		if ( ! empty( $args[0] ) ) {
-			$endpoint = ! empty( $assoc_args['endpoint'] ) ? esc_url_raw( $assoc_args['endpoint'] ) : isg_default_endpoint();
+			$endpoint = ! empty( $assoc_args['endpoint'] ) ? esc_url_raw( $assoc_args['endpoint'] ) : isgal_default_endpoint();
 			$result   = $force
-				? isg_refresh_gallery( $endpoint, $args[0] )
-				: isg_sync_gallery( $endpoint, $args[0], array( 'timeout' => 20 ) );
+				? isgal_refresh_gallery( $endpoint, $args[0] )
+				: isgal_sync_gallery( $endpoint, $args[0], array( 'timeout' => 20 ) );
 			$this->report( $args[0], $result );
 			return;
 		}
 
 		if ( $force ) {
-			$results = isg_refresh_all_galleries();
+			$results = isgal_refresh_all_galleries();
 		} else {
 			$results = array();
 			$done    = array();
-			foreach ( isg_indexed_gallery_blocks() as $block ) {
-				$a   = isg_resolve_attributes( $block['attrs'] );
-				$key = isg_resolve_endpoint( $a ) . '|' . $block['gallery'];
+			foreach ( isgal_indexed_gallery_blocks() as $block ) {
+				$a   = isgal_resolve_attributes( $block['attrs'] );
+				$key = isgal_resolve_endpoint( $a ) . '|' . $block['gallery'];
 				if ( isset( $done[ $key ] ) ) {
 					continue;
 				}
 				$done[ $key ]                 = true;
-				$results[ $block['gallery'] ] = isg_sync_gallery( isg_resolve_endpoint( $a ), $block['gallery'], array( 'timeout' => 20 ) );
+				$results[ $block['gallery'] ] = isgal_sync_gallery( isgal_resolve_endpoint( $a ), $block['gallery'], array( 'timeout' => 20 ) );
 			}
 		}
 
 		if ( empty( $results ) ) {
-			WP_CLI::warning( 'No galleries are in use on this site. Add a gallery block to a page first, or run `wp isg reindex`.' );
+			WP_CLI::warning( 'No galleries are in use on this site. Add a gallery block to a page first, or run `wp isgal reindex`.' );
 			return;
 		}
 		$failed = 0;
@@ -99,10 +99,10 @@ class ISG_CLI_Command {
 	 */
 	public function status( $args, $assoc_args ) {
 		$rows   = array();
-		$status = isg_sync_status();
+		$status = isgal_sync_status();
 		$terms  = get_terms(
 			array(
-				'taxonomy'   => ISG_TAXONOMY,
+				'taxonomy'   => ISGAL_TAXONOMY,
 				'hide_empty' => false,
 			)
 		);
@@ -110,21 +110,21 @@ class ISG_CLI_Command {
 		$seen   = array();
 
 		foreach ( $terms as $term ) {
-			$gallery          = (string) get_term_meta( $term->term_id, ISG_TERM_GALLERY, true );
+			$gallery          = (string) get_term_meta( $term->term_id, ISGAL_TERM_GALLERY, true );
 			$gallery          = '' !== $gallery ? $gallery : $term->name;
-			$synced           = isg_gallery_synced_at( $term );
+			$synced           = isgal_gallery_synced_at( $term );
 			$s                = isset( $status[ $gallery ] ) ? $status[ $gallery ] : array();
 			$rows[]           = array(
 				'gallery'   => $gallery,
-				'endpoint'  => (string) get_term_meta( $term->term_id, ISG_TERM_ENDPOINT, true ),
+				'endpoint'  => (string) get_term_meta( $term->term_id, ISGAL_TERM_ENDPOINT, true ),
 				'mirrored'  => (int) $term->count,
 				'last_sync' => $synced ? gmdate( 'Y-m-d H:i:s', $synced ) . ' UTC' : 'never',
-				'pages'     => count( isg_posts_for_gallery( $gallery ) ),
+				'pages'     => count( isgal_posts_for_gallery( $gallery ) ),
 				'error'     => isset( $s['error'] ) ? (string) $s['error'] : '',
 			);
 			$seen[ $gallery ] = true;
 		}
-		foreach ( isg_indexed_galleries() as $gallery ) {
+		foreach ( isgal_indexed_galleries() as $gallery ) {
 			if ( isset( $seen[ $gallery ] ) ) {
 				continue;
 			}
@@ -133,7 +133,7 @@ class ISG_CLI_Command {
 				'endpoint'  => '',
 				'mirrored'  => 0,
 				'last_sync' => 'never',
-				'pages'     => count( isg_posts_for_gallery( $gallery ) ),
+				'pages'     => count( isgal_posts_for_gallery( $gallery ) ),
 				'error'     => '',
 			);
 		}
@@ -149,7 +149,7 @@ class ISG_CLI_Command {
 	 * Drop mirrored galleries that no page uses any more.
 	 */
 	public function prune() {
-		$dropped = isg_prune_mirror();
+		$dropped = isgal_prune_mirror();
 		WP_CLI::success( $dropped ? 'Dropped: ' . implode( ', ', $dropped ) : 'Nothing to prune.' );
 	}
 
@@ -157,7 +157,7 @@ class ISG_CLI_Command {
 	 * Rebuild the index of which pages show which galleries.
 	 */
 	public function reindex() {
-		WP_CLI::success( sprintf( '%d posts contain a gallery.', isg_rebuild_index() ) );
+		WP_CLI::success( sprintf( '%d posts contain a gallery.', isgal_rebuild_index() ) );
 	}
 
 	/**
@@ -173,7 +173,7 @@ class ISG_CLI_Command {
 	 */
 	public function reset( $args, $assoc_args ) {
 		WP_CLI::confirm( 'Delete every mirrored image and gallery label?', $assoc_args );
-		WP_CLI::success( sprintf( 'Deleted %d mirrored images.', isg_mirror_drop_all() ) );
+		WP_CLI::success( sprintf( 'Deleted %d mirrored images.', isgal_mirror_drop_all() ) );
 	}
 
 	/**
@@ -204,4 +204,4 @@ class ISG_CLI_Command {
 	}
 }
 
-WP_CLI::add_command( 'isg', 'ISG_CLI_Command' );
+WP_CLI::add_command( 'isgal', 'ISGAL_CLI_Command' );

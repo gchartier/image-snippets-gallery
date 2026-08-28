@@ -8,14 +8,14 @@
 ( function () {
 	'use strict';
 
-	const grid = document.getElementById( 'isg-reorder-grid' );
-	const saveBtn = document.getElementById( 'isg-reorder-save' );
-	const clearBtn = document.getElementById( 'isg-reorder-clear' );
+	const grid = document.getElementById( 'isgal-reorder-grid' );
+	const saveBtn = document.getElementById( 'isgal-reorder-save' );
+	const clearBtn = document.getElementById( 'isgal-reorder-clear' );
 	if ( ! grid || ! saveBtn || ! clearBtn ) {
 		return;
 	}
-	const cfg = window.isgReorder || {};
-	const statusEl = document.getElementById( 'isg-reorder-status' );
+	const cfg = window.isgalReorder || {};
+	const statusEl = document.getElementById( 'isgal-reorder-status' );
 
 	let items = [];
 	let dirty = false;
@@ -80,19 +80,19 @@
 		grid.innerHTML = '';
 		if ( ! items.length ) {
 			const empty = document.createElement( 'li' );
-			empty.className = 'isg-reorder__empty';
+			empty.className = 'isgal-reorder__empty';
 			empty.textContent = t( 'empty' );
 			grid.appendChild( empty );
 			return;
 		}
 		items.forEach( function ( item, index ) {
 			const li = document.createElement( 'li' );
-			li.className = 'isg-reorder__item';
+			li.className = 'isgal-reorder__item';
 			li.draggable = true;
 			li.dataset.index = String( index );
 
 			const img = document.createElement( 'img' );
-			img.className = 'isg-reorder__thumb';
+			img.className = 'isgal-reorder__thumb';
 			img.src = item.thumb;
 			img.alt = '';
 			img.loading = 'lazy';
@@ -106,25 +106,25 @@
 			li.appendChild( img );
 
 			const pos = document.createElement( 'span' );
-			pos.className = 'isg-reorder__pos';
+			pos.className = 'isgal-reorder__pos';
 			pos.textContent = String( index + 1 );
 			li.appendChild( pos );
 
 			if ( ! item.arranged ) {
 				const badge = document.createElement( 'span' );
-				badge.className = 'isg-reorder__new';
+				badge.className = 'isgal-reorder__new';
 				badge.textContent = t( 'newBadge' );
 				li.appendChild( badge );
 			}
 
 			const title = document.createElement( 'span' );
-			title.className = 'isg-reorder__title';
+			title.className = 'isgal-reorder__title';
 			title.textContent = item.title || '';
 			title.title = item.title || '';
 			li.appendChild( title );
 
 			const nudge = document.createElement( 'div' );
-			nudge.className = 'isg-reorder__nudge';
+			nudge.className = 'isgal-reorder__nudge';
 			const up = document.createElement( 'button' );
 			up.type = 'button';
 			up.textContent = '←';

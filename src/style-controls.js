@@ -10,7 +10,7 @@
  *
  * Every value is stored as a plain CSS string (or a per-side object) and the
  * server turns it into custom properties on the wrapper; see
- * isg_style_vars() in includes/query.php. Nothing here is duplicated in the
+ * isgal_style_vars() in includes/query.php. Nothing here is duplicated in the
  * editor preview because ServerSideRender receives these attributes intact.
  */
 import { __ } from '@wordpress/i18n';

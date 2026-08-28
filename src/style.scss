@@ -4,23 +4,23 @@
 .wp-block-imagesnippets-gallery {
 	// A real heading (h1–h6, level chosen in the toolbar); the theme owns its
 	// typography. Only the outer margin is normalised so it sits on the grid.
-	.isg-title {
+	.isgal-title {
 		margin: 0 0 0.5em;
 	}
 
-	// --isg-cols / --isg-cols-sm are set on the wrapper by the server from the
+	// --isgal-cols / --isgal-cols-sm are set on the wrapper by the server from the
 	// block's Columns setting; phones never get more than two.
-	.isg-grid {
+	.isgal-grid {
 		display: grid;
-		gap: var( --isg-gap, 0.75rem );
-		grid-template-columns: repeat( var( --isg-cols, 3 ), minmax( 0, 1fr ) );
+		gap: var( --isgal-gap, 0.75rem );
+		grid-template-columns: repeat( var( --isgal-cols, 3 ), minmax( 0, 1fr ) );
 
 		@media ( max-width: 600px ) {
-			grid-template-columns: repeat( var( --isg-cols-sm, 2 ), minmax( 0, 1fr ) );
+			grid-template-columns: repeat( var( --isgal-cols-sm, 2 ), minmax( 0, 1fr ) );
 		}
 	}
 
-	.isg-item {
+	.isgal-item {
 		margin: 0;
 		// Search hits link here as #fragment; leave room above so the image is
 		// not jammed against the viewport edge (or under a sticky header).
@@ -33,15 +33,15 @@
 			height: auto;
 			object-fit: cover;
 			// Thumbnail border / radius / shadow come from the block's Images
-			// panel via custom properties on the wrapper (isg_style_vars()).
+			// panel via custom properties on the wrapper (isgal_style_vars()).
 			// A whole-box border wins over nothing; a per-side one wins over both.
-			border: var( --isg-img-border, 0 );
-			border-top: var( --isg-img-border-top, var( --isg-img-border, 0 ) );
-			border-right: var( --isg-img-border-right, var( --isg-img-border, 0 ) );
-			border-bottom: var( --isg-img-border-bottom, var( --isg-img-border, 0 ) );
-			border-left: var( --isg-img-border-left, var( --isg-img-border, 0 ) );
-			border-radius: var( --isg-img-radius, 4px );
-			box-shadow: var( --isg-img-shadow, none );
+			border: var( --isgal-img-border, 0 );
+			border-top: var( --isgal-img-border-top, var( --isgal-img-border, 0 ) );
+			border-right: var( --isgal-img-border-right, var( --isgal-img-border, 0 ) );
+			border-bottom: var( --isgal-img-border-bottom, var( --isgal-img-border, 0 ) );
+			border-left: var( --isgal-img-border-left, var( --isgal-img-border, 0 ) );
+			border-radius: var( --isgal-img-radius, 4px );
+			box-shadow: var( --isgal-img-shadow, none );
 		}
 	}
 
@@ -50,19 +50,19 @@
 	// say so visibly, then fade out rather than leaving the page marked up
 	// permanently. Both the fade and the reduced-motion fallback end at the
 	// same transparent outline, so the resting state is identical either way.
-	.isg-item:target {
-		outline: 3px solid var( --isg-target-color, currentColor );
+	.isgal-item:target {
+		outline: 3px solid var( --isgal-target-color, currentColor );
 		outline-offset: 3px;
-		border-radius: var( --isg-img-radius, 4px );
-		animation: isg-target-fade 4s ease-out 1s forwards;
+		border-radius: var( --isgal-img-radius, 4px );
+		animation: isgal-target-fade 4s ease-out 1s forwards;
 	}
 
-	@keyframes isg-target-fade {
+	@keyframes isgal-target-fade {
 		to { outline-color: transparent; }
 	}
 
 	@media ( prefers-reduced-motion: reduce ) {
-		.isg-item:target {
+		.isgal-item:target {
 			animation: none;
 			// Held, not faded: without motion there is no cue that it changed,
 			// so the marker has to stay for the visitor to find it at all.
@@ -73,13 +73,13 @@
 	// aspect-ratio alone sizes the box from the column width; do NOT add
 	// height: 100% — inside a stretched grid cell that resolves to the whole
 	// row height, so the image grows past its ratio and covers the caption.
-	&.isg-ratio-1-1 .isg-item img { aspect-ratio: 1 / 1; }
-	&.isg-ratio-4-3 .isg-item img { aspect-ratio: 4 / 3; }
-	&.isg-ratio-3-2 .isg-item img { aspect-ratio: 3 / 2; }
-	&.isg-ratio-16-9 .isg-item img { aspect-ratio: 16 / 9; }
-	// isg-ratio-original intentionally sets no aspect-ratio.
+	&.isgal-ratio-1-1 .isgal-item img { aspect-ratio: 1 / 1; }
+	&.isgal-ratio-4-3 .isgal-item img { aspect-ratio: 4 / 3; }
+	&.isgal-ratio-3-2 .isgal-item img { aspect-ratio: 3 / 2; }
+	&.isgal-ratio-16-9 .isgal-item img { aspect-ratio: 16 / 9; }
+	// isgal-ratio-original intentionally sets no aspect-ratio.
 
-	.isg-caption {
+	.isgal-caption {
 		font-size: 0.85em;
 		margin-top: 0.35em;
 	}
@@ -87,34 +87,34 @@
 	// "Style title and captions separately": the server sets a custom property
 	// and a gate class per value, so an unset size leaves the theme's heading
 	// size (or the caption default above) alone instead of collapsing to inherit.
-	&.isg-has-title-color .isg-title { color: var( --isg-title-color ); }
-	&.isg-has-title-size .isg-title { font-size: var( --isg-title-size ); }
-	&.isg-has-caption-color .isg-caption { color: var( --isg-caption-color ); }
-	&.isg-has-caption-size .isg-caption { font-size: var( --isg-caption-size ); }
+	&.isgal-has-title-color .isgal-title { color: var( --isgal-title-color ); }
+	&.isgal-has-title-size .isgal-title { font-size: var( --isgal-title-size ); }
+	&.isgal-has-caption-color .isgal-caption { color: var( --isgal-caption-color ); }
+	&.isgal-has-caption-size .isgal-caption { font-size: var( --isgal-caption-size ); }
 
-	.isg-footer,
-	.isg-message {
+	.isgal-footer,
+	.isgal-message {
 		font-size: 0.85em;
 		opacity: 0.8;
 	}
 
-	.isg-error {
+	.isgal-error {
 		color: #b32d2e;
 	}
 
 	// Masonry: CSS columns instead of grid.
-	&.isg-layout-masonry .isg-grid {
+	&.isgal-layout-masonry .isgal-grid {
 		display: block;
-		column-count: var( --isg-cols, 3 );
-		column-gap: var( --isg-gap, 0.75rem );
+		column-count: var( --isgal-cols, 3 );
+		column-gap: var( --isgal-gap, 0.75rem );
 
 		@media ( max-width: 600px ) {
-			column-count: var( --isg-cols-sm, 2 );
+			column-count: var( --isgal-cols-sm, 2 );
 		}
 
-		.isg-item {
+		.isgal-item {
 			break-inside: avoid;
-			margin-bottom: var( --isg-gap, 0.75rem );
+			margin-bottom: var( --isgal-gap, 0.75rem );
 		}
 	}
 }

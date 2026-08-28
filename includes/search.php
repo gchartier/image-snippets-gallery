@@ -38,18 +38,18 @@ defined( 'ABSPATH' ) || exit;
  * @param WP_Post $post Mirror post.
  * @return string URL.
  */
-function isg_mirror_post_url( WP_Post $post ) {
+function isgal_mirror_post_url( WP_Post $post ) {
 	static $by_term = array();
 
-	$page   = (string) get_post_meta( $post->ID, ISG_META_PAGE, true );
-	$anchor = isg_image_anchor( $page );
+	$page   = (string) get_post_meta( $post->ID, ISGAL_META_PAGE, true );
+	$anchor = isgal_image_anchor( $page );
 
-	$terms = wp_get_object_terms( $post->ID, ISG_TAXONOMY );
+	$terms = wp_get_object_terms( $post->ID, ISGAL_TAXONOMY );
 	if ( ! is_wp_error( $terms ) ) {
 		foreach ( $terms as $term ) {
 			if ( ! array_key_exists( $term->term_id, $by_term ) ) {
-				$gallery = (string) get_term_meta( $term->term_id, ISG_TERM_GALLERY, true );
-				$pages   = isg_posts_for_gallery( '' !== $gallery ? $gallery : $term->name );
+				$gallery = (string) get_term_meta( $term->term_id, ISGAL_TERM_GALLERY, true );
+				$pages   = isgal_posts_for_gallery( '' !== $gallery ? $gallery : $term->name );
 				$url     = '';
 				foreach ( $pages as $page_id ) {
 					$url = (string) get_permalink( $page_id );
@@ -78,13 +78,13 @@ function isg_mirror_post_url( WP_Post $post ) {
  * @param WP_Post $post Post.
  * @return string
  */
-function isg_filter_mirror_permalink( $url, $post ) {
-	if ( $post instanceof WP_Post && ISG_POST_TYPE === $post->post_type ) {
-		return isg_mirror_post_url( $post );
+function isgal_filter_mirror_permalink( $url, $post ) {
+	if ( $post instanceof WP_Post && ISGAL_POST_TYPE === $post->post_type ) {
+		return isgal_mirror_post_url( $post );
 	}
 	return $url;
 }
-add_filter( 'post_type_link', 'isg_filter_mirror_permalink', 10, 2 );
+add_filter( 'post_type_link', 'isgal_filter_mirror_permalink', 10, 2 );
 
 /**
  * Resolve a requested image size to pixels.
@@ -92,7 +92,7 @@ add_filter( 'post_type_link', 'isg_filter_mirror_permalink', 10, 2 );
  * @param string|int[] $size Registered size name, or array( width, height ).
  * @return array array( width, height, crop ); zero width means "unconstrained".
  */
-function isg_size_dimensions( $size ) {
+function isgal_size_dimensions( $size ) {
 	if ( is_array( $size ) ) {
 		return array(
 			isset( $size[0] ) ? (int) $size[0] : 0,
@@ -130,25 +130,25 @@ function isg_size_dimensions( $size ) {
  * @param string|array $attr         Attributes the caller asked for.
  * @return string
  */
-function isg_filter_mirror_thumbnail( $html, $post_id, $thumbnail_id, $size, $attr ) {
+function isgal_filter_mirror_thumbnail( $html, $post_id, $thumbnail_id, $size, $attr ) {
 	$post = get_post( $post_id );
-	if ( ! $post instanceof WP_Post || ISG_POST_TYPE !== $post->post_type || '' !== $html ) {
+	if ( ! $post instanceof WP_Post || ISGAL_POST_TYPE !== $post->post_type || '' !== $html ) {
 		return $html;
 	}
-	$row = isg_mirror_read_row( $post_id );
+	$row = isgal_mirror_read_row( $post_id );
 	if ( null === $row ) {
 		return $html;
 	}
-	$source = isg_first( array( $row['content'], $row['thumb'] ) );
+	$source = isgal_first( array( $row['content'], $row['thumb'] ) );
 	if ( '' === $source ) {
 		return $html;
 	}
 
-	list( $target_w, $target_h, $crop ) = isg_size_dimensions( $size );
+	list( $target_w, $target_h, $crop ) = isgal_size_dimensions( $size );
 
 	// Fetch a rendition near the requested width where the source offers them;
 	// a non-Flickr URL has only the original, and comes back unchanged.
-	$src = isg_flickr_sized( $source, isg_flickr_code_for_width( $target_w ) );
+	$src = isgal_flickr_sized( $source, isgal_flickr_code_for_width( $target_w ) );
 
 	// A cropped size is a box, and the box is what gets rendered. Otherwise
 	// scale the true pixel dimensions — from the graph, so they are the image's
@@ -159,7 +159,7 @@ function isg_filter_mirror_thumbnail( $html, $post_id, $thumbnail_id, $size, $at
 		$width  = $target_w;
 		$height = $target_h;
 	} else {
-		$dimensions = isg_row_dimensions( $row );
+		$dimensions = isgal_row_dimensions( $row );
 		if ( null !== $dimensions ) {
 			list( $width, $height ) = $target_w || $target_h
 				? wp_constrain_dimensions( $dimensions[0], $dimensions[1], $target_w, $target_h )
@@ -173,17 +173,17 @@ function isg_filter_mirror_thumbnail( $html, $post_id, $thumbnail_id, $size, $at
 		array(
 			'src'      => $src,
 			'class'    => "attachment-{$size_class} size-{$size_class}",
-			'alt'      => isg_row_alt( $row ),
+			'alt'      => isgal_row_alt( $row ),
 			'decoding' => 'async',
 		)
 	);
 
 	// Appended after the merge, exactly as core's _wp_post_thumbnail_class_filter
 	// does, so a caller that supplied its own class still gets the one themes
-	// use to recognise a featured image. isg-search-thumbnail rides along as a
+	// use to recognise a featured image. isgal-search-thumbnail rides along as a
 	// stable hook for a site that wants to treat these differently; nothing in
 	// this plugin styles it, by design — the theme's own rules should apply.
-	$attr['class'] = trim( $attr['class'] . ' wp-post-image isg-search-thumbnail' );
+	$attr['class'] = trim( $attr['class'] . ' wp-post-image isgal-search-thumbnail' );
 
 	if ( $width && ( ! isset( $attr['width'] ) || ! is_numeric( $attr['width'] ) ) ) {
 		$attr['width'] = $width;
@@ -206,7 +206,7 @@ function isg_filter_mirror_thumbnail( $html, $post_id, $thumbnail_id, $size, $at
 	}
 
 	if ( empty( $attr['srcset'] ) ) {
-		$srcset = isg_flickr_srcset( $source );
+		$srcset = isgal_flickr_srcset( $source );
 		if ( '' !== $srcset ) {
 			$attr['srcset'] = $srcset;
 			if ( empty( $attr['sizes'] ) && $width ) {
@@ -225,12 +225,12 @@ function isg_filter_mirror_thumbnail( $html, $post_id, $thumbnail_id, $size, $at
 	}
 	return $tags->get_updated_html();
 }
-add_filter( 'post_thumbnail_html', 'isg_filter_mirror_thumbnail', 10, 5 );
+add_filter( 'post_thumbnail_html', 'isgal_filter_mirror_thumbnail', 10, 5 );
 
 /**
  * The text a mirror post shows, as opposed to the text it matches on.
  *
- * post_content holds isg_row_search_text(): title, description, alt, creator,
+ * post_content holds isgal_row_search_text(): title, description, alt, creator,
  * rights and every entity label and keyword the graph carries, one per line.
  * That is what lets a search for "rafter" find an image whose title never says
  * so, and it belongs in a column WordPress will search. It does not belong on
@@ -241,12 +241,12 @@ add_filter( 'post_thumbnail_html', 'isg_filter_mirror_thumbnail', 10, 5 );
  * @param int|WP_Post $post Post.
  * @return string Plain text, or '' when there is nothing to say.
  */
-function isg_mirror_display_text( $post ) {
-	$row = isg_mirror_read_row( is_object( $post ) ? $post->ID : (int) $post );
+function isgal_mirror_display_text( $post ) {
+	$row = isgal_mirror_read_row( is_object( $post ) ? $post->ID : (int) $post );
 	if ( null === $row ) {
 		return '';
 	}
-	return isg_first( array( $row['desc'], $row['alt'], $row['title'], $row['name'] ) );
+	return isgal_first( array( $row['desc'], $row['alt'], $row['title'], $row['name'] ) );
 }
 
 /**
@@ -256,14 +256,14 @@ function isg_mirror_display_text( $post ) {
  * @param string $content Content.
  * @return string
  */
-function isg_filter_mirror_content( $content ) {
+function isgal_filter_mirror_content( $content ) {
 	$post = get_post();
-	if ( ! $post instanceof WP_Post || ISG_POST_TYPE !== $post->post_type ) {
+	if ( ! $post instanceof WP_Post || ISGAL_POST_TYPE !== $post->post_type ) {
 		return $content;
 	}
-	return isg_mirror_display_text( $post );
+	return isgal_mirror_display_text( $post );
 }
-add_filter( 'the_content', 'isg_filter_mirror_content', 9 );
+add_filter( 'the_content', 'isgal_filter_mirror_content', 9 );
 
 /**
  * Answer the excerpt with the same prose.
@@ -276,15 +276,15 @@ add_filter( 'the_content', 'isg_filter_mirror_content', 9 );
  * @param WP_Post $post    Post.
  * @return string
  */
-function isg_filter_mirror_excerpt( $excerpt, $post = null ) {
+function isgal_filter_mirror_excerpt( $excerpt, $post = null ) {
 	$post = $post instanceof WP_Post ? $post : get_post();
-	if ( ! $post instanceof WP_Post || ISG_POST_TYPE !== $post->post_type ) {
+	if ( ! $post instanceof WP_Post || ISGAL_POST_TYPE !== $post->post_type ) {
 		return $excerpt;
 	}
-	$text = isg_mirror_display_text( $post );
+	$text = isgal_mirror_display_text( $post );
 	return '' !== $text ? $text : $excerpt;
 }
-add_filter( 'get_the_excerpt', 'isg_filter_mirror_excerpt', 10, 2 );
+add_filter( 'get_the_excerpt', 'isgal_filter_mirror_excerpt', 10, 2 );
 
 /**
  * Answer the core/post-data binding for mirror posts.
@@ -312,13 +312,13 @@ add_filter( 'get_the_excerpt', 'isg_filter_mirror_excerpt', 10, 2 );
  * @param WP_Block $block_instance Block asking.
  * @return mixed
  */
-function isg_filter_mirror_binding( $value, $name, $source_args, $block_instance ) {
+function isgal_filter_mirror_binding( $value, $name, $source_args, $block_instance ) {
 	if ( null !== $value || 'core/post-data' !== $name ) {
 		return $value;
 	}
 	$post_id = isset( $block_instance->context['postId'] ) ? (int) $block_instance->context['postId'] : 0;
 	$post    = $post_id ? get_post( $post_id ) : null;
-	if ( ! $post instanceof WP_Post || ISG_POST_TYPE !== $post->post_type ) {
+	if ( ! $post instanceof WP_Post || ISGAL_POST_TYPE !== $post->post_type ) {
 		return $value;
 	}
 
@@ -338,14 +338,14 @@ function isg_filter_mirror_binding( $value, $name, $source_args, $block_instance
 				? esc_attr( get_the_modified_date( 'c', $post_id ) )
 				: '';
 		case 'link':
-			// Already the gallery page with its fragment: isg_filter_mirror_permalink
+			// Already the gallery page with its fragment: isgal_filter_mirror_permalink
 			// has rewritten it by the time we get here.
 			$permalink = get_permalink( $post_id );
 			return false === $permalink ? $value : esc_url( $permalink );
 	}
 	return $value;
 }
-add_filter( 'block_bindings_source_value', 'isg_filter_mirror_binding', 10, 4 );
+add_filter( 'block_bindings_source_value', 'isgal_filter_mirror_binding', 10, 4 );
 
 /**
  * The photographer, for themes that print an author.
@@ -362,13 +362,13 @@ add_filter( 'block_bindings_source_value', 'isg_filter_mirror_binding', 10, 4 );
  * @param string $name Display name.
  * @return string
  */
-function isg_filter_mirror_author( $name ) {
+function isgal_filter_mirror_author( $name ) {
 	$post = get_post();
-	if ( ! $post instanceof WP_Post || ISG_POST_TYPE !== $post->post_type ) {
+	if ( ! $post instanceof WP_Post || ISGAL_POST_TYPE !== $post->post_type ) {
 		return $name;
 	}
-	$row = isg_mirror_read_row( $post->ID );
+	$row = isgal_mirror_read_row( $post->ID );
 	return ( null !== $row && '' !== $row['creator'] ) ? $row['creator'] : $name;
 }
-add_filter( 'the_author', 'isg_filter_mirror_author' );
-add_filter( 'get_the_author_display_name', 'isg_filter_mirror_author' );
+add_filter( 'the_author', 'isgal_filter_mirror_author' );
+add_filter( 'get_the_author_display_name', 'isgal_filter_mirror_author' );

@@ -4,7 +4,7 @@
  *
  * Purging a page cache precisely means knowing which posts display which
  * gallery. Blocks store that in post content, which is not queryable, so this
- * mirrors it into postmeta on save: one _isg_gallery row per gallery a post
+ * mirrors it into postmeta on save: one _isgal_gallery row per gallery a post
  * references. The reverse lookup is then an ordinary meta query.
  *
  * The same index tells the admin screen which galleries exist without asking
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // phpcs:disable WordPress.DB.DirectDatabaseQuery -- This file is the index: bulk lookups over post meta that WP_Query would do in N queries. Results are small and cached by the callers.
 
-const ISG_GALLERY_META = '_isg_gallery';
+const ISGAL_GALLERY_META = '_isgal_gallery';
 
 /**
  * Collect gallery names from a parsed block tree, including nested blocks —
@@ -28,7 +28,7 @@ const ISG_GALLERY_META = '_isg_gallery';
  * @param array $blocks Parsed blocks.
  * @return array Unique gallery names.
  */
-function isg_collect_galleries( array $blocks ) {
+function isgal_collect_galleries( array $blocks ) {
 	$found = array();
 
 	foreach ( $blocks as $block ) {
@@ -39,7 +39,7 @@ function isg_collect_galleries( array $blocks ) {
 			}
 		}
 		if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
-			$found = array_merge( $found, isg_collect_galleries( $block['innerBlocks'] ) );
+			$found = array_merge( $found, isgal_collect_galleries( $block['innerBlocks'] ) );
 		}
 	}
 
@@ -53,7 +53,7 @@ function isg_collect_galleries( array $blocks ) {
  * @param WP_Post|null $post    Post object.
  * @return array Gallery names now indexed for this post.
  */
-function isg_index_post( $post_id, $post = null ) {
+function isgal_index_post( $post_id, $post = null ) {
 	$post_id = absint( $post_id );
 	if ( ! $post_id || wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) {
 		return array();
@@ -62,31 +62,31 @@ function isg_index_post( $post_id, $post = null ) {
 	if ( ! $post instanceof WP_Post ) {
 		$post = get_post( $post_id );
 	}
-	if ( ! $post instanceof WP_Post || isg_is_mirror_post( $post ) ) {
+	if ( ! $post instanceof WP_Post || isgal_is_mirror_post( $post ) ) {
 		return array();
 	}
 
-	$previous = (array) get_post_meta( $post_id, ISG_GALLERY_META, false );
-	delete_post_meta( $post_id, ISG_GALLERY_META );
+	$previous = (array) get_post_meta( $post_id, ISGAL_GALLERY_META, false );
+	delete_post_meta( $post_id, ISGAL_GALLERY_META );
 
 	// Skip the parse for the overwhelming majority of posts that contain no blocks.
 	$galleries = array();
 	if ( has_blocks( $post->post_content ) ) {
-		$galleries = isg_collect_galleries( parse_blocks( $post->post_content ) );
+		$galleries = isgal_collect_galleries( parse_blocks( $post->post_content ) );
 		foreach ( $galleries as $gallery ) {
-			add_post_meta( $post_id, ISG_GALLERY_META, $gallery );
+			add_post_meta( $post_id, ISGAL_GALLERY_META, $gallery );
 		}
 	}
 
 	// A gallery this post stopped showing may now be shown nowhere; if so its
 	// mirror is dead weight and goes.
 	if ( array_diff( $previous, $galleries ) ) {
-		isg_prune_mirror();
+		isgal_prune_mirror();
 	}
 
 	return $galleries;
 }
-add_action( 'save_post', 'isg_index_post', 10, 2 );
+add_action( 'save_post', 'isgal_index_post', 10, 2 );
 
 /**
  * Drop a deleted post's entries so purges never target a post that is gone.
@@ -97,14 +97,14 @@ add_action( 'save_post', 'isg_index_post', 10, 2 );
  * @param int $post_id Post ID.
  * @return void
  */
-function isg_deindex_post( $post_id ) {
-	$had = (array) get_post_meta( absint( $post_id ), ISG_GALLERY_META, false );
-	delete_post_meta( absint( $post_id ), ISG_GALLERY_META );
+function isgal_deindex_post( $post_id ) {
+	$had = (array) get_post_meta( absint( $post_id ), ISGAL_GALLERY_META, false );
+	delete_post_meta( absint( $post_id ), ISGAL_GALLERY_META );
 	if ( ! empty( $had ) ) {
-		isg_prune_mirror();
+		isgal_prune_mirror();
 	}
 }
-add_action( 'before_delete_post', 'isg_deindex_post' );
+add_action( 'before_delete_post', 'isgal_deindex_post' );
 
 /**
  * Published posts displaying a gallery.
@@ -119,7 +119,7 @@ add_action( 'before_delete_post', 'isg_deindex_post' );
  * @param string $gallery Gallery name.
  * @return array Post IDs.
  */
-function isg_posts_for_gallery( $gallery ) {
+function isgal_posts_for_gallery( $gallery ) {
 	global $wpdb;
 
 	$gallery = trim( (string) $gallery );
@@ -136,7 +136,7 @@ function isg_posts_for_gallery( $gallery ) {
 			    AND pm.meta_value = %s
 			    AND p.post_status = 'publish'
 			  LIMIT 200",
-			ISG_GALLERY_META,
+			ISGAL_GALLERY_META,
 			$gallery
 		)
 	);
@@ -149,13 +149,13 @@ function isg_posts_for_gallery( $gallery ) {
  *
  * @return array
  */
-function isg_indexed_galleries() {
+function isgal_indexed_galleries() {
 	global $wpdb;
 
 	$names = $wpdb->get_col(
 		$wpdb->prepare(
 			"SELECT DISTINCT meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s ORDER BY meta_value ASC",
-			ISG_GALLERY_META
+			ISGAL_GALLERY_META
 		)
 	);
 
@@ -178,7 +178,7 @@ function isg_indexed_galleries() {
  *
  * @return array List of array( 'gallery' => string, 'attrs' => array, 'post_id' => int ).
  */
-function isg_indexed_gallery_blocks() {
+function isgal_indexed_gallery_blocks() {
 	global $wpdb;
 
 	$post_ids = $wpdb->get_col(
@@ -189,7 +189,7 @@ function isg_indexed_gallery_blocks() {
 			  WHERE pm.meta_key = %s
 			    AND p.post_status = 'publish'
 			  LIMIT 500",
-			ISG_GALLERY_META
+			ISGAL_GALLERY_META
 		)
 	);
 
@@ -201,7 +201,7 @@ function isg_indexed_gallery_blocks() {
 			continue;
 		}
 
-		foreach ( isg_collect_gallery_blocks( parse_blocks( $post->post_content ) ) as $attrs ) {
+		foreach ( isgal_collect_gallery_blocks( parse_blocks( $post->post_content ) ) as $attrs ) {
 			$blocks[] = array(
 				'gallery' => trim( (string) $attrs['gallery'] ),
 				'attrs'   => $attrs,
@@ -219,7 +219,7 @@ function isg_indexed_gallery_blocks() {
  * @param array $blocks Parsed blocks.
  * @return array List of attribute arrays.
  */
-function isg_collect_gallery_blocks( array $blocks ) {
+function isgal_collect_gallery_blocks( array $blocks ) {
 	$found = array();
 
 	foreach ( $blocks as $block ) {
@@ -230,7 +230,7 @@ function isg_collect_gallery_blocks( array $blocks ) {
 			}
 		}
 		if ( ! empty( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
-			$found = array_merge( $found, isg_collect_gallery_blocks( $block['innerBlocks'] ) );
+			$found = array_merge( $found, isgal_collect_gallery_blocks( $block['innerBlocks'] ) );
 		}
 	}
 
@@ -244,7 +244,7 @@ function isg_collect_gallery_blocks( array $blocks ) {
  *
  * @return int Number of posts indexed.
  */
-function isg_rebuild_index() {
+function isgal_rebuild_index() {
 	$paged   = 1;
 	$indexed = 0;
 
@@ -263,7 +263,7 @@ function isg_rebuild_index() {
 		);
 
 		foreach ( $query->posts as $post ) {
-			if ( isg_index_post( $post->ID, $post ) ) {
+			if ( isgal_index_post( $post->ID, $post ) ) {
 				++$indexed;
 			}
 		}
