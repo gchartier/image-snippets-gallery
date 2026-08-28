@@ -78,6 +78,7 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 
 = 0.7.0 =
 
+* New layout: Justified rows. Every image keeps its own proportions and each row comes out the same height, edge to edge, so mixed portrait and landscape galleries look intended. Rows are sized on the server from the image dimensions ImageSnippets records, so nothing shifts as the pictures load and no script is needed.
 * Galleries can now be arranged by hand. Tools → ImageSnippets lists an Arrange button per gallery: drag the images into order (or use the earlier/later buttons), save, and set the block's Sort by to Manual. The order is kept on this site by image, so refreshing from ImageSnippets keeps it; images added on ImageSnippets later appear after the arranged ones, newest first, until they are placed.
 * Internal: everything the plugin stores and every hook and class it exposes now uses the `isgal` prefix instead of `isg` (a wordpress.org requirement). Existing settings and arranged orders carry over; mirrored galleries are rebuilt from ImageSnippets on the next visit. If you had hooked `isg_gallery_changed` or `isg_cache_ttl`, rename them. WP-CLI is now `wp isgal`.
 * Deactivating the plugin now cancels its scheduled background refreshes.

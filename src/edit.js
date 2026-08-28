@@ -241,11 +241,13 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 		: 10;
 	const overridesTtl = null !== cacheTtl && undefined !== cacheTtl;
 
-	// Masonry keeps natural heights, so a crop ratio cannot apply there. The
-	// server forces 'original' in that case; show the same so the control tells
-	// the truth while disabled.
+	// Masonry keeps natural heights and justified rows are sized from each
+	// image's own proportions, so a crop ratio cannot apply to either. The
+	// server forces 'original' in those cases; show the same so the control
+	// tells the truth while disabled.
 	const isMasonry = 'masonry' === layout;
-	const shownRatio = isMasonry ? 'original' : aspectRatio;
+	const isJustified = 'justified' === layout;
+	const shownRatio = isMasonry || isJustified ? 'original' : aspectRatio;
 
 	return (
 		<>
@@ -394,6 +396,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 						options={ [
 							{ label: 'Grid', value: 'grid' },
 							{ label: 'Masonry', value: 'masonry' },
+							{ label: 'Justified rows', value: 'justified' },
 						] }
 						onChange={ ( v ) => setAttributes( { layout: v } ) }
 					/>
@@ -415,15 +418,15 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 					<SelectControl
 						label={ __( 'Crop ratio', 'image-snippets-gallery' ) }
 						help={
-							isMasonry
+							isMasonry || isJustified
 								? __(
-										'Masonry keeps each image’s own proportions.',
+										'This layout keeps each image’s own proportions.',
 										'image-snippets-gallery'
 								  )
 								: undefined
 						}
 						value={ shownRatio }
-						disabled={ isMasonry }
+						disabled={ isMasonry || isJustified }
 						options={ [
 							{ label: 'Original (no crop)', value: 'original' },
 							{ label: 'Square (1:1)', value: '1-1' },

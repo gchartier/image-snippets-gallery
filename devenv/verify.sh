@@ -228,6 +228,15 @@ SSR="$(curl -sS -u "admin:${APP}" -G \
 
 tally "$( printf '%s' "$SSR" | python3 ./check-ssr.py )"
 
+head_ "Justified layout is sized on the server"
+
+# Each item carries its own width/height ratio from the mirrored og:image
+# dimensions, so rows are laid out before any image loads and without script.
+JUSTHTML="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "layout" => "justified", "limit" => 12 ) );' | tr -d '\r')"
+assert "justified items carry a per-image ratio" "6" "$(grep -o 'style="--isgal-r:[0-9.]*"' <<<"$JUSTHTML" | wc -l)"
+assert "and at least one is not the 4:3 fallback" "1" "$(grep -o 'style="--isgal-r:[0-9.]*"' <<<"$JUSTHTML" | grep -vc 'r:1.3333' | awk '{print ($1>0)?1:0}')"
+assert "the wrapper is marked justified" "1" "$(grep -c 'isgal-layout-justified' <<<"$JUSTHTML")"
+
 head_ "JSON-LD on the public page"
 
 tally "$( fetch | python3 ./check-jsonld.py )"

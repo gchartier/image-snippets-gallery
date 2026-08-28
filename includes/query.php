@@ -924,13 +924,14 @@ function isgal_render_gallery( array $attributes ) {
 
 	$endpoint = isgal_resolve_endpoint( $a );
 
-	$layout = in_array( $a['layout'], array( 'grid', 'masonry' ), true ) ? $a['layout'] : 'grid';
+	$layout = in_array( $a['layout'], array( 'grid', 'masonry', 'justified' ), true ) ? $a['layout'] : 'grid';
 	$cols   = max( 1, min( 8, (int) $a['columns'] ) );
 	$ratio  = in_array( $a['aspectRatio'], array( 'original', '1-1', '4-3', '3-2', '16-9' ), true ) ? $a['aspectRatio'] : '4-3';
 	// Which Flickr rendition to request as the src, by how wide a column is.
 	$size = $cols >= 5 ? 'small' : ( $cols >= 3 ? 'medium' : 'large' );
-	// Aspect-ratio cropping is incompatible with true masonry (variable heights).
-	if ( 'masonry' === $layout ) {
+	// Aspect-ratio cropping is incompatible with true masonry (variable heights)
+	// and with justified rows, which are sized from each image's own ratio.
+	if ( 'masonry' === $layout || 'justified' === $layout ) {
 		$ratio = 'original';
 	}
 
@@ -1008,8 +1009,18 @@ function isgal_render_gallery( array $attributes ) {
 					);
 					// Anchor for search results, which link here with #fragment.
 					$isgal_anchor = isgal_image_anchor( $row['page'] );
+					// Justified rows are laid out from each image's own proportions
+					// (isgal_row_dimensions()), with no script: the ratio becomes a
+					// custom property the stylesheet turns into flex-basis/grow and an
+					// aspect-ratio, so the row heights are known before any image loads.
+					$isgal_item_style = '';
+					if ( 'justified' === $layout ) {
+						$isgal_dims       = isgal_row_dimensions( $row );
+						$isgal_ratio      = $isgal_dims ? $isgal_dims[0] / $isgal_dims[1] : 4 / 3;
+						$isgal_item_style = ' style="--isgal-r:' . esc_attr( round( max( 0.25, min( 4, $isgal_ratio ) ), 4 ) ) . '"';
+					}
 					?>
-					<figure class="isgal-item"<?php echo '' !== $isgal_anchor ? ' id="' . esc_attr( $isgal_anchor ) . '"' : ''; ?> vocab="https://schema.org/" typeof="ImageObject">
+					<figure class="isgal-item"<?php echo '' !== $isgal_anchor ? ' id="' . esc_attr( $isgal_anchor ) . '"' : ''; ?><?php echo $isgal_item_style; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?> vocab="https://schema.org/" typeof="ImageObject">
 						<a href="<?php echo esc_url( $row['page'] ? $row['page'] : '#' ); ?>" aria-label="<?php echo esc_attr( $label ); ?>" target="_blank" rel="noopener">
 							<?php
 							// The source URL (contentUrl) is the full-res original; for Flickr it

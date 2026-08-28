@@ -102,6 +102,37 @@
 		color: #b32d2e;
 	}
 
+	// Justified: rows of equal height, each image at its own proportions, no
+	// script. Every item's --isgal-r (width ÷ height) is set by the server.
+	// flex-basis is the width the item would take at a nominal row height that
+	// fits about one column's worth of an average image; flex-grow in the same
+	// proportion means a row's items scale together, so they end up the same
+	// height however the row is filled. The trailing filler keeps a short last
+	// row from stretching to the edge.
+	&.isgal-layout-justified .isgal-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var( --isgal-gap, 0.75rem );
+
+		.isgal-item {
+			flex: var( --isgal-r, 1.3333 ) 1 calc( var( --isgal-r, 1.3333 ) * 75% / var( --isgal-cols, 3 ) );
+			min-width: 0;
+
+			@media ( max-width: 600px ) {
+				flex-basis: calc( var( --isgal-r, 1.3333 ) * 75% / var( --isgal-cols-sm, 2 ) );
+			}
+
+			img {
+				aspect-ratio: var( --isgal-r, 1.3333 );
+			}
+		}
+
+		&::after {
+			content: '';
+			flex: 999 1 auto;
+		}
+	}
+
 	// Masonry: CSS columns instead of grid.
 	&.isgal-layout-masonry .isgal-grid {
 		display: block;
