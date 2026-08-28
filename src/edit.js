@@ -26,7 +26,12 @@ import {
 } from '@wordpress/icons';
 import ServerSideRender from '@wordpress/server-side-render';
 import apiFetch from '@wordpress/api-fetch';
-import { useState, useEffect, useMemo } from '@wordpress/element';
+import {
+	useState,
+	useEffect,
+	useMemo,
+	createInterpolateElement,
+} from '@wordpress/element';
 
 import GalleryStyleControls from './style-controls';
 import './editor.scss';
@@ -168,7 +173,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 	}, [ galleryList, galleryTyped, gallery ] );
 
 	let galleryHelp = __(
-		'The gallery on ImageSnippets. Galleries outside the main Imagesnippets datasets are listed as owner/gallery.',
+		'The gallery on ImageSnippets.',
 		'image-snippets-gallery'
 	);
 	if ( 'loading' === galleryListState ) {
@@ -219,6 +224,18 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 	// Site-wide defaults from Tools → ImageSnippets, injected by
 	// isg_editor_defaults_script() ahead of this bundle.
 	const siteDefaults = window.isgEditorDefaults ?? {};
+	const reorderUrl = ( () => {
+		const base = siteDefaults.reorderUrl ?? '';
+		if ( ! base ) {
+			return '#';
+		}
+		const url = new URL( base, window.location.href );
+		url.searchParams.set( 'isg_reorder', gallery ?? '' );
+		if ( endpoint ) {
+			url.searchParams.set( 'isg_endpoint', endpoint );
+		}
+		return url.toString();
+	} )();
 	const defaultTtl = Number.isFinite( siteDefaults.ttl )
 		? siteDefaults.ttl
 		: 10;
@@ -307,11 +324,35 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 								),
 								value: 'title-desc',
 							},
+							{
+								label: __( 'Manual', 'image-snippets-gallery' ),
+								value: 'manual-asc',
+							},
 						] }
 						onChange={ ( v ) => {
 							const [ by, dir ] = v.split( '-' );
 							setAttributes( { orderBy: by, order: dir } );
 						} }
+						help={
+							orderBy === 'manual'
+								? createInterpolateElement(
+										__(
+											'Reorder images under <a>Tools → ImageSnippets</a>.',
+											'image-snippets-gallery'
+										),
+										{
+											a: (
+												// eslint-disable-next-line jsx-a11y/anchor-has-content
+												<a
+													href={ reorderUrl }
+													target="_blank"
+													rel="noreferrer"
+												/>
+											),
+										}
+								  )
+								: undefined
+						}
 					/>
 					<RangeControl
 						label={ __(
@@ -335,18 +376,6 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 							'image-snippets-gallery'
 						) }
 					</Button>
-					<p
-						style={ {
-							marginTop: '.5em',
-							fontSize: '.85em',
-							fontStyle: 'italic',
-						} }
-					>
-						{ __(
-							'Pulls the gallery again and clears the cached copy the public page serves.',
-							'image-snippets-gallery'
-						) }
-					</p>
 					{ refreshError && (
 						<Notice status="error" isDismissible={ false }>
 							{ refreshError }
@@ -371,7 +400,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 					<RangeControl
 						label={ __( 'Columns', 'image-snippets-gallery' ) }
 						help={ __(
-							'Phones show at most two.',
+							'Max. 2 on mobile',
 							'image-snippets-gallery'
 						) }
 						value={ columns }
@@ -391,10 +420,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 										'Masonry keeps each image’s own proportions.',
 										'image-snippets-gallery'
 								  )
-								: __(
-										'A uniform ratio prevents layout shift while images load.',
-										'image-snippets-gallery'
-								  )
+								: undefined
 						}
 						value={ shownRatio }
 						disabled={ isMasonry }
@@ -433,6 +459,16 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 							setAttributes( { displayCaption: v } )
 						}
 					/>
+					<ToggleControl
+						label={ __(
+							'Use filename when title is missing',
+							'image-snippets-gallery'
+						) }
+						checked={ useFilename }
+						onChange={ ( v ) =>
+							setAttributes( { useFilename: v } )
+						}
+					/>
 				</PanelBody>
 			</InspectorControls>
 
@@ -467,23 +503,15 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 					}
 				/>
 				<TextControl
-					label={ __( 'User ID', 'image-snippets-gallery' ) }
+					label={ __( 'Only images by', 'image-snippets-gallery' ) }
 					help={ __(
-						'Filter to one ImageSnippets user (optional).',
+						'ImageSnippets user name. Leave blank for everyone.',
 						'image-snippets-gallery'
 					) }
 					value={ userId }
 					onChange={ ( v ) =>
 						setAttributes( { userId: v.replace( IRI_SAFE, '' ) } )
 					}
-				/>
-				<ToggleControl
-					label={ __(
-						'Use filename when title is missing',
-						'image-snippets-gallery'
-					) }
-					checked={ useFilename }
-					onChange={ ( v ) => setAttributes( { useFilename: v } ) }
 				/>
 				<TextControl
 					label={ __( 'SPARQL endpoint', 'image-snippets-gallery' ) }

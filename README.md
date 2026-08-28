@@ -16,7 +16,7 @@ The original renders entirely in the browser, so search engines, social scrapers
 - **Smart text fallbacks**: alt text resolves `alt → description → title`; an optional filename fallback; an editor-only warning when images lack titles/alt text.
 - **Layouts**: grid, masonry, justified; small/medium/large thumbnails.
 - **Configurable crop ratio** (square, 4:3, 3:2, 16:9) to eliminate layout shift.
-- Sort by date or title, ascending or descending; limit the image count.
+- Sort by date or title, ascending or descending, or arrange the images by hand (Tools → ImageSnippets → Arrange, then Sort by → Manual on the block); limit the image count.
 - Optional filter by ImageSnippets user; overridable SPARQL endpoint.
 
 ## Install (for testing)

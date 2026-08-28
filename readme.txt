@@ -78,6 +78,7 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 
 = Unreleased =
 
+* Galleries can now be arranged by hand. Tools → ImageSnippets lists an Arrange button per gallery: drag the images into order (or use the earlier/later buttons), save, and set the block's Sort by to Manual. The order is kept on this site by image, so refreshing from ImageSnippets keeps it; images added on ImageSnippets later appear after the arranged ones, newest first, until they are placed.
 * Updates now arrive the way they do for any other plugin: when a new version is published, the Plugins screen shows the usual update notice and a one-click Update, with the changelog behind "View details". Until now the plugin had no way to learn a newer version existed, so every site stayed on whatever zip had been uploaded by hand. Updates come from the plugin's GitHub releases; no account or key is needed.
 
 = 0.6.0 =

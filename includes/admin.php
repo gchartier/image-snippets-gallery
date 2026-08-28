@@ -253,8 +253,9 @@ function isg_editor_defaults_script() {
 		generate_block_asset_handle( 'imagesnippets/gallery', 'editorScript' ),
 		'window.isgEditorDefaults = ' . wp_json_encode(
 			array(
-				'endpoint' => isg_default_endpoint(),
-				'ttl'      => isg_default_ttl_minutes(),
+				'endpoint'   => isg_default_endpoint(),
+				'ttl'        => isg_default_ttl_minutes(),
+				'reorderUrl' => admin_url( 'tools.php?page=isg-galleries' ),
 			)
 		) . ';',
 		'before'
@@ -311,6 +312,14 @@ function isg_gallery_endpoint_in_use( $gallery ) {
  * @return void
  */
 function isg_render_admin_page() {
+	if ( isset( $_GET['isg_reorder'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only screen selection; saves go through the REST route with its own nonce.
+		isg_render_reorder_page(
+			sanitize_text_field( wp_unslash( $_GET['isg_reorder'] ) ), // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			isset( $_GET['isg_endpoint'] ) ? esc_url_raw( wp_unslash( $_GET['isg_endpoint'] ) ) : '' // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		);
+		return;
+	}
+
 	$galleries = isg_indexed_galleries();
 	$status    = isg_sync_status();
 	$adapters  = isg_known_purge_adapters();
@@ -405,6 +414,15 @@ function isg_render_admin_page() {
 								)
 							);
 							?>
+							<a class="button button-small" href="<?php echo esc_url( isg_reorder_url( $gallery, $endpoint ) ); ?>">
+								<?php
+								if ( ! empty( isg_gallery_manual_order( $term ) ) ) {
+									esc_html_e( 'Edit order', 'image-snippets-gallery' );
+								} else {
+									esc_html_e( 'Arrange', 'image-snippets-gallery' );
+								}
+								?>
+							</a>
 						</td>
 					</tr>
 				<?php endforeach; ?>
@@ -470,6 +488,109 @@ function isg_render_admin_page() {
 	</div>
 	<?php
 }
+
+/**
+ * Link to the reorder screen for a gallery.
+ *
+ * @param string $gallery  Gallery name.
+ * @param string $endpoint SPARQL endpoint URL.
+ * @return string
+ */
+function isg_reorder_url( $gallery, $endpoint = '' ) {
+	$args = array(
+		'page'        => 'isg-galleries',
+		'isg_reorder' => $gallery,
+	);
+	if ( '' !== $endpoint && isg_default_endpoint() !== $endpoint ) {
+		$args['isg_endpoint'] = $endpoint;
+	}
+	return add_query_arg( $args, admin_url( 'tools.php' ) );
+}
+
+/**
+ * The reorder screen: every image in the gallery as a draggable tile. Reads and
+ * saves through the REST order route, so the same logic serves anything else
+ * that wants to arrange a gallery later.
+ *
+ * @param string $gallery  Gallery name.
+ * @param string $endpoint SPARQL endpoint URL, or '' for the default.
+ * @return void
+ */
+function isg_render_reorder_page( $gallery, $endpoint = '' ) {
+	$gallery = trim( (string) $gallery );
+	if ( '' === $endpoint ) {
+		$endpoint = isg_gallery_endpoint_in_use( $gallery );
+	}
+	?>
+	<div class="wrap isg-reorder">
+		<h1>
+			<?php
+			printf(
+				/* translators: %s: gallery name */
+				esc_html__( 'Arrange: %s', 'image-snippets-gallery' ),
+				esc_html( $gallery )
+			);
+			?>
+		</h1>
+		<p>
+			<a href="<?php echo esc_url( admin_url( 'tools.php?page=isg-galleries' ) ); ?>">&larr; <?php esc_html_e( 'All galleries', 'image-snippets-gallery' ); ?></a>
+		</p>
+		<p>
+			<?php esc_html_e( 'Drag images into the order you want. Blocks showing this gallery use it when their Sort by is set to Manual. Images added on ImageSnippets later appear after the ones you arranged until you place them.', 'image-snippets-gallery' ); ?>
+		</p>
+		<p class="isg-reorder__actions">
+			<button type="button" class="button button-primary" id="isg-reorder-save" disabled><?php esc_html_e( 'Save order', 'image-snippets-gallery' ); ?></button>
+			<button type="button" class="button" id="isg-reorder-clear"><?php esc_html_e( 'Clear arrangement', 'image-snippets-gallery' ); ?></button>
+			<span class="isg-reorder__status" id="isg-reorder-status" role="status" aria-live="polite"></span>
+		</p>
+		<ol class="isg-reorder__grid" id="isg-reorder-grid" aria-label="<?php esc_attr_e( 'Images, first to last', 'image-snippets-gallery' ); ?>">
+			<li class="isg-reorder__loading"><?php esc_html_e( 'Loading images…', 'image-snippets-gallery' ); ?></li>
+		</ol>
+	</div>
+	<?php
+	wp_add_inline_script(
+		'isg-reorder',
+		'window.isgReorder = ' . wp_json_encode(
+			array(
+				'gallery'  => $gallery,
+				'endpoint' => $endpoint,
+				'route'    => rest_url( 'imagesnippets/v1/order' ),
+				'nonce'    => wp_create_nonce( 'wp_rest' ),
+				'i18n'     => array(
+					'saving'     => __( 'Saving…', 'image-snippets-gallery' ),
+					'saved'      => __( 'Saved. Pages showing this gallery have been refreshed.', 'image-snippets-gallery' ),
+					'cleared'    => __( 'Arrangement cleared; blocks fall back to their date or title order.', 'image-snippets-gallery' ),
+					/* translators: %s: error message */
+					'failed'     => __( 'Could not save: %s', 'image-snippets-gallery' ),
+					/* translators: %s: error message */
+					'loadFailed' => __( 'Could not load the gallery: %s', 'image-snippets-gallery' ),
+					'empty'      => __( 'This gallery has no images yet.', 'image-snippets-gallery' ),
+					'unsaved'    => __( 'You have unsaved changes to the order.', 'image-snippets-gallery' ),
+					'moveUp'     => __( 'Move earlier', 'image-snippets-gallery' ),
+					'moveDown'   => __( 'Move later', 'image-snippets-gallery' ),
+					'newBadge'   => __( 'New', 'image-snippets-gallery' ),
+					'confirmClr' => __( 'Clear the arrangement for this gallery?', 'image-snippets-gallery' ),
+				),
+			)
+		) . ';',
+		'before'
+	);
+}
+
+/**
+ * Load the reorder screen's script and styles only on that screen.
+ *
+ * @param string $hook Current admin page hook.
+ * @return void
+ */
+function isg_reorder_assets( $hook ) {
+	if ( 'tools_page_isg-galleries' !== $hook || ! isset( $_GET['isg_reorder'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return;
+	}
+	wp_enqueue_script( 'isg-reorder', plugins_url( 'assets/reorder.js', ISG_PLUGIN_FILE ), array(), ISG_VERSION, true );
+	wp_enqueue_style( 'isg-reorder', plugins_url( 'assets/reorder.css', ISG_PLUGIN_FILE ), array(), ISG_VERSION );
+}
+add_action( 'admin_enqueue_scripts', 'isg_reorder_assets' );
 
 /**
  * How old a gallery's last sync may be before Site Health calls it stale.

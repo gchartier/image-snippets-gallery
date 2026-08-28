@@ -40,6 +40,7 @@ const ISG_META_CREATOR  = '_isg_creator';  // dcterms:creator of the graph, for 
 const ISG_TERM_ENDPOINT = 'isg_endpoint';  // Term meta: which SPARQL endpoint the gallery lives on.
 const ISG_TERM_GALLERY  = 'isg_gallery';   // Term meta: the gallery name, verbatim.
 const ISG_TERM_SYNCED   = 'isg_last_sync'; // Term meta: unix time of the last successful sync.
+const ISG_TERM_ORDER    = 'isg_manual_order'; // Term meta: page IRIs in the order a person arranged them. JSON.
 
 // Images per graph-fetch request. ~1.4s per 40 against the live endpoint.
 const ISG_SYNC_BATCH = 40;
@@ -607,6 +608,9 @@ function isg_sync_gallery( $endpoint, $gallery, array $opts = array() ) {
 		}
 	}
 
+	// A curated order only ever names images the gallery still holds.
+	isg_prune_manual_order( $term, wp_list_pluck( $rows, 'page' ) );
+
 	$changed = ( $added + $updated + $removed + $attached ) > 0;
 
 	update_term_meta( $term->term_id, ISG_TERM_SYNCED, time() );
@@ -753,9 +757,29 @@ function isg_mirror_drop_all() {
  * @return array Rows.
  */
 function isg_mirror_query_rows( WP_Term $term, array $a ) {
-	$by_title  = ( 'title' === strtolower( (string) $a['orderBy'] ) );
+	$order_by  = strtolower( (string) $a['orderBy'] );
+	$by_title  = ( 'title' === $order_by );
 	$ascending = ( 'asc' === strtolower( (string) $a['order'] ) );
 	$limit     = max( 1, min( 200, (int) $a['limit'] ) );
+
+	// Manual: read the whole gallery newest-first, put the arranged images in
+	// their arranged order, leave the rest (new arrivals) after them, then cut
+	// to the limit. Done in PHP rather than with post__in so an image the
+	// order does not name is still shown.
+	if ( 'manual' === $order_by ) {
+		$all = isg_mirror_query_rows(
+			$term,
+			array_merge(
+				$a,
+				array(
+					'orderBy' => 'date',
+					'order'   => 'desc',
+					'limit'   => 200,
+				)
+			)
+		);
+		return array_slice( isg_apply_manual_order( $all, isg_gallery_manual_order( $term ) ), 0, $limit );
+	}
 
 	$args = array(
 		'post_type'              => ISG_POST_TYPE,
@@ -803,6 +827,95 @@ function isg_mirror_query_rows( WP_Term $term, array $a ) {
 		}
 	}
 	return $rows;
+}
+
+/**
+ * The order a person arranged a gallery in: page IRIs, first to last.
+ *
+ * @param WP_Term|null $term Gallery term.
+ * @return string[] Page IRIs; empty when nothing has been arranged.
+ */
+function isg_gallery_manual_order( $term ) {
+	if ( ! $term instanceof WP_Term ) {
+		return array();
+	}
+	$raw = get_term_meta( $term->term_id, ISG_TERM_ORDER, true );
+	if ( ! is_string( $raw ) || '' === $raw ) {
+		return array();
+	}
+	$decoded = json_decode( $raw, true );
+	if ( ! is_array( $decoded ) ) {
+		return array();
+	}
+	return array_values( array_unique( array_filter( array_map( 'strval', $decoded ) ) ) );
+}
+
+/**
+ * Store a gallery's arranged order. An empty list clears it.
+ *
+ * Keyed by page IRI, not post ID: the IRI is the image's identity on
+ * ImageSnippets, so the order survives "Clear stored copies" and a resync.
+ *
+ * @param WP_Term  $term  Gallery term.
+ * @param string[] $pages Page IRIs, first to last.
+ * @return void
+ */
+function isg_set_gallery_manual_order( WP_Term $term, array $pages ) {
+	$pages = array_values( array_unique( array_filter( array_map( 'strval', $pages ) ) ) );
+	if ( empty( $pages ) ) {
+		delete_term_meta( $term->term_id, ISG_TERM_ORDER );
+		return;
+	}
+	update_term_meta( $term->term_id, ISG_TERM_ORDER, wp_json_encode( $pages ) );
+}
+
+/**
+ * Drop images from the arranged order that have left the gallery.
+ *
+ * Runs on every sync so the stored list never grows stale; new images are not
+ * added here — they simply follow the arranged ones until someone places them.
+ *
+ * @param WP_Term  $term  Gallery term.
+ * @param string[] $pages Page IRIs the gallery holds now.
+ * @return void
+ */
+function isg_prune_manual_order( WP_Term $term, array $pages ) {
+	$order = isg_gallery_manual_order( $term );
+	if ( empty( $order ) ) {
+		return;
+	}
+	$present = array_fill_keys( array_map( 'strval', $pages ), true );
+	$kept    = array_values( array_filter( $order, static fn( $p ) => isset( $present[ $p ] ) ) );
+	if ( $kept !== $order ) {
+		isg_set_gallery_manual_order( $term, $kept );
+	}
+}
+
+/**
+ * Sort rows by an arranged order; rows it does not name keep their relative
+ * order and follow the arranged ones.
+ *
+ * @param array    $rows  Rows, each with a 'page' IRI.
+ * @param string[] $order Page IRIs, first to last.
+ * @return array
+ */
+function isg_apply_manual_order( array $rows, array $order ) {
+	if ( empty( $order ) ) {
+		return $rows;
+	}
+	$rank   = array_flip( $order );
+	$placed = array();
+	$rest   = array();
+	foreach ( $rows as $row ) {
+		$page = isset( $row['page'] ) ? (string) $row['page'] : '';
+		if ( isset( $rank[ $page ] ) ) {
+			$placed[ $rank[ $page ] ] = $row;
+		} else {
+			$rest[] = $row;
+		}
+	}
+	ksort( $placed );
+	return array_merge( array_values( $placed ), $rest );
 }
 
 /**
