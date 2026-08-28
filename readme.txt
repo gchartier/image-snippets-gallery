@@ -34,6 +34,7 @@ For a forty-image gallery the default is roughly five kilobytes once compressed.
 Options:
 
 * Filter by gallery name and (optionally) by ImageSnippets user.
+* Let visitors filter the gallery by tag, creator, year, camera or rights, straight from the images' ImageSnippets annotations; filtered views are shareable links.
 * Show captions and/or the gallery title (a real heading, level of your choice).
 * Grid or masonry layouts, 1–8 columns, optional uniform crop ratio.
 * Sort newest or oldest first, or by title; limit the number of images.
@@ -78,6 +79,7 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 
 = 0.7.0 =
 
+* Filters. Under the block's Filters panel, let visitors narrow a gallery by tag, creator, year, camera or rights — buttons above the images, built from what each image is annotated with on ImageSnippets, with counts. Pick any of several values in a filter, combine filters, share the result as a link (`?isgal_tag=…`). Every image stays in the page for search engines; filtering only hides. A filter every image shares is left out, as is one no image has.
 * Timeline layout: images grouped under year headings down a rule, oldest or newest first, each with its date.
 * Dates now come from the best source an image has rather than always the catalogue date. By default the camera's capture time (EXIF DateTimeOriginal) wins, then file-creation time, then the IPTC/Photoshop date, then a year in the rights statement; each block can reorder these under Advanced → "Date comes from". The order applies to sorting, captions, the lightbox, the timeline and the date on site-search results. Captions and the lightbox say which field a date came from.
 * Lightbox. Set "Clicking an image" to open a lightbox on the page instead of the ImageSnippets page: keyboard arrows, swipe, Esc, and a provenance panel with the creator, date, rights, tags and a link to the source. Everything it shows is in the page already, so opening an image makes no request. A link to an image (the ones site search produces) opens it in the lightbox straight away. Built on WordPress's own Interactivity API; no library bundled. Requires WordPress 6.5.

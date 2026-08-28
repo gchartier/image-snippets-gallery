@@ -618,6 +618,8 @@ function isgal_defaults() {
 		'linkNewTab'        => true,
 		'lightboxDetails'   => true,
 		'dateFields'        => null,
+		'facets'            => array(),
+		'facetMax'          => 12,
 		'displayTitle'      => false,
 		'titleLevel'        => 2,
 		'layout'            => 'grid',
@@ -756,6 +758,221 @@ function isgal_row_tags( array $row ) {
 		}
 	}
 	return array_values( $tags );
+}
+
+/**
+ * The facets a gallery can be filtered by, in the order the editor offers
+ * them. Keys are what the block's `facets` attribute stores and what the URL
+ * carries (`?isgal_tag=…`). Every one is read straight from the graph the
+ * mirror already holds: a decade of hand annotation, not a taxonomy the site
+ * owner has to maintain.
+ *
+ * @return array Key => label.
+ */
+function isgal_facets() {
+	return array(
+		'tag'     => __( 'Tags', 'image-snippets-gallery' ),
+		'creator' => __( 'Creator', 'image-snippets-gallery' ),
+		'year'    => __( 'Year', 'image-snippets-gallery' ),
+		'camera'  => __( 'Camera', 'image-snippets-gallery' ),
+		'rights'  => __( 'Rights', 'image-snippets-gallery' ),
+	);
+}
+
+/**
+ * The block's facets, validated and in its order; empty means no filter bar.
+ *
+ * @param array $a Resolved attributes.
+ * @return string[]
+ */
+function isgal_block_facets( array $a ) {
+	if ( empty( $a['facets'] ) || ! is_array( $a['facets'] ) ) {
+		return array();
+	}
+	return array_values( array_unique( array_intersect( $a['facets'], array_keys( isgal_facets() ) ) ) );
+}
+
+/**
+ * The camera an image was taken with, from EXIF Make and Model. Model usually
+ * repeats the make ("Canon" / "Canon EOS 5D"), so it is not prefixed twice.
+ *
+ * @param array $row Row.
+ * @return string Empty when the graph carries neither.
+ */
+function isgal_row_camera( array $row ) {
+	$make  = '';
+	$model = '';
+	foreach ( (array) $row['triples'] as $triple ) {
+		if ( 'http://ns.adobe.com/exif/1.0/Make' === $triple[1] && '' === $make ) {
+			$make = trim( (string) $triple[2]['value'] );
+		} elseif ( 'http://ns.adobe.com/exif/1.0/Model' === $triple[1] && '' === $model ) {
+			$model = trim( (string) $triple[2]['value'] );
+		}
+	}
+	if ( '' === $model ) {
+		return $make;
+	}
+	if ( '' === $make || 0 === stripos( $model, $make ) ) {
+		return $model;
+	}
+	return $make . ' ' . $model;
+}
+
+/**
+ * One image's values for every facet, as shown. Matching is case-insensitive
+ * (see isgal_facet_key()), so "Fog" and "fog" are one chip.
+ *
+ * @param array $row Row.
+ * @param array $a   Resolved attributes (for the date priority).
+ * @return array Facet key => string[] display values.
+ */
+function isgal_row_facet_values( array $row, array $a ) {
+	$values = array(
+		'tag'     => isgal_row_tags( $row ),
+		'creator' => array(),
+		'year'    => array(),
+		'camera'  => array(),
+		'rights'  => array(),
+	);
+	if ( '' !== trim( (string) $row['creator'] ) ) {
+		$values['creator'][] = trim( (string) $row['creator'] );
+	}
+	$date = isgal_row_resolved_date( $row, isgal_block_date_priority( $a ) );
+	if ( $date && preg_match( '/^(\d{4})/', $date['raw'], $m ) ) {
+		$values['year'][] = $m[1];
+	}
+	$camera = isgal_row_camera( $row );
+	if ( '' !== $camera ) {
+		$values['camera'][] = $camera;
+	}
+	if ( '' !== trim( (string) $row['rights'] ) ) {
+		$values['rights'][] = trim( (string) $row['rights'] );
+	}
+	return $values;
+}
+
+/**
+ * The form a facet value is matched and carried in the URL in.
+ *
+ * @param string $value Display value.
+ * @return string
+ */
+function isgal_facet_key( $value ) {
+	return function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( (string) $value ) ) : strtolower( trim( (string) $value ) );
+}
+
+/**
+ * The filter bar's contents for a set of rows: per facet, the values that
+ * occur, how often, most common first, cut to the block's limit. A facet
+ * that could not narrow anything (one value, on every image) is left out —
+ * a bar of chips that hide nothing is noise.
+ *
+ * @param array    $rows Rows.
+ * @param array    $a    Resolved attributes.
+ * @param string[] $keys Facets to build, in order.
+ * @return array Facet key => [ 'label' => string, 'values' => [ [ 'key', 'label', count ], … ] ].
+ */
+function isgal_facet_index( array $rows, array $a, array $keys ) {
+	$labels = isgal_facets();
+	$max    = max( 1, min( 100, (int) $a['facetMax'] ) );
+	$counts = array_fill_keys( $keys, array() );
+	$shown  = array_fill_keys( $keys, array() );
+	$rows_with_value = array_fill_keys( $keys, 0 );
+	foreach ( $rows as $row ) {
+		$values = isgal_row_facet_values( $row, $a );
+		foreach ( $keys as $facet ) {
+			$seen = array();
+			foreach ( $values[ $facet ] as $value ) {
+				$k = isgal_facet_key( $value );
+				if ( '' === $k || isset( $seen[ $k ] ) ) {
+					continue;
+				}
+				$seen[ $k ] = true;
+				if ( ! isset( $counts[ $facet ][ $k ] ) ) {
+					$counts[ $facet ][ $k ] = 0;
+					$shown[ $facet ][ $k ]  = $value;
+				}
+				++$counts[ $facet ][ $k ];
+			}
+			if ( $seen ) {
+				++$rows_with_value[ $facet ];
+			}
+		}
+	}
+	$index = array();
+	foreach ( $keys as $facet ) {
+		if ( ! $counts[ $facet ] ) {
+			continue;
+		}
+		if ( 1 === count( $counts[ $facet ] ) && $rows_with_value[ $facet ] === count( $rows ) ) {
+			continue; // Everything shares it: nothing to filter.
+		}
+		$c = $counts[ $facet ];
+		$s = $shown[ $facet ];
+		uksort(
+			$c,
+			static function ( $x, $y ) use ( $c, $s, $facet ) {
+				if ( $c[ $x ] !== $c[ $y ] ) {
+					return $c[ $y ] - $c[ $x ];
+				}
+				// Years read best in order; everything else alphabetically.
+				return 'year' === $facet ? strcmp( $y, $x ) : strnatcasecmp( $s[ $x ], $s[ $y ] );
+			}
+		);
+		$values = array();
+		foreach ( array_slice( $c, 0, $max, true ) as $k => $n ) {
+			$values[] = array( (string) $k, $s[ $k ], $n ); // PHP makes "2012" an int key; the URL and items carry strings.
+		}
+		$index[ $facet ] = array(
+			'label'  => $labels[ $facet ],
+			'values' => $values,
+		);
+	}
+	return $index;
+}
+
+/**
+ * The filter bar: a row of chips per facet, and a status line. The chips are
+ * plain buttons that the view script wires up; without it (or in the editor)
+ * they are inert and every image stays visible, so nothing is ever hidden
+ * from a crawler or from a visitor without scripts.
+ *
+ * @param array $index isgal_facet_index() output.
+ * @param int   $total Images in the gallery.
+ * @return string HTML.
+ */
+function isgal_facet_bar_html( array $index, $total ) {
+	ob_start();
+	?>
+	<div class="isgal-facets" role="group" aria-label="<?php esc_attr_e( 'Filter images', 'image-snippets-gallery' ); ?>">
+		<?php foreach ( $index as $facet => $group ) : ?>
+			<div class="isgal-facet isgal-facet-<?php echo esc_attr( $facet ); ?>">
+				<span class="isgal-facet__name"><?php echo esc_html( $group['label'] ); ?></span>
+				<span class="isgal-facet__chips">
+					<?php foreach ( $group['values'] as $v ) : ?>
+						<button type="button" class="isgal-chip" aria-pressed="false" data-wp-context="<?php echo esc_attr( wp_json_encode( array( 'facet' => $facet, 'value' => $v[0] ) ) ); ?>" data-wp-on--click="actions.toggle" data-wp-bind--aria-pressed="state.chipOn" data-wp-class--is-active="state.chipOn"><?php echo esc_html( $v[1] ); ?> <span class="isgal-chip__count"><?php echo esc_html( number_format_i18n( $v[2] ) ); ?></span></button>
+					<?php endforeach; ?>
+				</span>
+			</div>
+		<?php endforeach; ?>
+		<p class="isgal-facets__status" hidden data-wp-bind--hidden="!state.filtering">
+			<?php
+			echo wp_kses(
+				sprintf(
+					/* translators: 1: the number shown (live), 2: total images */
+					__( 'Showing %1$s of %2$s images.', 'image-snippets-gallery' ),
+					'<span data-wp-text="state.visibleCount">' . esc_html( number_format_i18n( $total ) ) . '</span>',
+					esc_html( number_format_i18n( $total ) )
+				),
+				array( 'span' => array( 'data-wp-text' => array() ) )
+			);
+			?>
+			<button type="button" class="isgal-facets__clear" data-wp-on--click="actions.clearFacets"><?php esc_html_e( 'Clear filters', 'image-snippets-gallery' ); ?></button>
+		</p>
+		<p class="isgal-facets__empty isgal-message" hidden data-wp-bind--hidden="state.visibleCount"><?php esc_html_e( 'No images match every selected filter.', 'image-snippets-gallery' ); ?></p>
+	</div>
+	<?php
+	return ob_get_clean();
 }
 
 /**
@@ -1253,7 +1470,6 @@ function isgal_render_gallery( array $attributes ) {
 		$extra['style'] = implode( ';', $decls );
 	}
 	$wrapper_attributes = get_block_wrapper_attributes( $extra );
-	$lightbox_items     = array();
 
 	if ( '' === trim( (string) $a['gallery'] ) ) {
 		return sprintf(
@@ -1278,13 +1494,25 @@ function isgal_render_gallery( array $attributes ) {
 	// Not in the editor: showModal() inside the preview iframe is a trap for
 	// the person editing, and the items would be rebuilt on every keystroke.
 	$lightbox = $lightbox && ! is_wp_error( $rows ) && ! empty( $rows ) && ! isgal_is_editor_preview();
-	if ( $lightbox ) {
-		$wrapper_attributes .= ' data-wp-interactive="imagesnippets/gallery" data-wp-init="callbacks.openFromHash"';
+	// The filter bar is built from the rows at render time: the whole gallery
+	// is on the page already (p90 on ImageSnippets is 47 images), so filtering
+	// is a state change over what is there, not a query. In the editor the bar
+	// is drawn but inert, for the same reason the lightbox is off there.
+	$facet_keys  = isgal_block_facets( $a );
+	$facet_index = $facet_keys && ! empty( $rows ) ? isgal_facet_index( $rows, $a, $facet_keys ) : array();
+	$facets_live = ! empty( $facet_index ) && ! isgal_is_editor_preview();
+	$interactive = $lightbox || $facets_live;
+	$items       = array();
+	if ( $interactive ) {
+		$wrapper_attributes .= ' data-wp-interactive="imagesnippets/gallery" data-wp-init--hash="callbacks.openFromHash" data-wp-init--facets="callbacks.initFacets"';
+	}
+	if ( $facet_index ) {
+		$wrapper_attributes = str_replace( 'class="', 'class="isgal-has-facets ', $wrapper_attributes );
 	}
 
 	ob_start();
 	?>
-	<div <?php echo $wrapper_attributes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php echo $lightbox ? ' data-wp-context="' . esc_attr( 'ISGAL_CONTEXT_PLACEHOLDER' ) . '"' : ''; ?>>
+	<div <?php echo $wrapper_attributes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php echo $interactive ? ' data-wp-context="' . esc_attr( 'ISGAL_CONTEXT_PLACEHOLDER' ) . '"' : ''; ?>>
 		<?php echo isgal_editor_notice( $rows ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 
 		<?php
@@ -1298,6 +1526,7 @@ function isgal_render_gallery( array $attributes ) {
 		<?php if ( empty( $rows ) ) : ?>
 			<p class="isgal-message"><?php echo esc_html( sprintf( /* translators: %s: gallery name */ __( '%s — no images available.', 'image-snippets-gallery' ), $a['gallery'] ) ); ?></p>
 		<?php else : ?>
+			<?php echo $facet_index ? isgal_facet_bar_html( $facet_index, count( $rows ) ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped within. ?>
 			<?php
 			// A timeline is the same items grouped under year headings, in date
 			// order; every other layout is one group with no heading.
@@ -1329,6 +1558,22 @@ function isgal_render_gallery( array $attributes ) {
 					// (isgal_row_dimensions()), with no script: the ratio becomes a
 					// custom property the stylesheet turns into flex-basis/grow and an
 					// aspect-ratio, so the row heights are known before any image loads.
+					// Each figure knows its place in the context's items, which
+					// carry its facet values; hiding is a binding on that.
+					$isgal_item_attrs = '';
+					if ( $interactive ) {
+						$isgal_facet_values = array();
+						foreach ( $facet_keys as $isgal_facet ) {
+							$isgal_facet_values[ $isgal_facet ] = array_values( array_unique( array_map( 'isgal_facet_key', isgal_row_facet_values( $row, $a )[ $isgal_facet ] ) ) );
+						}
+						$isgal_item = array(
+							'anchor' => $isgal_anchor,
+							'f'      => (object) $isgal_facet_values,
+						);
+						if ( $facets_live ) {
+							$isgal_item_attrs = ' data-wp-context="' . esc_attr( wp_json_encode( array( 'i' => count( $items ) ) ) ) . '" data-wp-bind--hidden="state.itemHidden"';
+						}
+					}
 					$isgal_item_style = '';
 					if ( 'justified' === $layout ) {
 						$isgal_dims       = isgal_row_dimensions( $row );
@@ -1336,7 +1581,7 @@ function isgal_render_gallery( array $attributes ) {
 						$isgal_item_style = ' style="--isgal-r:' . esc_attr( round( max( 0.25, min( 4, $isgal_ratio ) ), 4 ) ) . '"';
 					}
 					?>
-					<figure class="isgal-item"<?php echo '' !== $isgal_anchor ? ' id="' . esc_attr( $isgal_anchor ) . '"' : ''; ?><?php echo $isgal_item_style; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?> vocab="https://schema.org/" typeof="ImageObject">
+					<figure class="isgal-item"<?php echo '' !== $isgal_anchor ? ' id="' . esc_attr( $isgal_anchor ) . '"' : ''; ?><?php echo $isgal_item_style . $isgal_item_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?> vocab="https://schema.org/" typeof="ImageObject">
 						<a href="<?php echo esc_url( $row['page'] ? $row['page'] : '#' ); ?>" aria-label="<?php echo esc_attr( $label ); ?>"<?php echo $a['linkNewTab'] ? ' target="_blank" rel="noopener"' : ''; ?><?php echo $lightbox ? ' data-wp-on--click="actions.open"' : ''; ?>>
 							<?php
 							// The source URL (contentUrl) is the full-res original; for Flickr it
@@ -1361,8 +1606,8 @@ function isgal_render_gallery( array $attributes ) {
 							$isgal_code    = isset( $isgal_src_map[ $size ] ) ? $isgal_src_map[ $size ] : 'z';
 							$isgal_src     = isgal_flickr_sized( $isgal_source, $isgal_code );
 							$isgal_srcset  = isgal_flickr_srcset( $isgal_source );
-							if ( $lightbox ) {
-								$lightbox_items[] = isgal_lightbox_item( $row, $a, $title, $alt, $isgal_source );
+							if ( $interactive ) {
+								$items[] = $lightbox ? array_merge( $isgal_item, isgal_lightbox_item( $row, $a, $title, $alt, $isgal_source ) ) : $isgal_item;
 							}
 							// One column's share of the viewport; phones cap at two columns.
 							$isgal_sizes = sprintf( '(max-width: 600px) %dvw, %dvw', (int) ( 100 / min( 2, $cols ) ), (int) ceil( 100 / $cols ) );
@@ -1426,12 +1671,14 @@ function isgal_render_gallery( array $attributes ) {
 	</div>
 	<?php
 	$html = ob_get_clean();
-	if ( $lightbox ) {
+	if ( $interactive ) {
 		$context = array(
-			'lightbox' => true,
+			'lightbox' => $lightbox,
 			'open'     => false,
 			'index'    => 0,
-			'items'    => $lightbox_items,
+			'items'    => $items,
+			'facets'   => $facet_keys,
+			'active'   => (object) array_fill_keys( $facet_keys, array() ),
 		);
 		$html    = str_replace( esc_attr( 'ISGAL_CONTEXT_PLACEHOLDER' ), esc_attr( wp_json_encode( $context ) ), $html );
 	}

@@ -70,6 +70,16 @@ const DEFAULT_DATE_PRIORITY = [
 	'rights',
 ];
 
+// What a visitor can filter the gallery by; every one comes from the image's
+// ImageSnippets graph. Mirrors isgal_facets() in PHP.
+const FACETS = [
+	{ key: 'tag', label: __( 'Tags', 'image-snippets-gallery' ) },
+	{ key: 'creator', label: __( 'Creator', 'image-snippets-gallery' ) },
+	{ key: 'year', label: __( 'Year', 'image-snippets-gallery' ) },
+	{ key: 'camera', label: __( 'Camera', 'image-snippets-gallery' ) },
+	{ key: 'rights', label: __( 'Rights', 'image-snippets-gallery' ) },
+];
+
 const CAPTION_FIELDS = [
 	{ key: 'title', label: __( 'Title', 'image-snippets-gallery' ) },
 	{ key: 'creator', label: __( 'Creator', 'image-snippets-gallery' ) },
@@ -221,6 +231,8 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 		captionTags,
 		hoverEffect,
 		dateFields,
+		facets,
+		facetMax,
 		onClick,
 		linkNewTab,
 		lightboxDetails,
@@ -588,6 +600,45 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 							setAttributes( { aspectRatio: v } )
 						}
 					/>
+				</PanelBody>
+				<PanelBody
+					title={ __( 'Filters', 'image-snippets-gallery' ) }
+					initialOpen={ false }
+				>
+					<OrderedFieldsControl
+						fields={ FACETS }
+						id="isgal-facets"
+						label={ __(
+							'Let visitors filter by',
+							'image-snippets-gallery'
+						) }
+						help={ __(
+							'A row of buttons above the gallery, in this order, built from what the images are tagged with on ImageSnippets. A filter every image shares is left out. Filtered views are shareable links.',
+							'image-snippets-gallery'
+						) }
+						value={ facets }
+						onChange={ ( v ) => setAttributes( { facets: v } ) }
+					/>
+					{ ( facets || [] ).length > 0 && (
+						<RangeControl
+							label={ __(
+								'Buttons per filter',
+								'image-snippets-gallery'
+							) }
+							help={ __(
+								'The most common values are kept.',
+								'image-snippets-gallery'
+							) }
+							value={ facetMax }
+							min={ 3 }
+							max={ 50 }
+							onChange={ ( v ) =>
+								setAttributes( { facetMax: v ?? 12 } )
+							}
+							__nextHasNoMarginBottom
+							__next40pxDefaultSize
+						/>
+					) }
 				</PanelBody>
 				<PanelBody
 					title={ __( 'Title & captions', 'image-snippets-gallery' ) }

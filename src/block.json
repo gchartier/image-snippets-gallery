@@ -86,6 +86,14 @@
 		"dateFields": {
 			"type": [ "array", "null" ]
 		},
+		"facets": {
+			"type": "array",
+			"default": []
+		},
+		"facetMax": {
+			"type": "number",
+			"default": 12
+		},
 		"hoverEffect": {
 			"type": "string",
 			"default": "none"

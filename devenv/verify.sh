@@ -268,6 +268,29 @@ RESOLVED="$(wp eval '$row = array( "dates" => array( "DateTimeOriginal" => "2019
 assert "capture time wins by default, EXIF colons parsed; priority and rights-year honoured" "DateTimeOriginal:2019-07-04 DateCreated 2012" "$RESOLVED"
 assert "the mirror keeps every date source per image" "1" "$(wp eval '$t = isgal_gallery_term( "https://imagesnippets.com/sparql/dbpedia", "mmgallery01" ); $ids = get_objects_in_term( $t->term_id, ISGAL_TAXONOMY ); $r = isgal_mirror_read_row( $ids[0] ); echo (int) ( isset( $r["dates"] ) && is_array( $r["dates"] ) && ! empty( $r["dates"] ) );' | tr -d '\r')"
 
+head_ "Facets are built from the graph"
+
+FCHTML="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "facets" => array( "year", "tag", "creator", "camera" ), "facetMax" => 4, "limit" => 12 ) );' | tr -d '\r')"
+assert "facets render in the block's order (year before tag)" "isgal-facet-year isgal-facet-tag" "$(grep -o 'isgal-facet isgal-facet-[a-z]*' <<<"$FCHTML" | sed 's/isgal-facet //' | tr '\n' ' ' | sed 's/ $//')"
+assert "a facet every image shares (creator) and one none has (camera) are left out" "0" "$(grep -c 'isgal-facet-creator\|isgal-facet-camera' <<<"$FCHTML")"
+assert "years are chips with counts, newest first" "2022 2017 2012 2007" "$(grep -o 'facet&quot;:&quot;year&quot;,&quot;value&quot;:&quot;[0-9]*' <<<"$FCHTML" | sed 's/.*;//' | tr '\n' ' ' | sed 's/ $//')"
+assert "chips are capped per facet, and a year chip carries a string, not a number" "4" "$(grep -o 'value&quot;:&quot;[0-9]*&quot;' <<<"$FCHTML" | wc -l)"
+assert "every figure is bound to its place in the context and stays in the HTML" "6" "$(grep -c '<figure class="isgal-item"[^>]*data-wp-bind--hidden="state.itemHidden"' <<<"$FCHTML")"
+assert "the context carries lowercased facet values per image" "1" "$(grep -o 'data-wp-context="[^"]*"' <<<"$FCHTML" | grep -c 'coast guard island')"
+assert "filtering works without a lightbox (interactive wrapper, lightbox off)" "1" "$(grep -o 'data-wp-context="[^"]*"' <<<"$FCHTML" | head -1 | grep -c '&quot;lightbox&quot;:false')"
+assert "the status line and empty message start hidden" "2" "$(grep -c 'class="isgal-facets__\(status\|empty\)[^"]*" hidden' <<<"$FCHTML")"
+NOF="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "limit" => 2 ) );' | tr -d '\r')"
+assert "no facets chosen: no bar, no interactivity" "0" "$(grep -c 'isgal-facets\|data-wp-interactive' <<<"$NOF")"
+CAM="$(wp eval '$r = array( "triples" => array( array( "x", "http://ns.adobe.com/exif/1.0/Make", array( "type" => "literal", "value" => "Canon" ) ), array( "x", "http://ns.adobe.com/exif/1.0/Model", array( "type" => "literal", "value" => "Canon EOS 5D" ) ) ) ); echo isgal_row_camera( $r ), "|", isgal_row_camera( array( "triples" => array( array( "x", "http://ns.adobe.com/exif/1.0/Make", array( "type" => "literal", "value" => "NIKON" ) ), array( "x", "http://ns.adobe.com/exif/1.0/Model", array( "type" => "literal", "value" => "D700" ) ) ) ) );' | tr -d '\r')"
+assert "camera joins Make and Model without repeating the make" "Canon EOS 5D|NIKON D700" "$CAM"
+# The page is the harness's own, so a fresh environment has it too.
+if ! wp post list --post_type=page --name=facets --format=count | grep -q '^1$'; then
+    wp post create --post_type=page --post_status=publish --post_title='Facets' --post_name=facets \
+        --post_content='<!-- wp:imagesnippets/gallery {"gallery":"mmgallery01","facets":["tag","year","creator","camera","rights"],"onClick":"lightbox","layout":"timeline","displayCaption":true,"limit":12} /-->' >/dev/null
+fi
+FPAGE="$(fetch /facets/)"
+assert "the anonymous visitor gets the bar and the view module on a page-cached page" "2" "$(grep -c 'class="isgal-facets"\|build/view.js' <<<"$FPAGE")"
+
 head_ "JSON-LD on the public page"
 
 tally "$( fetch | python3 ./check-jsonld.py )"

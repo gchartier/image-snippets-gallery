@@ -194,6 +194,92 @@
 	&.isgal-has-caption-color .isgal-caption { color: var( --isgal-caption-color ); }
 	&.isgal-has-caption-size .isgal-caption { font-size: var( --isgal-caption-size ); }
 
+	// Filter bar. Chips are buttons styled as pills; the pressed state is the
+	// theme's text colour inverted, so it reads on any palette without a
+	// colour of its own. A filtered-out figure is hidden with the attribute,
+	// which must beat the grid/flex display set on items.
+	.isgal-facets {
+		margin-bottom: 1rem;
+		font-size: 0.9em;
+	}
+
+	.isgal-facet {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0.35em 0.5em;
+		margin-bottom: 0.5em;
+	}
+
+	.isgal-facet__name {
+		font-weight: 600;
+		margin-right: 0.25em;
+	}
+
+	.isgal-facet__chips {
+		display: contents;
+	}
+
+	.isgal-chip {
+		font: inherit;
+		line-height: 1.2;
+		padding: 0.25em 0.7em;
+		border: 1px solid currentColor;
+		border-radius: 999px;
+		background: transparent;
+		color: inherit;
+		cursor: pointer;
+
+		&:hover,
+		&:focus-visible {
+			background: color-mix( in srgb, currentColor 12%, transparent );
+		}
+
+		// Pressed: a solid ring and a check, so it needs no colour of its own
+		// and reads the same on any theme palette.
+		&.is-active,
+		&[aria-pressed='true'] {
+			font-weight: 600;
+			box-shadow: 0 0 0 1px currentColor inset;
+
+			&::before {
+				content: '\2713\00a0';
+			}
+		}
+	}
+
+	.isgal-chip__count {
+		opacity: 0.65;
+		font-size: 0.85em;
+		margin-left: 0.15em;
+	}
+
+	.isgal-facets__status {
+		margin: 0.5em 0 0;
+		opacity: 0.8;
+	}
+
+	.isgal-facets__clear {
+		font: inherit;
+		font-size: 0.9em;
+		margin-left: 0.5em;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: inherit;
+		text-decoration: underline;
+		cursor: pointer;
+	}
+
+	.isgal-item[hidden] {
+		display: none !important;
+	}
+
+	// A timeline year with nothing left in it loses its heading too.
+	.isgal-timeline__group:not( :has( .isgal-item:not( [hidden] ) ) ) {
+		display: none;
+	}
+
 	.isgal-footer,
 	.isgal-message {
 		font-size: 0.85em;
