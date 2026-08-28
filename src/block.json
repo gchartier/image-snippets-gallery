@@ -18,6 +18,7 @@
 	"textdomain": "image-snippets-gallery",
 	"supports": {
 		"html": false,
+		"interactivity": true,
 		"align": [ "wide", "full" ],
 		"spacing": {
 			"margin": true,
@@ -69,6 +70,18 @@
 		"captionTags": {
 			"type": "number",
 			"default": 3
+		},
+		"onClick": {
+			"type": "string",
+			"default": "page"
+		},
+		"linkNewTab": {
+			"type": "boolean",
+			"default": true
+		},
+		"lightboxDetails": {
+			"type": "boolean",
+			"default": true
 		},
 		"hoverEffect": {
 			"type": "string",
@@ -161,5 +174,6 @@
 	"editorScript": "file:./index.js",
 	"editorStyle": "file:./index.css",
 	"style": "file:./style-index.css",
+	"viewScriptModule": "file:./view.js",
 	"render": "file:./render.php"
 }

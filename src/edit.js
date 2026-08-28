@@ -188,6 +188,9 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 		captionFields,
 		captionTags,
 		hoverEffect,
+		onClick,
+		linkNewTab,
+		lightboxDetails,
 		displayTitle,
 		titleLevel,
 		layout,
@@ -669,6 +672,65 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 							setAttributes( { useFilename: v } )
 						}
 					/>
+				</PanelBody>
+			</InspectorControls>
+
+			<InspectorControls>
+				<PanelBody
+					title={ __(
+						'Clicking an image',
+						'image-snippets-gallery'
+					) }
+					initialOpen={ false }
+				>
+					<SelectControl
+						label={ __( 'Opens', 'image-snippets-gallery' ) }
+						value={ onClick }
+						options={ [
+							{
+								label: __(
+									'Its ImageSnippets page',
+									'image-snippets-gallery'
+								),
+								value: 'page',
+							},
+							{
+								label: __(
+									'A lightbox on this page',
+									'image-snippets-gallery'
+								),
+								value: 'lightbox',
+							},
+						] }
+						onChange={ ( v ) => setAttributes( { onClick: v } ) }
+					/>
+					{ 'lightbox' === onClick ? (
+						<ToggleControl
+							label={ __(
+								'Show creator, date, rights, tags and a source link',
+								'image-snippets-gallery'
+							) }
+							help={ __(
+								'The lightbox is previewed on the published page, not here.',
+								'image-snippets-gallery'
+							) }
+							checked={ lightboxDetails }
+							onChange={ ( v ) =>
+								setAttributes( { lightboxDetails: v } )
+							}
+						/>
+					) : (
+						<ToggleControl
+							label={ __(
+								'Open in a new tab',
+								'image-snippets-gallery'
+							) }
+							checked={ linkNewTab }
+							onChange={ ( v ) =>
+								setAttributes( { linkNewTab: v } )
+							}
+						/>
+					) }
 				</PanelBody>
 			</InspectorControls>
 

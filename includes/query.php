@@ -614,6 +614,9 @@ function isgal_defaults() {
 		'captionTags'       => 3,
 		'hoverEffect'       => 'none',
 		'captionBackground' => '',
+		'onClick'           => 'page',
+		'linkNewTab'        => true,
+		'lightboxDetails'   => true,
 		'displayTitle'      => false,
 		'titleLevel'        => 2,
 		'layout'            => 'grid',
@@ -713,6 +716,67 @@ function isgal_row_tags( array $row ) {
 		}
 	}
 	return array_values( $tags );
+}
+
+/**
+ * Everything the lightbox needs for one image, resolved on the server so the
+ * front end never fetches. Goes into the block's Interactivity context.
+ *
+ * @param array  $row          Row.
+ * @param array  $a            Resolved attributes.
+ * @param string $title        Resolved title.
+ * @param string $alt          Resolved alt text.
+ * @param string $source       Full-size source URL.
+ * @return array
+ */
+function isgal_lightbox_item( array $row, array $a, $title, $alt, $source ) {
+	$srcset = isgal_flickr_srcset( $source );
+	return array(
+		'anchor'  => isgal_image_anchor( $row['page'] ),
+		'src'     => esc_url_raw( isgal_flickr_sized( $source, 'b' ) ),
+		'srcset'  => $srcset,
+		'alt'     => (string) $alt,
+		'title'   => (string) $title,
+		'creator' => $a['lightboxDetails'] ? (string) $row['creator'] : '',
+		'date'    => $a['lightboxDetails'] ? isgal_format_graph_date( $row['date'] ) : '',
+		'rights'  => $a['lightboxDetails'] ? (string) $row['rights'] : '',
+		'tags'    => $a['lightboxDetails'] ? array_slice( isgal_row_tags( $row ), 0, 12 ) : array(),
+		'page'    => $a['lightboxDetails'] ? esc_url_raw( $row['page'] ) : '',
+	);
+}
+
+/**
+ * The lightbox dialog for a gallery. One per block; the items live in the
+ * wrapper's context, so this is only the frame that shows the current one.
+ *
+ * @return string HTML.
+ */
+function isgal_lightbox_html() {
+	ob_start();
+	?>
+	<dialog class="isgal-lightbox" data-wp-watch="callbacks.syncDialog" data-wp-on--close="actions.close" data-wp-on--click="actions.backdrop" data-wp-on--keydown="actions.keydown" data-wp-on--touchstart="actions.touchStart" data-wp-on--touchend="actions.touchEnd" aria-label="<?php esc_attr_e( 'Image viewer', 'image-snippets-gallery' ); ?>">
+		<div class="isgal-lightbox__frame">
+			<button type="button" class="isgal-lightbox__close" data-wp-on--click="actions.close" aria-label="<?php esc_attr_e( 'Close', 'image-snippets-gallery' ); ?>">&#x2715;</button>
+			<button type="button" class="isgal-lightbox__nav isgal-lightbox__prev" data-wp-on--click="actions.prev" data-wp-bind--hidden="!state.hasMany" aria-label="<?php esc_attr_e( 'Previous image', 'image-snippets-gallery' ); ?>">&#x2039;</button>
+			<figure class="isgal-lightbox__figure">
+				<img class="isgal-lightbox__img" data-wp-bind--src="state.current.src" data-wp-bind--srcset="state.current.srcset" data-wp-bind--alt="state.current.alt" sizes="100vw" decoding="async" />
+				<figcaption class="isgal-lightbox__caption">
+					<span class="isgal-lightbox__title" data-wp-text="state.current.title"></span>
+					<span class="isgal-lightbox__count" data-wp-text="state.position" data-wp-bind--hidden="!state.hasMany"></span>
+					<dl class="isgal-lightbox__details" data-wp-bind--hidden="!state.hasDetails">
+						<div data-wp-bind--hidden="!state.current.creator"><dt><?php esc_html_e( 'Creator', 'image-snippets-gallery' ); ?></dt><dd data-wp-text="state.current.creator"></dd></div>
+						<div data-wp-bind--hidden="!state.current.date"><dt><?php esc_html_e( 'Date', 'image-snippets-gallery' ); ?></dt><dd data-wp-text="state.current.date"></dd></div>
+						<div data-wp-bind--hidden="!state.current.rights"><dt><?php esc_html_e( 'Rights', 'image-snippets-gallery' ); ?></dt><dd data-wp-text="state.current.rights"></dd></div>
+						<div data-wp-bind--hidden="!state.current.tags.length"><dt><?php esc_html_e( 'Tags', 'image-snippets-gallery' ); ?></dt><dd><template data-wp-each="state.current.tags"><span class="isgal-lightbox__tag" data-wp-text="context.item"></span></template></dd></div>
+						<div data-wp-bind--hidden="!state.current.page"><dt><?php esc_html_e( 'Source', 'image-snippets-gallery' ); ?></dt><dd><a data-wp-bind--href="state.current.page" target="_blank" rel="noopener"><?php esc_html_e( 'View on ImageSnippets', 'image-snippets-gallery' ); ?></a></dd></div>
+					</dl>
+				</figcaption>
+			</figure>
+			<button type="button" class="isgal-lightbox__nav isgal-lightbox__next" data-wp-on--click="actions.next" data-wp-bind--hidden="!state.hasMany" aria-label="<?php esc_attr_e( 'Next image', 'image-snippets-gallery' ); ?>">&#x203A;</button>
+		</div>
+	</dialog>
+	<?php
+	return ob_get_clean();
 }
 
 /**
@@ -1065,6 +1129,7 @@ function isgal_render_gallery( array $attributes ) {
 		$ratio = 'original';
 	}
 
+	$lightbox    = 'lightbox' === $a['onClick'];
 	$caption_pos = in_array( $a['captionPosition'], array( 'below', 'overlay', 'hover' ), true ) ? $a['captionPosition'] : 'below';
 	$hover       = in_array( $a['hoverEffect'], array( 'none', 'zoom', 'fade', 'lift' ), true ) ? $a['hoverEffect'] : 'none';
 
@@ -1072,7 +1137,7 @@ function isgal_render_gallery( array $attributes ) {
 	$classes = implode(
 		' ',
 		array_merge(
-			array( 'isgal-gallery', 'isgal-layout-' . $layout, 'isgal-ratio-' . $ratio, 'isgal-captions-' . $caption_pos, 'isgal-hover-' . $hover ),
+			array( 'isgal-gallery', 'isgal-layout-' . $layout, 'isgal-ratio-' . $ratio, 'isgal-captions-' . $caption_pos, 'isgal-hover-' . $hover, $lightbox ? 'isgal-has-lightbox' : '' ),
 			$style['classes']
 		)
 	);
@@ -1094,6 +1159,7 @@ function isgal_render_gallery( array $attributes ) {
 		$extra['style'] = implode( ';', $decls );
 	}
 	$wrapper_attributes = get_block_wrapper_attributes( $extra );
+	$lightbox_items     = array();
 
 	if ( '' === trim( (string) $a['gallery'] ) ) {
 		return sprintf(
@@ -1115,10 +1181,16 @@ function isgal_render_gallery( array $attributes ) {
 
 	$use_filename = (bool) $a['useFilename'];
 	$position     = 0;
+	// Not in the editor: showModal() inside the preview iframe is a trap for
+	// the person editing, and the items would be rebuilt on every keystroke.
+	$lightbox = $lightbox && ! is_wp_error( $rows ) && ! empty( $rows ) && ! isgal_is_editor_preview();
+	if ( $lightbox ) {
+		$wrapper_attributes .= ' data-wp-interactive="imagesnippets/gallery" data-wp-init="callbacks.openFromHash"';
+	}
 
 	ob_start();
 	?>
-	<div <?php echo $wrapper_attributes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+	<div <?php echo $wrapper_attributes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?><?php echo $lightbox ? ' data-wp-context="' . esc_attr( 'ISGAL_CONTEXT_PLACEHOLDER' ) . '"' : ''; ?>>
 		<?php echo isgal_editor_notice( $rows ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 
 		<?php
@@ -1160,7 +1232,7 @@ function isgal_render_gallery( array $attributes ) {
 					}
 					?>
 					<figure class="isgal-item"<?php echo '' !== $isgal_anchor ? ' id="' . esc_attr( $isgal_anchor ) . '"' : ''; ?><?php echo $isgal_item_style; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?> vocab="https://schema.org/" typeof="ImageObject">
-						<a href="<?php echo esc_url( $row['page'] ? $row['page'] : '#' ); ?>" aria-label="<?php echo esc_attr( $label ); ?>" target="_blank" rel="noopener">
+						<a href="<?php echo esc_url( $row['page'] ? $row['page'] : '#' ); ?>" aria-label="<?php echo esc_attr( $label ); ?>"<?php echo $a['linkNewTab'] ? ' target="_blank" rel="noopener"' : ''; ?><?php echo $lightbox ? ' data-wp-on--click="actions.open"' : ''; ?>>
 							<?php
 							// The source URL (contentUrl) is the full-res original; for Flickr it
 							// carries the size in its filename suffix, so we request a rendition
@@ -1184,6 +1256,9 @@ function isgal_render_gallery( array $attributes ) {
 							$isgal_code    = isset( $isgal_src_map[ $size ] ) ? $isgal_src_map[ $size ] : 'z';
 							$isgal_src     = isgal_flickr_sized( $isgal_source, $isgal_code );
 							$isgal_srcset  = isgal_flickr_srcset( $isgal_source );
+							if ( $lightbox ) {
+								$lightbox_items[] = isgal_lightbox_item( $row, $a, $title, $alt, $isgal_source );
+							}
 							// One column's share of the viewport; phones cap at two columns.
 							$isgal_sizes = sprintf( '(max-width: 600px) %dvw, %dvw', (int) ( 100 / min( 2, $cols ) ), (int) ceil( 100 / $cols ) );
 							?>
@@ -1230,8 +1305,19 @@ function isgal_render_gallery( array $attributes ) {
 				<p class="isgal-footer"><?php echo esc_html( sprintf( /* translators: %s: rights statement */ __( 'Images %s', 'image-snippets-gallery' ), reset( $isgal_rights ) ) ); ?></p>
 			<?php endif; ?>
 			<?php echo isgal_jsonld( $rows, $a['gallery'], $use_filename, $a['jsonldProfile'], isgal_current_permalink() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php echo $lightbox ? isgal_lightbox_html() : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped within. ?>
 		<?php endif; ?>
 	</div>
 	<?php
-	return ob_get_clean();
+	$html = ob_get_clean();
+	if ( $lightbox ) {
+		$context = array(
+			'lightbox' => true,
+			'open'     => false,
+			'index'    => 0,
+			'items'    => $lightbox_items,
+		);
+		$html    = str_replace( esc_attr( 'ISGAL_CONTEXT_PLACEHOLDER' ), esc_attr( wp_json_encode( $context ) ), $html );
+	}
+	return $html;
 }

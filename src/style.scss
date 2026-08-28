@@ -235,6 +235,160 @@
 		}
 	}
 
+	// Lightbox. A native <dialog>, so focus, Esc and the backdrop are the
+	// browser's; this only lays it out. Colours are fixed dark: it sits over
+	// the page, not in it, and must read the same on any theme.
+	.isgal-lightbox {
+		border: 0;
+		padding: 0;
+		margin: auto;
+		width: min( 96vw, 1400px );
+		max-width: none;
+		max-height: 96vh;
+		background: transparent;
+		color: #fff;
+
+		&::backdrop {
+			background: rgba( 0, 0, 0, 0.92 );
+		}
+
+		&__frame {
+			display: grid;
+			grid-template-columns: auto 1fr auto;
+			align-items: center;
+			gap: 0.5rem;
+			position: relative;
+		}
+
+		&__figure {
+			margin: 0;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			min-width: 0;
+		}
+
+		&__img {
+			display: block;
+			max-width: 100%;
+			max-height: 70vh;
+			width: auto;
+			height: auto;
+			object-fit: contain;
+			border-radius: 0;
+			border: 0;
+			box-shadow: none;
+		}
+
+		&__caption {
+			width: 100%;
+			max-width: 60ch;
+			margin-top: 0.75rem;
+			font-size: 0.9rem;
+			line-height: 1.4;
+			text-align: left;
+		}
+
+		&__title {
+			display: block;
+			font-size: 1.1em;
+			font-weight: 600;
+		}
+
+		&__count {
+			display: block;
+			opacity: 0.6;
+			font-size: 0.85em;
+		}
+
+		&__details {
+			margin: 0.6rem 0 0;
+			padding-top: 0.6rem;
+			border-top: 1px solid rgba( 255, 255, 255, 0.2 );
+			display: grid;
+			grid-template-columns: max-content 1fr;
+			column-gap: 1rem;
+			row-gap: 0.25rem;
+
+			> div {
+				display: contents;
+			}
+
+			dt {
+				opacity: 0.6;
+				font-size: 0.85em;
+				text-transform: uppercase;
+				letter-spacing: 0.04em;
+			}
+
+			dd {
+				margin: 0;
+			}
+
+			a {
+				color: inherit;
+				text-decoration: underline;
+			}
+		}
+
+		&__tag {
+			display: inline-block;
+			margin: 0 0.35em 0.25em 0;
+			padding: 0.05em 0.5em;
+			border: 1px solid rgba( 255, 255, 255, 0.3 );
+			border-radius: 999px;
+			font-size: 0.85em;
+		}
+
+		&__close,
+		&__nav {
+			background: rgba( 255, 255, 255, 0.12 );
+			color: #fff;
+			border: 0;
+			border-radius: 999px;
+			cursor: pointer;
+			font-size: 1.6rem;
+			line-height: 1;
+			width: 2.6rem;
+			height: 2.6rem;
+			display: grid;
+			place-items: center;
+			padding: 0;
+
+			&:hover,
+			&:focus-visible {
+				background: rgba( 255, 255, 255, 0.28 );
+			}
+		}
+
+		&__close {
+			position: absolute;
+			top: 0;
+			right: 0;
+			z-index: 1;
+			font-size: 1.1rem;
+		}
+
+		@media ( max-width: 600px ) {
+			&__frame {
+				grid-template-columns: 1fr;
+			}
+
+			&__nav {
+				position: absolute;
+				top: 40%;
+			}
+
+			&__prev {
+				left: 0;
+			}
+
+			&__next {
+				right: 0;
+			}
+		}
+	}
+
 	// Masonry: CSS columns instead of grid.
 	&.isgal-layout-masonry .isgal-grid {
 		display: block;

@@ -1,7 +1,7 @@
 === ImageSnippets Gallery ===
 Contributors: gnosyslabs
 Tags: gallery, block, media, provenance, rdf
-Requires at least: 6.4
+Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 7.4
 Stable tag: 0.7.0
@@ -78,6 +78,8 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 
 = 0.7.0 =
 
+* Lightbox. Set "Clicking an image" to open a lightbox on the page instead of the ImageSnippets page: keyboard arrows, swipe, Esc, and a provenance panel with the creator, date, rights, tags and a link to the source. Everything it shows is in the page already, so opening an image makes no request. A link to an image (the ones site search produces) opens it in the lightbox straight away. Built on WordPress's own Interactivity API; no library bundled. Requires WordPress 6.5.
+* "Open in a new tab" is now a choice rather than always on.
 * Captions can now carry more than the title: choose any of title, creator, date, rights and tags, in the order you want, per block. The lines come from each image's ImageSnippets record — the photographer, when it was made, who holds the rights, what it shows — so the provenance is on the page, not only in the metadata.
 * Captions can sit below the image, over it, or over it only on hover; overlaid captions have their own background colour in the Styles tab.
 * Hover effects: zoom, fade or lift. Off by default; all three respect the visitor's reduced-motion setting.

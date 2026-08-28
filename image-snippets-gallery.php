@@ -3,7 +3,7 @@
  * Plugin Name:       ImageSnippets Gallery
  * Plugin URI:        https://imagesnippets.com/
  * Description:        Responsive, server-rendered gallery of images from ImageSnippets, with embedded provenance metadata (JSON-LD) for SEO and discoverability. Galleries are mirrored into WordPress, so pages render without waiting on the network and site search finds the images. A modern fork of "IS Gallery" by Henry Sautter.
- * Requires at least: 6.4
+ * Requires at least: 6.5
  * Requires PHP:      7.4
  * Version:           0.7.0
  * Author:            GnoSys Labs

@@ -6,8 +6,8 @@
 	"license": "GPL-2.0-or-later",
 	"main": "build/index.js",
 	"scripts": {
-		"build": "wp-scripts build",
-		"start": "wp-scripts start",
+		"build": "wp-scripts build --experimental-modules",
+		"start": "wp-scripts start --experimental-modules",
 		"lint:js": "wp-scripts lint-js",
 		"lint:php": "docker run --rm -v \"$PWD\":/app -w /app composer:2 sh -c 'composer install --quiet --no-interaction && vendor/bin/phpcs'",
 		"lint:php:fix": "docker run --rm -v \"$PWD\":/app -w /app composer:2 sh -c 'composer install --quiet --no-interaction && vendor/bin/phpcbf'",
@@ -16,6 +16,7 @@
 	},
 	"devDependencies": {
 		"@wordpress/icons": "^15.4.0",
+		"@wordpress/interactivity": "^6.54.0",
 		"@wordpress/scripts": "^30.0.0"
 	}
 }

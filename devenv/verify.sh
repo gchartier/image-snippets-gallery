@@ -246,6 +246,18 @@ assert "a year-only date stays a year" "1" "$(grep -c 'isgal-cap-date">2002<' <<
 assert "tags include an entity attached to a region, not just the image" "1" "$(grep -c 'isgal-cap-tags">[^<]*pinhole' <<<"$CAPHTML")"
 assert "position and hover effect are wrapper classes" "1" "$(grep -c 'isgal-captions-overlay isgal-hover-zoom' <<<"$CAPHTML")"
 
+head_ "Lightbox is server-fed"
+
+LBHTML="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "onClick" => "lightbox", "limit" => 12 ) );' | tr -d '\r')"
+assert "the wrapper joins the Interactivity store" "1" "$(grep -c 'data-wp-interactive="imagesnippets/gallery"' <<<"$LBHTML")"
+assert "every image is in the context, so opening one needs no request" "6" "$(grep -o 'data-wp-context="[^"]*"' <<<"$LBHTML" | grep -o '&quot;anchor&quot;' | wc -l)"
+assert "the context carries provenance (rights) for the panel" "1" "$(grep -o 'data-wp-context="[^"]*"' <<<"$LBHTML" | grep -c 'Copyright 2022 Margaret Warren')"
+assert "one dialog per gallery" "1" "$(grep -c '<dialog class="isgal-lightbox"' <<<"$LBHTML")"
+assert "links still point at ImageSnippets for crawlers" "6" "$(grep -o '<a href="https://imagesnippets.com/[^"]*"[^>]*data-wp-on--click="actions.open"' <<<"$LBHTML" | wc -l)"
+assert "the view module is enqueued on the page" "1" "$(fetch | grep -c 'build/view.js')"
+NOLB="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "linkNewTab" => false, "limit" => 2 ) );' | tr -d '\r')"
+assert "open-in-new-tab can be turned off" "0" "$(grep -c 'target="_blank"' <<<"$NOLB")"
+
 head_ "JSON-LD on the public page"
 
 tally "$( fetch | python3 ./check-jsonld.py )"
