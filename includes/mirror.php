@@ -815,6 +815,26 @@ function isgal_mirror_query_rows( WP_Term $term, array $a ) {
 		return array_slice( array_column( $keyed, 2 ), 0, $limit );
 	}
 
+	// Shuffle: one order per refetch window, not per request. Under a page
+	// cache one shuffle is frozen for the cache's lifetime anyway; keying the
+	// seed on the window keeps uncached views (logged-in editors, the block
+	// editor) from reshuffling on every load, and keeps facet/lightbox/deep-link
+	// positions stable within a visit.
+	if ( 'random' === $order_by ) {
+		$all = isgal_mirror_query_rows(
+			$term,
+			array_merge(
+				$a,
+				array(
+					'orderBy' => 'date',
+					'order'   => 'desc',
+					'limit'   => 200,
+				)
+			)
+		);
+		return array_slice( isgal_shuffle_rows( $all, isgal_shuffle_seed( $term, $a ) ), 0, $limit );
+	}
+
 	if ( 'manual' === $order_by ) {
 		$all = isgal_mirror_query_rows(
 			$term,
@@ -996,4 +1016,44 @@ add_action( 'pre_get_posts', 'isgal_scope_mirror_queries' );
  */
 function isgal_is_mirror_post( $post ) {
 	return $post instanceof WP_Post && ISGAL_POST_TYPE === $post->post_type;
+}
+
+/**
+ * The seed a shuffled gallery uses: the gallery plus the current refetch
+ * window, so the order changes when the stored copy is next due to change.
+ * A refetch rate of 0 (check every view) shuffles every request.
+ *
+ * @param WP_Term $term Gallery term.
+ * @param array   $a    Resolved block attributes.
+ * @return int
+ */
+function isgal_shuffle_seed( WP_Term $term, array $a ) {
+	$ttl    = function_exists( 'isgal_configured_ttl' ) ? (int) isgal_configured_ttl( $a ) : 0;
+	$window = $ttl > 0 ? (int) floor( time() / $ttl ) : time() + wp_rand( 0, PHP_INT_MAX >> 33 );
+	return (int) ( crc32( $term->slug . '|' . $window ) & 0x7fffffff );
+}
+
+/**
+ * Fisher–Yates over the rows with a seeded generator, so the same seed gives
+ * the same order. Does not touch PHP's global random state.
+ *
+ * @param array $rows Rows.
+ * @param int   $seed Seed.
+ * @return array
+ */
+function isgal_shuffle_rows( array $rows, $seed ) {
+	$n = count( $rows );
+	if ( $n < 2 ) {
+		return $rows;
+	}
+	// Multiplicative LCG (Park–Miller) — portable and good enough for a gallery order.
+	$state = ( (int) $seed % 2147483646 ) + 1;
+	for ( $i = $n - 1; $i > 0; $i-- ) {
+		$state      = (int) ( ( 16807 * $state ) % 2147483647 );
+		$j          = $state % ( $i + 1 );
+		$tmp        = $rows[ $i ];
+		$rows[ $i ] = $rows[ $j ];
+		$rows[ $j ] = $tmp;
+	}
+	return $rows;
 }

@@ -71,6 +71,10 @@ Open Tools &rarr; ImageSnippets. It shows when each gallery last updated, how ma
 
 If that screen says a page cache is active but has not been cleared by this plugin, your host or caching plugin is serving stored HTML to visitors. Exclude the gallery pages from that cache, or ask your host how to clear it when content changes.
 
+= What does a gallery look like by default? =
+
+Three columns of 4:3 crops, no captions, no title, newest first, forty images, each linking to its page on ImageSnippets in a new tab, with every image's provenance in the page as JSON-LD. Everything is a setting in the block's sidebar, and the inserter's Patterns tab offers other starting points under "ImageSnippets".
+
 = Is it fast? =
 
 Yes, by construction. Each gallery is copied to your site once and refreshed in the background, so a page view makes no request to ImageSnippets: the HTML, the image sizes and the structured data all come from the local copy. Images load lazily with sizes matched to their column, and nothing on the page needs a script to appear. For long galleries, set "Images shown at first" to add a "Load more" button (or reveal on scroll); the rest of the images are still in the page for search engines, just hidden until asked for. Site Health → Info → ImageSnippets Gallery shows the numbers.
@@ -83,6 +87,11 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 
 = 0.7.0 =
 
+* Getting started. After activation, Tools → ImageSnippets opens with a panel that lists your galleries on ImageSnippets and creates a draft page holding one, in a look of your choosing, then opens it in the editor. The panel also comes back whenever the site has no gallery.
+* Block patterns. The inserter's Patterns tab has an "ImageSnippets" category with four ready-made looks — Gallery with title, Portfolio grid, Slideshow hero, Timeline — each a single gallery block with the settings that make that layout look intended; pick the gallery in its Source panel.
+* The block's preview in the inserter is drawn locally rather than fetched, so it appears at once and makes no request.
+* Sort by → Shuffle. A random order that changes each time the gallery is refetched from ImageSnippets (the block's refetch rate), not on every view — so a visitor's filters, lightbox and links to an image stay stable, and a page cache holding one order is the intended behaviour rather than a surprise.
+* Alt text can come from the image's ImageSnippets description (the default; it is written to describe the picture) or from its title, per block, under Title & captions.
 * "Load more". Set "Images shown at first" in the block's Source panel and long galleries show that many, with a button that reveals the next batch — or, with the scroll option, reveal as the visitor nears the end. Every image is still in the page for search engines and structured data; only the display waits. Works with filters (each filtered view starts with a full first batch) and the lightbox (closing it reveals up to the image you were on); a link to a specific image reveals it.
 * Site Health now says how many images are kept on this site and that pages make no request to ImageSnippets; Site Health → Info has a section with the figures.
 * New layout: Slideshow. One image at a time, as wide as the block, with previous/next arrows, a counter, and dots or a thumbnail strip to jump to any image; optional autoplay with a chosen number of seconds per image, which pauses while the pointer or keyboard focus is on the gallery and stays stopped for visitors who ask their browser for less motion. Arrow keys and swiping work. Every image is still in the page for search engines and structured data; the script only moves a `hidden` attribute. Works with filters (a filtered-out image loses its slide and its dot) and with the lightbox (closing it lands the slideshow on the image just seen).

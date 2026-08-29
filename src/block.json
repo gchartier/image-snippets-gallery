@@ -161,6 +161,14 @@
 			"type": "boolean",
 			"default": false
 		},
+		"altSource": {
+			"type": "string",
+			"default": "graph"
+		},
+		"isPreview": {
+			"type": "boolean",
+			"default": false
+		},
 		"cacheTtl": {
 			"type": [ "number", "null" ]
 		},
@@ -196,10 +204,9 @@
 	},
 	"example": {
 		"attributes": {
-			"gallery": "mmgallery01",
+			"isPreview": true,
 			"displayCaption": true,
-			"displayTitle": true,
-			"limit": 6
+			"displayTitle": true
 		}
 	},
 	"editorScript": "file:./index.js",

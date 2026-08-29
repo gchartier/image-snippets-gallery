@@ -398,6 +398,48 @@ fetch >/dev/null
 STALLED="$(fixture status gallery | awk '/^interval/{print $2}')"
 assert "stalled cron falls back to a synchronous sync" "fresh" "$STALLED"
 
+head_ "Shuffle, alt text source"
+
+SHUF1="$(wp eval 'echo implode( ",", array_map( function ( $r ) { return $r["_post_id"]; }, isgal_mirror_query_rows( isgal_gallery_term( isgal_default_endpoint(), "mmgallery01" ), array_merge( isgal_resolve_attributes( array() ), array( "gallery" => "mmgallery01", "orderBy" => "random", "limit" => 12 ) ) ) ) );' | tr -d '\r')"
+SHUF2="$(wp eval 'echo implode( ",", array_map( function ( $r ) { return $r["_post_id"]; }, isgal_mirror_query_rows( isgal_gallery_term( isgal_default_endpoint(), "mmgallery01" ), array_merge( isgal_resolve_attributes( array() ), array( "gallery" => "mmgallery01", "orderBy" => "random", "limit" => 12 ) ) ) ) );' | tr -d '\r')"
+DATED="$(wp eval 'echo implode( ",", array_map( function ( $r ) { return $r["_post_id"]; }, isgal_mirror_query_rows( isgal_gallery_term( isgal_default_endpoint(), "mmgallery01" ), array_merge( isgal_resolve_attributes( array() ), array( "gallery" => "mmgallery01", "limit" => 12 ) ) ) ) );' | tr -d '\r')"
+assert "shuffle keeps every image" "$(tr ',' '\n' <<<"$DATED" | sort | tr '\n' ',')" "$(tr ',' '\n' <<<"$SHUF1" | sort | tr '\n' ',')"
+assert "shuffle is stable within a refetch window" "$SHUF1" "$SHUF2"
+assert "shuffle is not the date order" "1" "$([ "$SHUF1" != "$DATED" ] && echo 1 || echo 0)"
+assert "a different window gives a different order" "1" \
+    "$(wp eval 'echo isgal_shuffle_rows( range( 1, 12 ), 5 ) === isgal_shuffle_rows( range( 1, 12 ), 6 ) ? 0 : 1;' | tr -d '\r')"
+
+ALTG="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "limit" => 12, "displayCaption" => true ) );' | tr -d '\r')"
+ALTT="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "limit" => 12, "displayCaption" => true, "altSource" => "title" ) );' | tr -d '\r')"
+FIRST_TITLE="$(grep -o 'isgal-cap-title[^>]*>[^<]*' <<<"$ALTT" | head -1 | sed 's/.*>//')"
+assert "alt from title matches the caption" "$FIRST_TITLE" "$(grep -o 'alt="[^"]*"' <<<"$ALTT" | head -1 | sed 's/alt="//; s/"$//' | sed 's/&#039;/'"'"'/g; s/&amp;/\&/g')"
+assert "default alt differs from the title for at least one image" "1" \
+    "$([ "$(grep -o 'alt="[^"]*"' <<<"$ALTG")" != "$(grep -o 'alt="[^"]*"' <<<"$ALTT")" ] && echo 1 || echo 0)"
+
+head_ "Onboarding: patterns, preview, demo page"
+
+assert "four patterns registered under imagesnippets/" "4" \
+    "$(wp eval 'echo count( array_filter( WP_Block_Patterns_Registry::get_instance()->get_all_registered(), function ( $p ) { return 0 === strpos( $p["name"], "imagesnippets/" ); } ) );' | tr -d '\r')"
+assert "pattern category exists" "1" \
+    "$(wp eval 'echo WP_Block_Pattern_Categories_Registry::get_instance()->is_registered( "imagesnippets" ) ? 1 : 0;' | tr -d '\r')"
+assert "every pattern parses to one gallery block" "4" \
+    "$(wp eval 'foreach ( WP_Block_Patterns_Registry::get_instance()->get_all_registered() as $p ) { if ( 0 !== strpos( $p["name"], "imagesnippets/" ) ) continue; $b = array_values( array_filter( parse_blocks( $p["content"] ), function ( $x ) { return null !== $x["blockName"]; } ) ); if ( 1 === count( $b ) && "imagesnippets/gallery" === $b[0]["blockName"] ) echo "."; }' | tr -d '\r' | tr -cd '.' | wc -c | tr -d ' ')"
+assert "the slideshow pattern renders as a slideshow" "1" \
+    "$(wp eval '$p = WP_Block_Patterns_Registry::get_instance()->get_registered( "imagesnippets/slideshow-hero" ); $b = parse_blocks( $p["content"] ); $b = array_values( array_filter( $b, function ( $x ) { return null !== $x["blockName"]; } ) ); echo isgal_render_gallery( array_merge( $b[0]["attrs"], array( "gallery" => "mmgallery01", "limit" => 12 ) ) );' | grep -c 'isgal-layout-slideshow' | awk '{print ($1>0)?1:0}')"
+assert "inserter example is the static preview" "1" \
+    "$(wp eval '$t = WP_Block_Type_Registry::get_instance()->get_registered( "imagesnippets/gallery" ); echo ! empty( $t->example["attributes"]["isPreview"] ) && empty( $t->example["attributes"]["gallery"] ) ? 1 : 0;' | tr -d '\r')"
+
+DEMO_ID="$(wp eval 'echo isgal_create_demo_page( "mmgallery01", "portfolio-grid" );' | tr -d '\r')"
+assert "demo page is a draft page" "page/draft" \
+    "$(wp post get "$DEMO_ID" --field=post_type | tr -d '\r')/$(wp post get "$DEMO_ID" --field=post_status | tr -d '\r')"
+assert "demo page holds the gallery with the pattern's settings" "1" \
+    "$(wp post get "$DEMO_ID" --field=post_content | grep -c '"gallery":"mmgallery01".*"columns":4' | awk '{print ($1>0)?1:0}')"
+assert "demo page renders the gallery" "$TRUE_COUNT" \
+    "$(wp eval '$b = parse_blocks( get_post( '"$DEMO_ID"' )->post_content ); echo isgal_render_gallery( array_merge( $b[0]["attrs"], array( "limit" => 12 ) ) );' | grep -c '<figure class="isgal-item"')"
+assert "an empty gallery name is refused" "1" \
+    "$(wp eval 'echo is_wp_error( isgal_create_demo_page( "" ) ) ? 1 : 0;' | tr -d '\r')"
+wp post delete "$DEMO_ID" --force >/dev/null
+
 head_ "WP-CLI"
 
 assert "wp isgal status lists the gallery" "mmgallery01" "$(wp isgal status --format=csv | awk -F, 'NR==2{print $1}' | tr -d '\r')"

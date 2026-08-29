@@ -22,3 +22,48 @@
 	min-width: 24px;
 	padding: 0 4px;
 }
+
+// Inserter preview: a sketch of the block, no image data involved.
+.isgal-preview {
+	padding: 4px;
+
+	&__title {
+		height: 10px;
+		width: 45%;
+		margin: 0 0 8px;
+		border-radius: 3px;
+		background: currentColor;
+		opacity: 0.55;
+	}
+
+	&__grid {
+		display: grid;
+		grid-template-columns: repeat( 3, 1fr );
+		gap: 6px;
+	}
+
+	&__item {
+		margin: 0;
+	}
+
+	&__img {
+		aspect-ratio: 4 / 3;
+		border-radius: 3px;
+		background: linear-gradient( 135deg, #7f8c8d, #34495e );
+	}
+
+	&__item-1 &__img { background: linear-gradient( 135deg, #c0392b, #8e44ad ); }
+	&__item-2 &__img { background: linear-gradient( 135deg, #16a085, #2980b9 ); }
+	&__item-3 &__img { background: linear-gradient( 135deg, #f39c12, #d35400 ); }
+	&__item-4 &__img { background: linear-gradient( 135deg, #27ae60, #16a085 ); }
+	&__item-5 &__img { background: linear-gradient( 135deg, #2c3e50, #7f8c8d ); }
+
+	&__cap {
+		height: 5px;
+		width: 70%;
+		margin-top: 4px;
+		border-radius: 2px;
+		background: currentColor;
+		opacity: 0.35;
+	}
+}

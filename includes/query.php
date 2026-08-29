@@ -549,12 +549,19 @@ function isgal_row_dimensions( array $row ) {
 }
 
 /**
- * Resolve alt text (AltText -> extended description -> title).
+ * Resolve alt text. By default the image's own alt text on ImageSnippets
+ * (og:image:alt, then the extended description) wins over the title, because
+ * it is written to describe the picture; a block may prefer the title, which
+ * is shorter and matches what a caption shows.
  *
- * @param array $row Row.
+ * @param array  $row    Row.
+ * @param string $source 'graph' (default) or 'title'.
  * @return string
  */
-function isgal_row_alt( array $row ) {
+function isgal_row_alt( array $row, $source = 'graph' ) {
+	if ( 'title' === $source ) {
+		return isgal_first( array( $row['title'], $row['name'], $row['alt'], $row['desc'] ) );
+	}
 	return isgal_first( array( $row['alt'], $row['desc'], $row['title'], $row['name'] ) );
 }
 
@@ -635,6 +642,7 @@ function isgal_defaults() {
 		'columns'           => 3,
 		'aspectRatio'       => '4-3',
 		'useFilename'       => false,
+		'altSource'         => 'graph',
 		'cacheTtl'          => null,
 		'jsonldProfile'     => 'provenance',
 		'imageBorder'       => null,
@@ -1669,7 +1677,7 @@ function isgal_render_gallery( array $attributes ) {
 				foreach ( $isgal_group_rows as $row ) :
 					++$position;
 					$title = isgal_row_title( $row, $use_filename );
-					$alt   = isgal_row_alt( $row );
+					$alt   = isgal_row_alt( $row, (string) $a['altSource'] );
 					// Always give the link an accessible name, even when alt is empty.
 					$label = isgal_first(
 						array(

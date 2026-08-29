@@ -46,6 +46,7 @@ require_once __DIR__ . '/includes/mirror.php';
 require_once __DIR__ . '/includes/query.php';
 require_once __DIR__ . '/includes/search.php';
 require_once __DIR__ . '/includes/rest.php';
+require_once __DIR__ . '/includes/patterns.php';
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	require_once __DIR__ . '/includes/cli.php';
@@ -66,6 +67,10 @@ if ( is_admin() ) {
 function isgal_activate() {
 	isgal_migrate_from_isg();
 	isgal_rebuild_index();
+	// Shows the getting-started notice once; Tools → ImageSnippets clears it.
+	if ( false === get_option( 'isgal_welcome' ) ) {
+		add_option( 'isgal_welcome', 1, '', false );
+	}
 }
 register_activation_hook( __FILE__, 'isgal_activate' );
 

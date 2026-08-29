@@ -95,6 +95,23 @@ function isgal_handle_admin_actions() {
 		);
 	}
 
+	if ( 'dismiss_welcome' === $action ) {
+		delete_option( 'isgal_welcome' );
+	}
+
+	if ( 'create_demo' === $action ) {
+		$gallery = isset( $_POST['isgal_gallery'] ) ? sanitize_text_field( wp_unslash( $_POST['isgal_gallery'] ) ) : '';
+		$pattern = isset( $_POST['isgal_pattern'] ) ? sanitize_key( wp_unslash( $_POST['isgal_pattern'] ) ) : 'gallery-with-title';
+		$post_id = isgal_create_demo_page( $gallery, $pattern );
+		if ( is_wp_error( $post_id ) ) {
+			add_settings_error( 'isgal', 'isgal_demo', $post_id->get_error_message(), 'error' );
+		} else {
+			delete_option( 'isgal_welcome' );
+			wp_safe_redirect( get_edit_post_link( $post_id, 'raw' ) );
+			exit;
+		}
+	}
+
 	if ( 'sync_one' === $action ) {
 		$gallery  = isset( $_POST['isgal_gallery'] ) ? sanitize_text_field( wp_unslash( $_POST['isgal_gallery'] ) ) : '';
 		$endpoint = isset( $_POST['isgal_endpoint'] ) ? esc_url_raw( wp_unslash( $_POST['isgal_endpoint'] ) ) : isgal_default_endpoint();
@@ -329,6 +346,8 @@ function isgal_render_admin_page() {
 
 		<?php settings_errors( 'isgal' ); ?>
 
+		<?php isgal_render_welcome_panel( $galleries ); ?>
+
 		<p>
 			<?php esc_html_e( 'Each gallery is fetched from ImageSnippets on a schedule and stored on this site, so pages render without waiting on the network and WordPress search can find the images. Refresh pulls the latest from ImageSnippets now.', 'image-snippets-gallery' ); ?>
 		</p>
@@ -488,6 +507,106 @@ function isgal_render_admin_page() {
 	</div>
 	<?php
 }
+
+/**
+ * Getting-started panel at the top of Tools → ImageSnippets. Shown after
+ * activation until dismissed or a page is created from it, and whenever the
+ * site has no gallery yet. Offers the site's galleries (from ImageSnippets,
+ * cached) and a button that creates a draft page holding one and opens it.
+ *
+ * @param array $galleries Indexed gallery names (may be empty).
+ * @return void
+ */
+function isgal_render_welcome_panel( array $galleries ) {
+	if ( ! current_user_can( 'edit_pages' ) ) {
+		return;
+	}
+	if ( ! empty( $galleries ) && ! get_option( 'isgal_welcome' ) ) {
+		return;
+	}
+	$list = isgal_list_galleries( isgal_default_endpoint() );
+	if ( is_wp_error( $list ) ) {
+		$list = array();
+	}
+	$patterns = function_exists( 'isgal_pattern_definitions' ) ? isgal_pattern_definitions() : array();
+	?>
+	<div class="card" style="max-width:none">
+		<h2><?php esc_html_e( 'Get started', 'image-snippets-gallery' ); ?></h2>
+		<p>
+			<?php esc_html_e( 'A gallery is a block. Add "ImageSnippets Gallery" to any page and pick one of your galleries in its Source panel — or let this create a draft page for you.', 'image-snippets-gallery' ); ?>
+		</p>
+		<?php if ( empty( $list ) ) : ?>
+			<p>
+				<?php
+				printf(
+					/* translators: %s: endpoint URL */
+					esc_html__( 'The list of galleries could not be fetched from %s just now. You can still type a gallery name in the block.', 'image-snippets-gallery' ),
+					'<code>' . esc_html( isgal_default_endpoint() ) . '</code>'
+				);
+				?>
+			</p>
+		<?php else : ?>
+			<form method="post" style="display:flex;flex-wrap:wrap;gap:.5em 1em;align-items:end">
+				<?php wp_nonce_field( 'isgal_admin_create_demo' ); ?>
+				<input type="hidden" name="isgal_action" value="create_demo">
+				<label>
+					<span style="display:block"><?php esc_html_e( 'Gallery', 'image-snippets-gallery' ); ?></span>
+					<select name="isgal_gallery">
+						<?php foreach ( $list as $item ) : ?>
+							<option value="<?php echo esc_attr( $item['value'] ); ?>">
+								<?php
+								printf(
+									/* translators: 1: gallery name, 2: image count */
+									esc_html__( '%1$s — %2$d images', 'image-snippets-gallery' ),
+									esc_html( $item['value'] ),
+									(int) $item['count']
+								);
+								?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+				<?php if ( $patterns ) : ?>
+				<label>
+					<span style="display:block"><?php esc_html_e( 'Look', 'image-snippets-gallery' ); ?></span>
+					<select name="isgal_pattern">
+						<?php foreach ( $patterns as $slug => $pattern ) : ?>
+							<option value="<?php echo esc_attr( $slug ); ?>"><?php echo esc_html( $pattern['title'] ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+				<?php endif; ?>
+				<button type="submit" class="button button-primary"><?php esc_html_e( 'Create a draft page with it', 'image-snippets-gallery' ); ?></button>
+			</form>
+		<?php endif; ?>
+		<p class="description" style="margin-top:.75em">
+			<?php esc_html_e( 'By default a gallery shows three columns of 4:3 crops, captions off, links to the image on ImageSnippets, and each image\'s full provenance as JSON-LD. Every setting is in the block\'s sidebar; the Patterns tab of the inserter has ready-made looks under "ImageSnippets".', 'image-snippets-gallery' ); ?>
+		</p>
+		<?php if ( get_option( 'isgal_welcome' ) ) : ?>
+			<?php isgal_action_button( 'dismiss_welcome', __( 'Hide this', 'image-snippets-gallery' ), 'button-link' ); ?>
+		<?php endif; ?>
+	</div>
+	<?php
+}
+
+/**
+ * One notice on the Plugins screen after activation, pointing at the panel.
+ *
+ * @return void
+ */
+function isgal_welcome_notice() {
+	$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+	if ( ! $screen || 'plugins' !== $screen->id || ! get_option( 'isgal_welcome' ) || ! current_user_can( 'edit_pages' ) ) {
+		return;
+	}
+	printf(
+		'<div class="notice notice-info"><p>%s <a href="%s">%s</a></p></div>',
+		esc_html__( 'ImageSnippets Gallery is ready.', 'image-snippets-gallery' ),
+		esc_url( admin_url( 'tools.php?page=isgal-galleries' ) ),
+		esc_html__( 'Pick a gallery and create a page →', 'image-snippets-gallery' )
+	);
+}
+add_action( 'admin_notices', 'isgal_welcome_notice' );
 
 /**
  * Link to the reorder screen for a gallery.

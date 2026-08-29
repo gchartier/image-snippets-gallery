@@ -40,6 +40,7 @@ delete_option( 'isgal_sync_status' );
 delete_option( 'isgal_purge_adapters' );
 delete_option( 'isgal_default_endpoint' );
 delete_option( 'isgal_default_ttl' );
+delete_option( 'isgal_welcome' );
 delete_option( 'isgal_schema' );
 delete_option( 'isgal_pending_orders' );
 $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_isgal%' OR option_name LIKE '\\_transient\\_timeout\\_isgal%'" );

@@ -220,6 +220,33 @@ function blockGapStyle( gap ) {
 	return { '--isgal-gap': gap };
 }
 
+/**
+ * Static stand-in for the inserter preview: six tiles in the block's default
+ * three columns, each with a caption line, drawn in CSS only.
+ *
+ * @param {Object}  props
+ * @param {boolean} props.title    Show a gallery title bar.
+ * @param {boolean} props.captions Show a caption line under each tile.
+ */
+function GalleryPreview( { title, captions } ) {
+	return (
+		<div className="isgal-preview" aria-hidden="true">
+			{ title && <div className="isgal-preview__title" /> }
+			<div className="isgal-preview__grid">
+				{ [ 0, 1, 2, 3, 4, 5 ].map( ( i ) => (
+					<figure
+						key={ i }
+						className={ `isgal-preview__item isgal-preview__item-${ i }` }
+					>
+						<div className="isgal-preview__img" />
+						{ captions && <div className="isgal-preview__cap" /> }
+					</figure>
+				) ) }
+			</div>
+		</div>
+	);
+}
+
 export default function Edit( { attributes, setAttributes, clientId } ) {
 	const {
 		gallery,
@@ -250,6 +277,8 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 		columns,
 		aspectRatio,
 		useFilename,
+		altSource,
+		isPreview,
 		cacheTtl,
 		jsonldProfile,
 	} = attributes;
@@ -259,6 +288,14 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 	// asked to skip them (skipBlockSupportAttributes below) so they are not
 	// applied twice. blockGap is the exception: core emits it only for blocks
 	// with `layout` support, so we bridge it to --isgal-gap here as render does.
+	const sortHelp =
+		orderBy === 'random'
+			? __(
+					'A new order each time the gallery is refetched from ImageSnippets (see Advanced → refetch rate). A page cache keeps one order for as long as it holds the page.',
+					'image-snippets-gallery'
+			  )
+			: undefined;
+
 	const blockProps = useBlockProps( {
 		style: blockGapStyle( attributes?.style?.spacing?.blockGap ),
 	} );
@@ -416,6 +453,20 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 	const isSlideshow = 'slideshow' === layout;
 	const shownRatio = isMasonry || isJustified ? 'original' : aspectRatio;
 
+	// The inserter's preview. No server round-trip, no network, no gallery
+	// chosen yet: a static sketch of a captioned 3-column grid is enough to say
+	// what the block is.
+	if ( isPreview ) {
+		return (
+			<div { ...blockProps }>
+				<GalleryPreview
+					title={ attributes.displayTitle }
+					captions={ attributes.displayCaption }
+				/>
+			</div>
+		);
+	}
+
 	return (
 		<>
 			{ displayTitle && (
@@ -497,6 +548,13 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 								label: __( 'Manual', 'image-snippets-gallery' ),
 								value: 'manual-asc',
 							},
+							{
+								label: __(
+									'Shuffle',
+									'image-snippets-gallery'
+								),
+								value: 'random-asc',
+							},
 						] }
 						onChange={ ( v ) => {
 							const [ by, dir ] = v.split( '-' );
@@ -520,7 +578,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 											),
 										}
 								  )
-								: undefined
+								: sortHelp
 						}
 					/>
 					<RangeControl
@@ -899,6 +957,28 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 						onChange={ ( v ) =>
 							setAttributes( { useFilename: v } )
 						}
+					/>
+					<SelectControl
+						label={ __( 'Alt text', 'image-snippets-gallery' ) }
+						value={ altSource }
+						options={ [
+							{
+								label: __(
+									'Description from ImageSnippets',
+									'image-snippets-gallery'
+								),
+								value: 'graph',
+							},
+							{
+								label: __( 'Title', 'image-snippets-gallery' ),
+								value: 'title',
+							},
+						] }
+						onChange={ ( v ) => setAttributes( { altSource: v } ) }
+						help={ __(
+							'What screen readers and search engines get for each image. The ImageSnippets description is written for the picture; the title is what the caption shows. Either falls back to the other.',
+							'image-snippets-gallery'
+						) }
 					/>
 				</PanelBody>
 			</InspectorControls>
