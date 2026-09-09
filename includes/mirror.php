@@ -688,10 +688,14 @@ function isg_mirror_drop_gallery( WP_Term $term ) {
  * Runs after the block index changes, so removing the last block for a gallery
  * cleans up behind it without anyone having to know there was anything to clean.
  *
+ * "References" means a live post: isg_galleries_in_use() rather than
+ * isg_indexed_galleries(), so a page sitting in the trash no longer keeps a
+ * gallery's images mirrored and searchable with nowhere on the site to land.
+ *
  * @return array Gallery names dropped.
  */
 function isg_prune_mirror() {
-	$in_use  = array_fill_keys( isg_indexed_galleries(), true );
+	$in_use  = array_fill_keys( isg_galleries_in_use(), true );
 	$terms   = get_terms(
 		array(
 			'taxonomy'   => ISG_TAXONOMY,
