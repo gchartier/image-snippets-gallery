@@ -107,6 +107,28 @@ function isgal_deindex_post( $post_id ) {
 add_action( 'before_delete_post', 'isgal_deindex_post' );
 
 /**
+ * Prune after a post is trashed.
+ *
+ * Trashing is not saving: wp_trash_post() fires trashed_post and never
+ * save_post, so nothing here noticed a gallery going out of use that way. The
+ * mirror was then left until some unrelated post happened to be saved with a
+ * changed gallery set -- which on a finished site may be never.
+ *
+ * Untrashing needs no counterpart: a gallery with no stored copy is fetched the
+ * first time its page is viewed, so restoring the page restores its images.
+ *
+ * @param int $post_id Post ID.
+ * @return void
+ */
+function isgal_prune_after_trash( $post_id ) {
+	$had = (array) get_post_meta( absint( $post_id ), ISGAL_GALLERY_META, false );
+	if ( ! empty( $had ) ) {
+		isgal_prune_mirror();
+	}
+}
+add_action( 'trashed_post', 'isgal_prune_after_trash' );
+
+/**
  * Published posts displaying a gallery.
  *
  * Deliberately a direct query rather than WP_Query with a meta_query. WP_Query
@@ -148,6 +170,16 @@ function isgal_posts_for_gallery( $gallery ) {
 /**
  * Every gallery name currently used anywhere on the site.
  *
+ * Joined to the posts table so that postmeta whose post no longer exists -- the
+ * residue of an import, a migration, or a direct SQL delete -- cannot keep a
+ * gallery alive for ever.
+ *
+ * Every post status is still included, deliberately: the Tools screen lists
+ * what this returns, and a gallery whose only page is a draft is something an
+ * administrator should still see, next to the "No published pages" note that
+ * table already prints in its "Shown on" column. The pruner asks a narrower
+ * question -- see isgal_galleries_in_use().
+ *
  * @return array
  */
 function isgal_indexed_galleries() {
@@ -155,7 +187,46 @@ function isgal_indexed_galleries() {
 
 	$names = $wpdb->get_col(
 		$wpdb->prepare(
-			"SELECT DISTINCT meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s ORDER BY meta_value ASC",
+			"SELECT DISTINCT pm.meta_value
+			   FROM {$wpdb->postmeta} pm
+			   INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+			  WHERE pm.meta_key = %s
+			  ORDER BY pm.meta_value ASC",
+			ISGAL_GALLERY_META
+		)
+	);
+
+	return is_array( $names ) ? $names : array();
+}
+
+/**
+ * Gallery names a live post still references.
+ *
+ * The pruner's question, and narrower than the one above. A post in the trash
+ * keeps both its row and its postmeta, so under the old test it counted as in
+ * use for ever: the mirror was spared, while isgal_posts_for_gallery() -- which
+ * requires 'publish' -- could find those images no page to land on. Site search
+ * still offered them, every result fell back to its ImageSnippets URL, and
+ * emptying the trash was the only cure. That is not something anyone thinks to
+ * do to fix a search result.
+ *
+ * Drafts, pending, private and scheduled posts still count. Work in progress is
+ * a real reason to keep a mirror warm, and dropping a gallery's images only to
+ * re-fetch them the moment its page is published would be worse than useless.
+ *
+ * @return array Gallery names.
+ */
+function isgal_galleries_in_use() {
+	global $wpdb;
+
+	$names = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT DISTINCT pm.meta_value
+			   FROM {$wpdb->postmeta} pm
+			   INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+			  WHERE pm.meta_key = %s
+			    AND p.post_status NOT IN ( 'trash', 'auto-draft' )
+			  ORDER BY pm.meta_value ASC",
 			ISGAL_GALLERY_META
 		)
 	);

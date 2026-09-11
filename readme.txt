@@ -107,6 +107,7 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 * Galleries can now be arranged by hand. Tools → ImageSnippets lists an Arrange button per gallery: drag the images into order (or use the earlier/later buttons), save, and set the block's Sort by to Manual. The order is kept on this site by image, so refreshing from ImageSnippets keeps it; images added on ImageSnippets later appear after the arranged ones, newest first, until they are placed.
 * Internal: everything the plugin stores and every hook and class it exposes now uses the `isgal` prefix instead of `isg` (a wordpress.org requirement). Existing settings and arranged orders carry over; mirrored galleries are rebuilt from ImageSnippets on the next visit. If you had hooked `isg_gallery_changed` or `isg_cache_ttl`, rename them. WP-CLI is now `wp isgal`.
 * Deactivating the plugin now cancels its scheduled background refreshes.
+* Fixed: a gallery whose only page had been moved to the trash stayed mirrored and kept appearing in site search, with every result linking off-site because no published page could hold it. Trashing a page now prunes galleries nothing live still shows (drafts, pending, private and scheduled pages still count as in use), and stored copies whose page row is gone no longer keep a gallery alive. Restoring the page refetches its gallery on first view. Thanks to Margaret Warren.
 
 = 0.6.0 =
 
