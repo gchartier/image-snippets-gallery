@@ -99,6 +99,10 @@ function isgal_handle_admin_actions() {
 		delete_option( 'isgal_welcome' );
 	}
 
+	if ( 'show_welcome' === $action ) {
+		update_option( 'isgal_welcome', 1, false );
+	}
+
 	if ( 'create_demo' === $action ) {
 		$gallery = isset( $_POST['isgal_gallery'] ) ? sanitize_text_field( wp_unslash( $_POST['isgal_gallery'] ) ) : '';
 		$pattern = isset( $_POST['isgal_pattern'] ) ? sanitize_key( wp_unslash( $_POST['isgal_pattern'] ) ) : 'gallery-with-title';
@@ -355,6 +359,9 @@ function isgal_render_admin_page() {
 			<?php isgal_action_button( 'refresh_all', __( 'Refresh all galleries', 'image-snippets-gallery' ), 'button button-primary' ); ?>
 			<?php isgal_action_button( 'rebuild_index', __( 'Rebuild index', 'image-snippets-gallery' ) ); ?>
 			<?php isgal_action_button( 'reset_mirror', __( 'Clear stored copies', 'image-snippets-gallery' ) ); ?>
+			<?php if ( ! get_option( 'isgal_welcome' ) ) : ?>
+				<?php isgal_action_button( 'show_welcome', __( 'Show the getting-started panel', 'image-snippets-gallery' ), 'button-link' ); ?>
+			<?php endif; ?>
 		</p>
 
 		<?php if ( empty( $galleries ) ) : ?>

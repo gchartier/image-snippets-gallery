@@ -87,7 +87,7 @@ Yes. When a gallery's contents change, the plugin clears the affected pages from
 
 = 0.7.0 =
 
-* Getting started. After activation, Tools → ImageSnippets opens with a panel that lists your galleries on ImageSnippets and creates a draft page holding one, in a look of your choosing, then opens it in the editor. The panel also comes back whenever the site has no gallery.
+* Getting started. After activation, Tools → ImageSnippets opens with a panel that lists your galleries on ImageSnippets and creates a draft page holding one, in a look of your choosing, then opens it in the editor. The panel also comes back whenever the site has no gallery, and "Show the getting-started panel" brings it back on demand once it's been hidden.
 * Block patterns. The inserter's Patterns tab has an "ImageSnippets" category with four ready-made looks — Gallery with title, Portfolio grid, Slideshow hero, Timeline — each a single gallery block with the settings that make that layout look intended; pick the gallery in its Source panel.
 * The block's preview in the inserter is drawn locally rather than fetched, so it appears at once and makes no request.
 * Sort by → Shuffle. A random order that changes each time the gallery is refetched from ImageSnippets (the block's refetch rate), not on every view — so a visitor's filters, lightbox and links to an image stay stable, and a page cache holding one order is the intended behaviour rather than a surprise.
