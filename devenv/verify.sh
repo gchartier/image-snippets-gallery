@@ -479,6 +479,29 @@ assert "an empty gallery name is refused" "1" \
     "$(wp eval 'echo is_wp_error( isgal_create_demo_page( "" ) ) ? 1 : 0;' | tr -d '\r')"
 wp post delete "$DEMO_ID" --force >/dev/null
 
+head_ "A gallery can be made of something other than a dataset"
+
+# The seam only: a term carrying its own source is asked for its pattern, and
+# everything after the list query is the same sync. No UI writes one yet.
+SRC="$(wp eval '
+$ep = isgal_default_endpoint();
+$t  = isgal_gallery_term( $ep, "verify-pelicans", true );
+update_term_meta( $t->term_id, ISGAL_TERM_SOURCE, wp_json_encode( array( "kind" => "verify" ) ) );
+add_filter( "isgal_sync_max_images", function () { return 4; } );
+add_filter( "isgal_source_fragment", function ( $f, $source ) { return "verify" === $source["kind"] ? "?image lio:depicts <http://dbpedia.org/resource/Brown_Pelican>." : $f; }, 10, 2 );
+$q = isgal_build_sparql_list( isgal_source_fragment( $ep, "verify-pelicans" ) );
+$r = isgal_sync_gallery( $ep, "verify-pelicans", array( "timeout" => 30 ) );
+$n = count( get_objects_in_term( $t->term_id, ISGAL_TAXONOMY ) );
+$d = isgal_build_sparql_list( isgal_source_fragment( $ep, "mmgallery01" ) );
+isgal_prune_mirror();
+$kept = isgal_gallery_term( $ep, "verify-pelicans" );
+$left = $kept ? count( get_objects_in_term( $kept->term_id, ISGAL_TAXONOMY ) ) : -1;
+if ( $kept ) { wp_delete_term( $kept->term_id, ISGAL_TAXONOMY ); }
+echo ( false !== strpos( $q, "lio:depicts" ) && false === strpos( $q, "lio:isIn" ) ? 1 : 0 ), " ", ( is_wp_error( $r ) ? $r->get_error_message() : $n ), " ", ( false !== strpos( $d, "lio:isIn <https://imagesnippets.com/imgtag/datasets/Imagesnippets/mmgallery01>" ) ? 1 : 0 ), " ", ( $kept ? 1 : 0 ), " ", $left;
+' | tr -d '\r')"
+assert "its own pattern replaces the dataset one; four images mirrored; a plain gallery still asks for its dataset; pruning keeps the definition and drops its images" "1 4 1 1 0" "$SRC"
+assert "the real gallery is untouched" "6" "$(fixture status gallery | awk '/^mirrored/{print $2}')"
+
 head_ "WP-CLI"
 
 assert "wp isgal status lists the gallery" "mmgallery01" "$(wp isgal status --format=csv | awk -F, 'NR==2{print $1}' | tr -d '\r')"

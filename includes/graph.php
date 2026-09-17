@@ -306,15 +306,69 @@ function isgal_build_sparql_datasets() {
 }
 
 /**
+ * What a gallery is made of: the SPARQL pattern that says which images belong.
+ *
+ * Every gallery is a named thing (a term in the mirror), and the name usually
+ * is the definition: an ImageSnippets dataset, read through lio:isIn. A term
+ * may instead carry a source of its own (ISGAL_TERM_SOURCE), in which case the
+ * name is only a name and the source says what belongs. Either way the answer
+ * has the same shape — a pattern binding ?image inside the image's own graph —
+ * so the queries built from it, and everything after the sync, cannot tell the
+ * two apart.
+ *
+ * Only 'dataset' exists so far. Other kinds register through the filter.
+ *
+ * @param string $endpoint SPARQL endpoint URL.
+ * @param string $gallery  Gallery name.
+ * @return string SPARQL fragment binding ?image.
+ */
+function isgal_source_fragment( $endpoint, $gallery ) {
+	$source = isgal_gallery_source( $endpoint, $gallery );
+
+	/**
+	 * Filter the membership pattern of a gallery whose source is not a dataset.
+	 * Return a SPARQL fragment that binds ?image; it is placed inside
+	 * GRAPH ?page { … } beside the plugin's own conditions.
+	 *
+	 * @param string $fragment '' to fall back to the dataset of the same name.
+	 * @param array  $source   [ 'kind' => string, … ].
+	 * @param string $gallery  Gallery name.
+	 * @param string $endpoint SPARQL endpoint URL.
+	 */
+	$fragment = 'dataset' === $source['kind'] ? '' : (string) apply_filters( 'isgal_source_fragment', '', $source, $gallery, $endpoint );
+
+	return '' !== trim( $fragment ) ? $fragment : isgal_sparql_membership( $gallery );
+}
+
+/**
+ * The source a gallery's term carries, or the dataset source every gallery
+ * without one has.
+ *
+ * @param string $endpoint SPARQL endpoint URL.
+ * @param string $gallery  Gallery name.
+ * @return array [ 'kind' => string, … ].
+ */
+function isgal_gallery_source( $endpoint, $gallery ) {
+	$term   = isgal_gallery_term( $endpoint, $gallery );
+	$source = $term instanceof WP_Term ? json_decode( (string) get_term_meta( $term->term_id, ISGAL_TERM_SOURCE, true ), true ) : null;
+	if ( ! is_array( $source ) || empty( $source['kind'] ) || ! is_string( $source['kind'] ) ) {
+		return array( 'kind' => 'dataset' );
+	}
+	return $source;
+}
+
+/**
  * Sync query 1: every image in a gallery, with the fields the sync sorts and
  * labels by. Small rows, so it is unbounded except for a safety ceiling.
  *
- * @param string $gallery Gallery name.
+ * The caller says which images belong; the wrapper — what is selected, the
+ * thumbnail condition, the ceiling — is always the plugin's.
+ *
+ * @param string $member SPARQL fragment binding ?image (isgal_source_fragment()).
  * @return string
  */
-function isgal_build_sparql_list( $gallery ) {
-	$member = isgal_sparql_membership( $gallery );
-	$cap    = max( 1, (int) apply_filters( 'isgal_sync_max_images', ISGAL_SYNC_MAX_IMAGES ) );
+function isgal_build_sparql_list( $member ) {
+	$cap = max( 1, (int) apply_filters( 'isgal_sync_max_images', ISGAL_SYNC_MAX_IMAGES ) );
 
 	return isgal_sparql_prefixes()
 		. "SELECT ?page ?image (SAMPLE(?d) AS ?date_) (SAMPLE(?t) AS ?title_) WHERE {\n"

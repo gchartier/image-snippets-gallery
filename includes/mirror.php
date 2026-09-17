@@ -41,6 +41,7 @@ const ISGAL_TERM_ENDPOINT = 'isgal_endpoint';  // Term meta: which SPARQL endpoi
 const ISGAL_TERM_GALLERY  = 'isgal_gallery';   // Term meta: the gallery name, verbatim.
 const ISGAL_TERM_SYNCED   = 'isgal_last_sync'; // Term meta: unix time of the last successful sync.
 const ISGAL_TERM_ORDER    = 'isgal_manual_order'; // Term meta: page IRIs in the order a person arranged them. JSON.
+const ISGAL_TERM_SOURCE   = 'isgal_source';    // Term meta: what the gallery is made of, when not the dataset of its name. JSON.
 
 // Images per graph-fetch request. ~1.4s per 40 against the live endpoint.
 const ISGAL_SYNC_BATCH = 40;
@@ -472,7 +473,7 @@ function isgal_iri_is_clean( $iri ) {
  * @return array|WP_Error  Rows, or WP_Error.
  */
 function isgal_sync_fetch_gallery( $endpoint, $gallery, $timeout = 20 ) {
-	$listing = isgal_sparql_json( $endpoint, isgal_build_sparql_list( $gallery ), $timeout );
+	$listing = isgal_sparql_json( $endpoint, isgal_build_sparql_list( isgal_source_fragment( $endpoint, $gallery ) ), $timeout );
 	if ( is_wp_error( $listing ) ) {
 		return $listing;
 	}
@@ -699,6 +700,12 @@ function isgal_mirror_drop_gallery( WP_Term $term ) {
 		if ( empty( $left ) || is_wp_error( $left ) ) {
 			wp_delete_post( $post_id, true );
 		}
+	}
+	// A term that carries its own source is somebody's written definition, not
+	// just a label the sync made: its images go, it stays, marked never synced.
+	if ( '' !== (string) get_term_meta( $term->term_id, ISGAL_TERM_SOURCE, true ) ) {
+		delete_term_meta( $term->term_id, ISGAL_TERM_SYNCED );
+		return count( $posts );
 	}
 	wp_delete_term( $term->term_id, ISGAL_TAXONOMY );
 	return count( $posts );
