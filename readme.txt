@@ -209,6 +209,9 @@ Fixes:
 
 == Upgrade Notice ==
 
+= 0.7.0 =
+A large release: lightbox with a flip to the image's full metadata, slideshow, timeline and justified layouts, filters, load more, captions, saved sources (galleries made of a query), and a share image for gallery pages. The stored copies of your galleries are rebuilt automatically the first time each page is viewed after updating; existing pages need no changes.
+
 = 0.6.0 =
 Images now render properly in site search results — correctly sized, with a description, a date, and a link straight to the image that matched. The gallery name is also chosen from a searchable list, with image counts. Existing pages need no changes.
 

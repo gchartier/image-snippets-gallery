@@ -525,6 +525,14 @@ wp post delete "$(wp post list --post_type=page --name=verify-source --field=ID)
 assert "deleting it removes the term and the images only it held" "1 0" "$(wp isgal source rm '~verify-pelicans' | grep -c Deleted) $(wp eval 'echo isgal_gallery_term( isgal_default_endpoint(), "~verify-pelicans" ) ? 1 : 0;')"
 assert "the real gallery is still untouched" "6" "$(fixture status gallery | awk '/^mirrored/{print $2}')"
 
+head_ "Updating from 0.6 by uploading the zip (no activation hook)"
+
+# What Margaret's site does: the files change under a running plugin. The old
+# index is deleted with the old prefix, so the migration has to rebuild it.
+MIG="$(wp eval 'global $wpdb; $p = get_page_by_path( "slideshow" ); delete_post_meta( $p->ID, ISGAL_GALLERY_META ); add_post_meta( $p->ID, "_isg_gallery", "mmgallery01" ); update_option( "isg_default_ttl", 7 ); $keep = get_option( "isgal_default_ttl", null ); delete_option( "isgal_default_ttl" ); delete_option( "isgal_schema" ); isgal_migrate_from_isg(); do_action( "wp_loaded" ); echo implode( ",", (array) get_post_meta( $p->ID, ISGAL_GALLERY_META, false ) ), " ", (int) get_post_meta( $p->ID, "_isg_gallery", true ), " ", get_option( "isgal_default_ttl" ), " ", get_option( "isgal_schema" ); if ( null === $keep ) { delete_option( "isgal_default_ttl" ); } else { update_option( "isgal_default_ttl", $keep, false ); }' | tr -d '\r')"
+assert "the page index is rebuilt, the old one removed, the site default carried over" "mmgallery01 0 7 1" "$MIG"
+assert "the gallery is still mirrored afterwards" "6" "$(fixture status gallery | awk '/^mirrored/{print $2}')"
+
 head_ "WP-CLI"
 
 assert "wp isgal status lists the gallery" "mmgallery01" "$(wp isgal status --format=csv | awk -F, 'NR==2{print $1}' | tr -d '\r')"

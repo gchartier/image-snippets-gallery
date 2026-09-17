@@ -149,6 +149,13 @@ function isgal_migrate_from_isg() {
 	if ( $orders ) {
 		update_option( 'isgal_pending_orders', $orders, false );
 	}
+
+	// The index of which pages show which gallery went with the old prefix. An
+	// update by uploading the zip over the old plugin never fires activation, so
+	// build it here: without it no sync knows which pages to purge, the Tools
+	// screen lists nothing and no page has a share image. After every plugin
+	// has registered its post types, so none is missed.
+	add_action( 'wp_loaded', 'isgal_rebuild_index' );
 }
 add_action( 'init', 'isgal_migrate_from_isg', 5 );
 
