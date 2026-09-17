@@ -593,14 +593,15 @@ function isgal_row_dimensions( array $row ) {
 	$og     = '';
 	foreach ( $row['triples'] as $triple ) {
 		$value = isset( $triple[2]['value'] ) ? (string) $triple[2]['value'] : '';
-		switch ( $triple[1] ) {
-			case 'https://ogp.me/ns#image':
+		// The corpus writes the namespace with https, the specification with http.
+		switch ( preg_replace( '#^https?://ogp\.me/ns\##', 'og:', $triple[1] ) ) {
+			case 'og:image':
 				$og = $value;
 				break;
-			case 'https://ogp.me/ns#image:width':
+			case 'og:image:width':
 				$width = (int) $value;
 				break;
-			case 'https://ogp.me/ns#image:height':
+			case 'og:image:height':
 				$height = (int) $value;
 				break;
 		}

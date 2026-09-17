@@ -45,6 +45,7 @@ require_once __DIR__ . '/includes/graph.php';
 require_once __DIR__ . '/includes/mirror.php';
 require_once __DIR__ . '/includes/query.php';
 require_once __DIR__ . '/includes/search.php';
+require_once __DIR__ . '/includes/opengraph.php';
 require_once __DIR__ . '/includes/rest.php';
 require_once __DIR__ . '/includes/patterns.php';
 

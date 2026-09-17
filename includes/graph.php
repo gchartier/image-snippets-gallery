@@ -63,25 +63,34 @@ function isgal_jsonld_prefixes() {
 }
 
 /**
- * Predicate namespaces dropped from the 'provenance' profile.
- *
- * All of it describes the ImageSnippets HTML page — its Open Graph chrome, its
- * stylesheet — or the camera sensor. None of it is provenance about the image's
- * meaning, and together it is a large fraction of every graph.
+ * Predicate namespaces that describe the ImageSnippets HTML page rather than
+ * the image: its Open Graph chrome, its Twitter card, its stylesheet.
  *
  * 'twitter:' has no trailing separator because the predicate in the corpus is
- * the literal string "twitter:card", which is not an absolute IRI at all.
+ * the literal string "twitter:card", which is not an absolute IRI at all. The
+ * corpus writes the Open Graph namespace with https; the specification writes
+ * it with http, so both are named.
  *
  * @return array
  */
-function isgal_graph_dropped_prefixes() {
+function isgal_graph_chrome_prefixes() {
 	return array(
 		'http://ogp.me/ns#',
 		'https://ogp.me/ns#',
 		'twitter:',
 		'http://www.w3.org/1999/xhtml/vocab#',
-		'http://ns.adobe.com/exif/1.0/',
 	);
+}
+
+/**
+ * Predicate namespaces dropped from the 'provenance' profile: the page chrome,
+ * and the camera sensor's EXIF. None of it is provenance about the image's
+ * meaning, and together it is a large fraction of every graph.
+ *
+ * @return array
+ */
+function isgal_graph_dropped_prefixes() {
+	return array_merge( isgal_graph_chrome_prefixes(), array( 'http://ns.adobe.com/exif/1.0/' ) );
 }
 
 /**
@@ -672,7 +681,7 @@ function isgal_node_label( $iri, array $labels ) {
  */
 function isgal_row_back( array $row ) {
 	$labels = isset( $row['labels'] ) ? (array) $row['labels'] : array();
-	$chrome = array( 'http://ogp.me/ns#', 'https://ogp.me/ns#', 'twitter:', 'http://www.w3.org/1999/xhtml/vocab#' );
+	$chrome = isgal_graph_chrome_prefixes();
 	$groups = array();
 
 	foreach ( (array) $row['triples'] as $triple ) {

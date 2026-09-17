@@ -347,6 +347,17 @@ assert "the anonymous visitor gets one visible slide, the controls and the view 
 # attribute off before any script ran, and every slide would flash up at once.
 assert "the server-rendered hidden survives directive processing on the real page" "5" "$(grep -c '<figure class="isgal-item"[^>]* hidden' <<<"$SPAGE")"
 
+head_ "A shared gallery page has a picture"
+
+# Core writes no Open Graph tags, and an SEO plugin finds no image in a page
+# whose gallery is rendered at request time: the first image has to be offered.
+OGIMG="$(grep -o '<meta property="og:image" content="[^"]*"' <<<"$SPAGE" | sed 's/.*content="//; s/"$//')"
+assert "the page names exactly one share image" "1" "$(grep -c '<meta property="og:image" content=' <<<"$SPAGE")"
+assert "it is the full-size image of the first slide, not a thumbnail" "1" "$(tr -d '\n' <<<"$SPAGE" | grep -o '<figure class="isgal-item"[^>]*>.\{0,1200\}' | head -1 | grep -cF "$OGIMG")"
+assert "with a title, a URL and the large-card hint" "1 1 1" "$(echo "$(grep -c '<meta property="og:title" content="Slideshow"' <<<"$SPAGE") $(grep -c '<meta property="og:url" content="[^"]*/slideshow/"' <<<"$SPAGE") $(grep -c '<meta name="twitter:card" content="summary_large_image"' <<<"$SPAGE")")"
+assert "a page with no gallery is left alone" "0" "$(fetch / | grep -c 'ImageSnippets Gallery: Open Graph')"
+assert "the filter turns it off" "0" "$(wp eval 'add_filter( "isgal_emit_open_graph", "__return_false" ); $p = get_page_by_path( "slideshow" ); query_posts( array( "page_id" => $p->ID ) ); ob_start(); isgal_render_open_graph(); echo substr_count( ob_get_clean(), "og:image" );' | tr -d '\r')"
+
 head_ "Load more reveals what is already in the page"
 
 LMHTML="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01", "pageSize" => 2, "limit" => 12 ) );' | tr -d '\r')"
