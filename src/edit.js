@@ -550,7 +550,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 							},
 							{
 								label: __(
-									'Shuffle',
+									'Random',
 									'image-snippets-gallery'
 								),
 								value: 'random-asc',
