@@ -67,10 +67,6 @@
 			"type": "array",
 			"default": [ "title" ]
 		},
-		"captionTags": {
-			"type": "number",
-			"default": 3
-		},
 		"onClick": {
 			"type": "string",
 			"default": "page"
@@ -80,6 +76,10 @@
 			"default": true
 		},
 		"lightboxDetails": {
+			"type": "boolean",
+			"default": true
+		},
+		"lightboxFlip": {
 			"type": "boolean",
 			"default": true
 		},
@@ -164,6 +164,14 @@
 		"altSource": {
 			"type": "string",
 			"default": "graph"
+		},
+		"imageLoading": {
+			"type": "string",
+			"default": "auto"
+		},
+		"imageReveal": {
+			"type": "string",
+			"default": "fade"
 		},
 		"isPreview": {
 			"type": "boolean",

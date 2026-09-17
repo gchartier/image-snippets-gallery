@@ -107,30 +107,6 @@ function isgal_graph_about_predicates() {
 }
 
 /**
- * Predicates that tag an image with a thing, wherever in its graph they sit:
- * the "is about" set above (subject = the image) plus the LIO relations that
- * hang off regions and settings ("this region looks like an Eagle", "the
- * setting is morning", "a wood fence is in the foreground").
- *
- * @return array
- */
-function isgal_graph_tag_predicates() {
-	return array_merge(
-		isgal_graph_about_predicates(),
-		array(
-			'https://w3id.org/lio/v1#hasSetting',
-			'https://w3id.org/lio/v1#hasInForeground',
-			'https://w3id.org/lio/v1#hasInBackground',
-			'https://w3id.org/lio/v1#looksLike',
-			'https://w3id.org/lio/v1#hasProperty',
-			'https://w3id.org/lio/v1#conveys',
-			'https://w3id.org/lio/v1#evokes',
-			'https://w3id.org/lio/v1#hasVisualElement',
-		)
-	);
-}
-
-/**
  * Where an image's date can come from, in the order the plugin trusts them by
  * default. The corpus (full dump, 2026-08-28) carries exif:DateTimeOriginal on
  * 27% of images — the camera's capture time — and photoshop:DateCreated on
@@ -630,6 +606,130 @@ function isgal_graph_to_row( $page, array $graph ) {
 	$resolved    = isgal_row_resolved_date( $row );
 	$row['date'] = $resolved ? $resolved['raw'] : '';
 	return $row;
+}
+
+/**
+ * A predicate as words: the local name, split where the case changes.
+ * "hasInForeground" reads "Has in foreground", "DateCreated" "Date created".
+ *
+ * @param string $iri Predicate IRI.
+ * @return string
+ */
+function isgal_predicate_label( $iri ) {
+	if ( 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type' === $iri ) {
+		return __( 'Type', 'image-snippets-gallery' );
+	}
+	$local = preg_replace( '~^.*[/#:]~', '', rtrim( (string) $iri, '/#' ) );
+	$words = preg_replace( '/(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|[_\-]+/', ' ', $local );
+	$words = trim( (string) $words );
+	if ( '' === $words ) {
+		return (string) $iri;
+	}
+	// Leave an acronym alone ("URL"), lower the rest ("Date created").
+	$parts = explode( ' ', $words );
+	foreach ( $parts as $i => $part ) {
+		if ( strtoupper( $part ) !== $part || 1 === strlen( $part ) ) {
+			$parts[ $i ] = strtolower( $part );
+		}
+	}
+	return ucfirst( implode( ' ', $parts ) );
+}
+
+/**
+ * What to call a node of the graph that has no rdfs:label: a region by its
+ * fragment ("Region A"), anything else by its last path segment.
+ *
+ * @param string $iri    Node IRI.
+ * @param array  $labels The graph's label lookup.
+ * @return string
+ */
+function isgal_node_label( $iri, array $labels ) {
+	if ( isset( $labels[ $iri ] ) && '' !== trim( (string) $labels[ $iri ] ) ) {
+		return trim( (string) $labels[ $iri ] );
+	}
+	$fragment = strpos( $iri, '#' );
+	if ( false !== $fragment && strlen( $iri ) > $fragment + 1 ) {
+		$name = rawurldecode( substr( $iri, $fragment + 1 ) );
+		return str_replace( '_', ' ', preg_replace( '/^Region_/', '', $name ) );
+	}
+	return isgal_compact_iri( $iri );
+}
+
+/**
+ * The back of the photograph: every statement in the image's graph, as words,
+ * grouped by what it is about. The image comes first, then its regions and
+ * whatever else the graph describes. This is what ImageSnippets shows when an
+ * image page is flipped, and the lightbox shows it the same way.
+ *
+ * Left out: the Open Graph / Twitter / stylesheet statements, which describe
+ * the ImageSnippets web page rather than the image; statements with an empty
+ * value; and the rdfs:label statements, which are read here as the names of
+ * the things they label instead of being listed beside them.
+ *
+ * @param array $row Row.
+ * @return array List of groups: [ 's' => heading, 'rows' => [ [ 'p' => label,
+ *               'i' => compact predicate, 'v' => [ [ 't' => text, 'h' => href ] ] ] ] ].
+ */
+function isgal_row_back( array $row ) {
+	$labels = isset( $row['labels'] ) ? (array) $row['labels'] : array();
+	$chrome = array( 'http://ogp.me/ns#', 'https://ogp.me/ns#', 'twitter:', 'http://www.w3.org/1999/xhtml/vocab#' );
+	$groups = array();
+
+	foreach ( (array) $row['triples'] as $triple ) {
+		list( $subject, $predicate, $term ) = $triple;
+		$value                              = isset( $term['value'] ) ? trim( (string) $term['value'] ) : '';
+		if ( '' === $value || 'http://www.w3.org/2000/01/rdf-schema#label' === $predicate ) {
+			continue;
+		}
+		foreach ( $chrome as $prefix ) {
+			if ( 0 === strpos( $predicate, $prefix ) ) {
+				continue 2;
+			}
+		}
+
+		$type = isset( $term['type'] ) ? $term['type'] : 'literal';
+		$text = 'uri' === $type ? isgal_node_label( $value, $labels ) : $value;
+		$href = preg_match( '#^https?://\S+$#i', $value ) ? esc_url_raw( $value ) : '';
+
+		if ( ! isset( $groups[ $subject ][ $predicate ] ) ) {
+			$groups[ $subject ][ $predicate ] = array(
+				'p' => isgal_predicate_label( $predicate ),
+				'i' => isgal_compact_iri( $predicate ),
+				'v' => array(),
+			);
+		}
+		$groups[ $subject ][ $predicate ]['v'][ $text . '|' . $href ] = array(
+			't' => $text,
+			'h' => $href,
+		);
+	}
+
+	// The image first; the rest in graph order.
+	$image = (string) $row['image'];
+	if ( isset( $groups[ $image ] ) ) {
+		$groups = array( $image => $groups[ $image ] ) + $groups;
+	}
+
+	$back = array();
+	foreach ( $groups as $subject => $predicates ) {
+		$rows = array();
+		foreach ( $predicates as $entry ) {
+			$entry['v'] = array_values( $entry['v'] );
+			$rows[]     = $entry;
+		}
+		if ( (string) $subject === $image ) {
+			$heading = __( 'This image', 'image-snippets-gallery' );
+		} elseif ( (string) $subject === (string) $row['page'] ) {
+			$heading = __( 'This metadata record', 'image-snippets-gallery' );
+		} else {
+			$heading = isgal_node_label( (string) $subject, $labels );
+		}
+		$back[] = array(
+			's'    => $heading,
+			'rows' => $rows,
+		);
+	}
+	return $back;
 }
 
 /**

@@ -73,7 +73,6 @@ const DEFAULT_DATE_PRIORITY = [
 // What a visitor can filter the gallery by; every one comes from the image's
 // ImageSnippets graph. Mirrors isgal_facets() in PHP.
 const FACETS = [
-	{ key: 'tag', label: __( 'Tags', 'image-snippets-gallery' ) },
 	{ key: 'creator', label: __( 'Creator', 'image-snippets-gallery' ) },
 	{ key: 'year', label: __( 'Year', 'image-snippets-gallery' ) },
 	{ key: 'camera', label: __( 'Camera', 'image-snippets-gallery' ) },
@@ -85,7 +84,6 @@ const CAPTION_FIELDS = [
 	{ key: 'creator', label: __( 'Creator', 'image-snippets-gallery' ) },
 	{ key: 'date', label: __( 'Date', 'image-snippets-gallery' ) },
 	{ key: 'rights', label: __( 'Rights', 'image-snippets-gallery' ) },
-	{ key: 'tags', label: __( 'Tags', 'image-snippets-gallery' ) },
 ];
 
 /**
@@ -255,7 +253,6 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 		displayCaption,
 		captionPosition,
 		captionFields,
-		captionTags,
 		hoverEffect,
 		dateFields,
 		facets,
@@ -266,6 +263,9 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 		onClick,
 		linkNewTab,
 		lightboxDetails,
+		lightboxFlip,
+		imageLoading,
+		imageReveal,
 		displayTitle,
 		titleLevel,
 		layout,
@@ -872,6 +872,13 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 									},
 									{
 										label: __(
+											'Above the image',
+											'image-snippets-gallery'
+										),
+										value: 'above',
+									},
+									{
+										label: __(
 											'Over the image',
 											'image-snippets-gallery'
 										),
@@ -905,22 +912,6 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 									setAttributes( { captionFields: v } )
 								}
 							/>
-							{ ( captionFields || [] ).includes( 'tags' ) && (
-								<RangeControl
-									label={ __(
-										'Tags per image',
-										'image-snippets-gallery'
-									) }
-									value={ captionTags }
-									min={ 1 }
-									max={ 20 }
-									onChange={ ( v ) =>
-										setAttributes( { captionTags: v ?? 3 } )
-									}
-									__nextHasNoMarginBottom
-									__next40pxDefaultSize
-								/>
-							) }
 						</>
 					) }
 					<SelectControl
@@ -1013,20 +1004,32 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 						onChange={ ( v ) => setAttributes( { onClick: v } ) }
 					/>
 					{ 'lightbox' === onClick ? (
-						<ToggleControl
-							label={ __(
-								'Show creator, date, rights, tags and a source link',
-								'image-snippets-gallery'
-							) }
-							help={ __(
-								'The lightbox is previewed on the published page, not here.',
-								'image-snippets-gallery'
-							) }
-							checked={ lightboxDetails }
-							onChange={ ( v ) =>
-								setAttributes( { lightboxDetails: v } )
-							}
-						/>
+						<>
+							<ToggleControl
+								label={ __(
+									'Let visitors flip the image to its metadata',
+									'image-snippets-gallery'
+								) }
+								help={ __(
+									'The back shows everything ImageSnippets holds about the image, as its ImageSnippets page does. The lightbox is previewed on the published page, not here.',
+									'image-snippets-gallery'
+								) }
+								checked={ lightboxFlip }
+								onChange={ ( v ) =>
+									setAttributes( { lightboxFlip: v } )
+								}
+							/>
+							<ToggleControl
+								label={ __(
+									'Show creator, date, rights and a source link',
+									'image-snippets-gallery'
+								) }
+								checked={ lightboxDetails }
+								onChange={ ( v ) =>
+									setAttributes( { lightboxDetails: v } )
+								}
+							/>
+						</>
 					) : (
 						<ToggleControl
 							label={ __(
@@ -1039,6 +1042,74 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 							}
 						/>
 					) }
+				</PanelBody>
+			</InspectorControls>
+
+			<InspectorControls>
+				<PanelBody
+					title={ __( 'Image loading', 'image-snippets-gallery' ) }
+					initialOpen={ false }
+				>
+					<SelectControl
+						label={ __( 'Load images', 'image-snippets-gallery' ) }
+						value={ imageLoading || 'auto' }
+						options={ [
+							{
+								label: __(
+									'Automatically (recommended)',
+									'image-snippets-gallery'
+								),
+								value: 'auto',
+							},
+							{
+								label: __(
+									'Only as they scroll into view',
+									'image-snippets-gallery'
+								),
+								value: 'lazy',
+							},
+							{
+								label: __(
+									'All with the page',
+									'image-snippets-gallery'
+								),
+								value: 'eager',
+							},
+						] }
+						onChange={ ( v ) =>
+							setAttributes( { imageLoading: v } )
+						}
+						help={ __(
+							'Automatically loads the first two rows with the page, so the gallery is there when a visitor arrives, and the rest as they scroll. A slideshow fetches the next slide ahead of time.',
+							'image-snippets-gallery'
+						) }
+					/>
+					<SelectControl
+						label={ __(
+							'While an image loads',
+							'image-snippets-gallery'
+						) }
+						value={ imageReveal || 'fade' }
+						options={ [
+							{
+								label: __(
+									'Hold its place, then fade it in',
+									'image-snippets-gallery'
+								),
+								value: 'fade',
+							},
+							{
+								label: __(
+									'Nothing (the browser’s default)',
+									'image-snippets-gallery'
+								),
+								value: 'none',
+							},
+						] }
+						onChange={ ( v ) =>
+							setAttributes( { imageReveal: v } )
+						}
+					/>
 				</PanelBody>
 			</InspectorControls>
 

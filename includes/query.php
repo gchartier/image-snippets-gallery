@@ -158,16 +158,77 @@ function isgal_flickr_srcset( $url ) {
 }
 
 /**
+ * Note which REST route is being served, and whether it writes.
+ *
+ * REST_REQUEST is true for the editor's preview, for a page being saved and
+ * for a headless site reading content, and the three want different things
+ * from the mirror. Recorded from rest_pre_dispatch because the constant says
+ * nothing about the route. Batch requests arrive as one POST to /batch/v1.
+ *
+ * @param mixed           $result  Passed through untouched.
+ * @param WP_REST_Server  $server  Server.
+ * @param WP_REST_Request $request Request about to be dispatched.
+ * @return mixed
+ */
+function isgal_note_rest_request( $result, $server, $request ) {
+	isgal_rest_request( $request );
+	return $result;
+}
+add_filter( 'rest_pre_dispatch', 'isgal_note_rest_request', 10, 3 );
+
+/**
+ * The REST request being served, as far as the renderer cares.
+ *
+ * @param WP_REST_Request|null $request Set by isgal_note_rest_request().
+ * @return array [ 'route' => string, 'write' => bool ]
+ */
+function isgal_rest_request( $request = null ) {
+	static $current = array(
+		'route' => '',
+		'write' => false,
+	);
+	if ( $request instanceof WP_REST_Request ) {
+		$current = array(
+			'route' => (string) $request->get_route(),
+			'write' => ! in_array( $request->get_method(), array( 'GET', 'HEAD', 'OPTIONS' ), true ),
+		);
+	}
+	return $current;
+}
+
+/**
  * Whether the current request is a block-editor preview.
  *
- * The editor previews dynamic blocks through the block-renderer REST route, so
- * REST_REQUEST alone would also match public REST consumers. The capability
- * check narrows it to someone actually editing.
+ * The editor previews dynamic blocks through the block-renderer REST route.
+ * REST_REQUEST alone would also match public REST consumers, and REST_REQUEST
+ * plus the capability also matches saving a post, whose response carries the
+ * rendered content. That one must not count: a preview asks for fresh data and
+ * waits for it, and a save that waits on ImageSnippets outlives the host's
+ * gateway timeout and surfaces as "The response is not a valid JSON response."
  *
  * @return bool
  */
 function isgal_is_editor_preview() {
-	return defined( 'REST_REQUEST' ) && REST_REQUEST && current_user_can( 'edit_posts' );
+	if ( ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || ! current_user_can( 'edit_posts' ) ) {
+		return false;
+	}
+	$rest = isgal_rest_request();
+	return 0 === strpos( $rest['route'], '/wp/v2/block-renderer/' );
+}
+
+/**
+ * Whether the current request is writing through REST (saving a post, an
+ * autosave, a batch). Its response carries rendered content nobody looks at,
+ * so the gallery must never go to the network on its account.
+ *
+ * @return bool
+ */
+function isgal_is_rest_write() {
+	if ( ! ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+		return false;
+	}
+	$rest = isgal_rest_request();
+	return $rest['write'];
 }
 
 /**
@@ -385,6 +446,10 @@ function isgal_refresh_all_galleries() {
  * or stale enough that waiting is the right call.
  *
  * The rungs, in order:
+ *   0. A REST write (saving the post) — never wait on the network. Queue a
+ *      sync if one is due and serve whatever the mirror holds; nobody reads
+ *      the content rendered into a save response, and a save that waits on a
+ *      slow endpoint fails in the editor as an invalid JSON response.
  *   1. Never synced — sync now, inline. The alternative is an empty gallery
  *      frozen into a page cache.
  *   2. Interval of 0 ("always live") or an editor preview past its cap — sync
@@ -408,7 +473,11 @@ function isgal_gallery_rows( array $a, $endpoint ) {
 	// Inline syncs run inside someone's page load. Shorter ceiling than cron.
 	$inline = array( 'timeout' => (int) apply_filters( 'isgal_inline_sync_timeout', 10 ) );
 
-	if ( 0 === $synced ) {
+	if ( isgal_is_rest_write() ) {
+		if ( 0 === $synced || ( time() - $synced ) >= $ttl ) {
+			isgal_schedule_sync( $endpoint, $gallery );
+		}
+	} elseif ( 0 === $synced ) {
 		$result = isgal_sync_gallery( $endpoint, $gallery, $inline );
 		if ( is_wp_error( $result ) ) {
 			return $result;
@@ -618,12 +687,12 @@ function isgal_defaults() {
 		'displayCaption'    => false,
 		'captionPosition'   => 'below',
 		'captionFields'     => array( 'title' ),
-		'captionTags'       => 3,
 		'hoverEffect'       => 'none',
 		'captionBackground' => '',
 		'onClick'           => 'page',
 		'linkNewTab'        => true,
 		'lightboxDetails'   => true,
+		'lightboxFlip'      => true,
 		'dateFields'        => null,
 		'facets'            => array(),
 		'facetMax'          => 12,
@@ -643,6 +712,8 @@ function isgal_defaults() {
 		'aspectRatio'       => '4-3',
 		'useFilename'       => false,
 		'altSource'         => 'graph',
+		'imageLoading'      => 'auto',
+		'imageReveal'       => 'fade',
 		'cacheTtl'          => null,
 		'jsonldProfile'     => 'provenance',
 		'imageBorder'       => null,
@@ -668,7 +739,6 @@ function isgal_caption_fields() {
 		'creator' => __( 'Creator', 'image-snippets-gallery' ),
 		'date'    => __( 'Date', 'image-snippets-gallery' ),
 		'rights'  => __( 'Rights', 'image-snippets-gallery' ),
-		'tags'    => __( 'Tags', 'image-snippets-gallery' ),
 	);
 }
 
@@ -736,47 +806,9 @@ function isgal_row_display_date( array $row, array $a ) {
 }
 
 /**
- * What an image is tagged with, as words: the labels of the entities it is
- * about (DBpedia and the like) followed by any plain-string keywords. This is
- * what lio:hasTag, schema:about and friends amount to once resolved.
- *
- * @param array $row Row.
- * @return string[] Unique, in graph order.
- */
-function isgal_row_tags( array $row ) {
-	$predicates = array_fill_keys( isgal_graph_tag_predicates(), true );
-	$tags       = array();
-	$labels     = isset( $row['labels'] ) ? (array) $row['labels'] : array();
-	foreach ( (array) $row['triples'] as $triple ) {
-		if ( ! isset( $predicates[ $triple[1] ] ) ) {
-			continue;
-		}
-		$term  = $triple[2];
-		$value = isset( $term['value'] ) ? trim( (string) $term['value'] ) : '';
-		if ( '' === $value ) {
-			continue;
-		}
-		if ( 'uri' === $term['type'] ) {
-			$value = isset( $labels[ $value ] ) ? trim( (string) $labels[ $value ] ) : '';
-			if ( '' === $value ) {
-				continue; // An entity nobody labelled: not a word to show.
-			}
-		}
-		$tags[ strtolower( $value ) ] = $value;
-	}
-	foreach ( (array) $row['keywords'] as $kw ) {
-		$kw = trim( (string) $kw );
-		if ( '' !== $kw && ! isset( $tags[ strtolower( $kw ) ] ) ) {
-			$tags[ strtolower( $kw ) ] = $kw;
-		}
-	}
-	return array_values( $tags );
-}
-
-/**
  * The facets a gallery can be filtered by, in the order the editor offers
  * them. Keys are what the block's `facets` attribute stores and what the URL
- * carries (`?isgal_tag=…`). Every one is read straight from the graph the
+ * carries (`?isgal_year=…`). Every one is read straight from the graph the
  * mirror already holds: a decade of hand annotation, not a taxonomy the site
  * owner has to maintain.
  *
@@ -784,7 +816,6 @@ function isgal_row_tags( array $row ) {
  */
 function isgal_facets() {
 	return array(
-		'tag'     => __( 'Tags', 'image-snippets-gallery' ),
 		'creator' => __( 'Creator', 'image-snippets-gallery' ),
 		'year'    => __( 'Year', 'image-snippets-gallery' ),
 		'camera'  => __( 'Camera', 'image-snippets-gallery' ),
@@ -841,7 +872,6 @@ function isgal_row_camera( array $row ) {
  */
 function isgal_row_facet_values( array $row, array $a ) {
 	$values = array(
-		'tag'     => isgal_row_tags( $row ),
 		'creator' => array(),
 		'year'    => array(),
 		'camera'  => array(),
@@ -1023,7 +1053,6 @@ function isgal_lightbox_item( array $row, array $a, $title, $alt, $source ) {
 		'date'       => $a['lightboxDetails'] ? $date['text'] : '',
 		'dateSource' => $a['lightboxDetails'] ? $date['source'] : '',
 		'rights'     => $a['lightboxDetails'] ? (string) $row['rights'] : '',
-		'tags'       => $a['lightboxDetails'] ? array_slice( isgal_row_tags( $row ), 0, 12 ) : array(),
 		'page'       => $a['lightboxDetails'] ? esc_url_raw( $row['page'] ) : '',
 	);
 }
@@ -1032,25 +1061,59 @@ function isgal_lightbox_item( array $row, array $a, $title, $alt, $source ) {
  * The lightbox dialog for a gallery. One per block; the items live in the
  * wrapper's context, so this is only the frame that shows the current one.
  *
+ * @param bool $flip Whether the image can be flipped to its metadata.
  * @return string HTML.
  */
-function isgal_lightbox_html() {
+function isgal_lightbox_html( $flip = false ) {
 	ob_start();
 	?>
-	<dialog class="isgal-lightbox" data-wp-watch="callbacks.syncDialog" data-wp-on--close="actions.close" data-wp-on--click="actions.backdrop" data-wp-on--keydown="actions.keydown" data-wp-on--touchstart="actions.touchStart" data-wp-on--touchend="actions.touchEnd" aria-label="<?php esc_attr_e( 'Image viewer', 'image-snippets-gallery' ); ?>">
+	<dialog class="isgal-lightbox" data-wp-watch="callbacks.syncDialog" data-wp-class--is-flipped="context.flipped" data-wp-class--is-loading="context.loading" data-wp-on--close="actions.close" data-wp-on--click="actions.backdrop" data-wp-on--keydown="actions.keydown" data-wp-on--touchstart="actions.touchStart" data-wp-on--touchend="actions.touchEnd" aria-label="<?php esc_attr_e( 'Image viewer', 'image-snippets-gallery' ); ?>">
 		<div class="isgal-lightbox__frame">
 			<button type="button" class="isgal-lightbox__close" data-wp-on--click="actions.close" aria-label="<?php esc_attr_e( 'Close', 'image-snippets-gallery' ); ?>">&#x2715;</button>
 			<button type="button" class="isgal-lightbox__nav isgal-lightbox__prev" data-wp-on--click="actions.prev" data-wp-bind--hidden="!state.hasMany" aria-label="<?php esc_attr_e( 'Previous image', 'image-snippets-gallery' ); ?>">&#x2039;</button>
 			<figure class="isgal-lightbox__figure">
-				<img class="isgal-lightbox__img" data-wp-bind--src="state.current.src" data-wp-bind--srcset="state.current.srcset" data-wp-bind--alt="state.current.alt" sizes="100vw" decoding="async" />
+				<div class="isgal-flip">
+					<div class="isgal-flip__inner">
+						<div class="isgal-flip__front">
+							<img class="isgal-lightbox__img" data-wp-watch="callbacks.watchImage" data-wp-on--load="actions.loaded" data-wp-on--error="actions.loaded"<?php echo $flip ? ' data-wp-on--click="actions.flip"' : ''; ?> data-wp-bind--src="state.current.src" data-wp-bind--srcset="state.current.srcset" data-wp-bind--alt="state.current.alt" sizes="100vw" decoding="async" />
+							<span class="isgal-lightbox__spinner" aria-hidden="true"></span>
+						</div>
+						<?php if ( $flip ) : // The back of the photograph: the image's whole graph over a ghost of the image, as ImageSnippets shows it. ?>
+						<div class="isgal-flip__back" data-wp-bind--aria-hidden="!context.flipped">
+							<img class="isgal-flip__ghost" data-wp-bind--src="state.current.src" alt="" aria-hidden="true" decoding="async" />
+							<div class="isgal-flip__data" tabindex="0" role="group" aria-label="<?php esc_attr_e( 'Image metadata', 'image-snippets-gallery' ); ?>">
+								<template data-wp-each--group="state.back">
+									<section class="isgal-flip__group">
+										<h3 class="isgal-flip__subject" data-wp-text="context.group.s"></h3>
+										<dl>
+											<template data-wp-each--row="context.group.rows">
+												<div class="isgal-flip__row">
+													<dt data-wp-text="context.row.p" data-wp-bind--title="context.row.i"></dt>
+													<dd>
+														<template data-wp-each--val="context.row.v">
+															<span class="isgal-flip__value"><a data-wp-bind--hidden="!context.val.h" data-wp-bind--href="context.val.h" data-wp-text="context.val.t" target="_blank" rel="noopener"></a><span data-wp-bind--hidden="context.val.h" data-wp-text="context.val.t"></span></span>
+														</template>
+													</dd>
+												</div>
+											</template>
+										</dl>
+									</section>
+								</template>
+							</div>
+						</div>
+						<?php endif; ?>
+					</div>
+				</div>
 				<figcaption class="isgal-lightbox__caption">
+					<?php if ( $flip ) : ?>
+					<button type="button" class="isgal-lightbox__flip" data-wp-on--click="actions.flip" data-wp-bind--aria-pressed="context.flipped" aria-pressed="false"><span aria-hidden="true">&#x21C4;</span> <span data-wp-text="state.flipLabel"><?php esc_html_e( 'Flip to see the metadata', 'image-snippets-gallery' ); ?></span></button>
+					<?php endif; ?>
 					<span class="isgal-lightbox__title" data-wp-text="state.current.title"></span>
 					<span class="isgal-lightbox__count" data-wp-text="state.position" data-wp-bind--hidden="!state.hasMany"></span>
 					<dl class="isgal-lightbox__details" data-wp-bind--hidden="!state.hasDetails">
 						<div data-wp-bind--hidden="!state.current.creator"><dt><?php esc_html_e( 'Creator', 'image-snippets-gallery' ); ?></dt><dd data-wp-text="state.current.creator"></dd></div>
 						<div data-wp-bind--hidden="!state.current.date"><dt><?php esc_html_e( 'Date', 'image-snippets-gallery' ); ?></dt><dd><span data-wp-text="state.current.date"></span> <small class="isgal-lightbox__source" data-wp-text="state.current.dateSource"></small></dd></div>
 						<div data-wp-bind--hidden="!state.current.rights"><dt><?php esc_html_e( 'Rights', 'image-snippets-gallery' ); ?></dt><dd data-wp-text="state.current.rights"></dd></div>
-						<div data-wp-bind--hidden="!state.current.tags.length"><dt><?php esc_html_e( 'Tags', 'image-snippets-gallery' ); ?></dt><dd><template data-wp-each="state.current.tags"><span class="isgal-lightbox__tag" data-wp-text="context.item"></span></template></dd></div>
 						<div data-wp-bind--hidden="!state.current.page"><dt><?php esc_html_e( 'Source', 'image-snippets-gallery' ); ?></dt><dd><a data-wp-bind--href="state.current.page" target="_blank" rel="noopener"><?php esc_html_e( 'View on ImageSnippets', 'image-snippets-gallery' ); ?></a></dd></div>
 					</dl>
 				</figcaption>
@@ -1221,10 +1284,6 @@ function isgal_row_caption_lines( array $row, array $a, $title ) {
 				break;
 			case 'rights':
 				$text = (string) $row['rights'];
-				break;
-			case 'tags':
-				$max  = max( 1, min( 20, (int) $a['captionTags'] ) );
-				$text = implode( ', ', array_slice( isgal_row_tags( $row ), 0, $max ) );
 				break;
 		}
 		if ( '' !== $text ) {
@@ -1548,14 +1607,36 @@ function isgal_render_gallery( array $attributes ) {
 	}
 
 	$lightbox    = 'lightbox' === $a['onClick'];
-	$caption_pos = in_array( $a['captionPosition'], array( 'below', 'overlay', 'hover' ), true ) ? $a['captionPosition'] : 'below';
+	$caption_pos = in_array( $a['captionPosition'], array( 'below', 'above', 'overlay', 'hover' ), true ) ? $a['captionPosition'] : 'below';
 	$hover       = in_array( $a['hoverEffect'], array( 'none', 'zoom', 'fade', 'lift' ), true ) ? $a['hoverEffect'] : 'none';
+
+	// How images arrive. 'auto' loads the first two rows with the page, since
+	// they are what a visitor lands on and a lazy image there paints late, and
+	// leaves the rest to the browser; 'lazy' and 'eager' are the two extremes.
+	// 'fade' holds a tinted box where each image will be and fades it in.
+	$loading = in_array( $a['imageLoading'], array( 'auto', 'lazy', 'eager' ), true ) ? $a['imageLoading'] : 'auto';
+	$reveal  = in_array( $a['imageReveal'], array( 'fade', 'none' ), true ) ? $a['imageReveal'] : 'fade';
+	if ( 'eager' === $loading ) {
+		$eager = PHP_INT_MAX;
+	} elseif ( 'lazy' === $loading ) {
+		$eager = 0;
+	} else {
+		$eager = 'slideshow' === $layout ? 1 : min( 12, $cols * 2 );
+	}
+	/**
+	 * Filter how many of a gallery's leading images load with the page rather
+	 * than lazily.
+	 *
+	 * @param int   $eager Number of images.
+	 * @param array $a     Resolved block attributes.
+	 */
+	$eager = max( 0, (int) apply_filters( 'isgal_eager_images', $eager, $a ) );
 
 	$style   = isgal_style_vars( $a );
 	$classes = implode(
 		' ',
 		array_merge(
-			array( 'isgal-gallery', 'isgal-layout-' . $layout, 'isgal-ratio-' . $ratio, 'isgal-captions-' . $caption_pos, 'isgal-hover-' . $hover, $lightbox ? 'isgal-has-lightbox' : '' ),
+			array( 'isgal-gallery', 'isgal-layout-' . $layout, 'isgal-ratio-' . $ratio, 'isgal-captions-' . $caption_pos, 'isgal-hover-' . $hover, 'isgal-reveal-' . $reveal, $lightbox ? 'isgal-has-lightbox' : '' ),
 			$style['classes']
 		)
 	);
@@ -1625,8 +1706,24 @@ function isgal_render_gallery( array $attributes ) {
 	$interactive = $lightbox || $facets_live || $slides_live || $paged_live;
 	$items       = array();
 	$thumbs      = array();
+	// The back of each photograph (its whole graph, as words) for the lightbox
+	// flip. Kept out of the context: it is several KB an image, read only if
+	// someone flips one, so it rides along as inert JSON and is parsed then.
+	$flip  = $lightbox && ! empty( $a['lightboxFlip'] );
+	$backs = array();
 	if ( $interactive ) {
 		$wrapper_attributes .= ' data-wp-interactive="imagesnippets/gallery" data-wp-init--hash="callbacks.openFromHash" data-wp-init--facets="callbacks.initFacets"';
+	}
+	if ( $flip ) {
+		wp_interactivity_state(
+			'imagesnippets/gallery',
+			array(
+				'flipI18n' => array(
+					'toBack'  => __( 'Flip to see the metadata', 'image-snippets-gallery' ),
+					'toFront' => __( 'Flip back to the image', 'image-snippets-gallery' ),
+				),
+			)
+		);
 	}
 	if ( $slides_live ) {
 		wp_interactivity_state(
@@ -1717,12 +1814,39 @@ function isgal_render_gallery( array $attributes ) {
 					}
 					$isgal_item_style = '';
 					if ( 'justified' === $layout ) {
-						$isgal_dims       = isgal_row_dimensions( $row );
-						$isgal_ratio      = $isgal_dims ? $isgal_dims[0] / $isgal_dims[1] : 4 / 3;
+						$isgal_jdims      = isgal_row_dimensions( $row );
+						$isgal_ratio      = $isgal_jdims ? $isgal_jdims[0] / $isgal_jdims[1] : 4 / 3;
 						$isgal_item_style = ' style="--isgal-r:' . esc_attr( round( max( 0.25, min( 4, $isgal_ratio ) ), 4 ) ) . '"';
 					}
 					?>
+					<?php
+					$isgal_lines = $a['displayCaption'] ? isgal_row_caption_lines( $row, $a, $title ) : array();
+					if ( 'timeline' === $layout && ! in_array( 'date', wp_list_pluck( $isgal_lines, 0 ), true ) ) {
+						// A timeline without dates on the items would be a grid with headings.
+						$isgal_when = isgal_row_display_date( $row, $a );
+						if ( '' !== $isgal_when['text'] ) {
+							$isgal_lines[] = array( 'date', $isgal_when['text'], $isgal_when['source'] );
+						}
+					}
+					$isgal_caption = '';
+					if ( $isgal_lines ) {
+						$isgal_caption = '<figcaption class="isgal-caption">';
+						foreach ( $isgal_lines as $isgal_line ) {
+							$isgal_caption .= '<span class="isgal-cap isgal-cap-' . esc_attr( $isgal_line[0] ) . '"'
+								. ( 'title' === $isgal_line[0] ? ' property="name"' : '' )
+								. ( '' !== $isgal_line[2] ? ' title="' . esc_attr( $isgal_line[2] ) . '"' : '' )
+								. '>' . esc_html( $isgal_line[1] ) . '</span>';
+						}
+						$isgal_caption .= '</figcaption>';
+					}
+					// Hidden figures (a later "Load more" batch) stay lazy whatever the
+					// setting: loading them with the page is what paging is there to avoid.
+					$isgal_waiting = $paged && $position > $page_size;
+					$isgal_eager   = $position <= $eager && ! $isgal_waiting;
+					$isgal_dims    = isgal_row_dimensions( $row );
+					?>
 					<figure class="isgal-item"<?php echo '' !== $isgal_anchor ? ' id="' . esc_attr( $isgal_anchor ) . '"' : ''; ?><?php echo $isgal_item_style . $isgal_item_attrs; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?> vocab="https://schema.org/" typeof="ImageObject">
+						<?php echo 'above' === $caption_pos ? $isgal_caption : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?>
 						<a href="<?php echo esc_url( $row['page'] ? $row['page'] : '#' ); ?>" aria-label="<?php echo esc_attr( $label ); ?>"<?php echo $a['linkNewTab'] ? ' target="_blank" rel="noopener"' : ''; ?><?php echo $lightbox ? ' data-wp-on--click="actions.open"' : ''; ?>>
 							<?php
 							// The source URL (contentUrl) is the full-res original; for Flickr it
@@ -1750,6 +1874,9 @@ function isgal_render_gallery( array $attributes ) {
 							if ( $interactive ) {
 								$items[] = $lightbox ? array_merge( $isgal_item, isgal_lightbox_item( $row, $a, $title, $alt, $isgal_source ) ) : $isgal_item;
 							}
+							if ( $flip && '' !== $isgal_anchor ) {
+								$backs[ $isgal_anchor ] = isgal_row_back( $row );
+							}
 							if ( $slideshow ) {
 								// The picker strip wants something small: ImageSnippets' own
 								// 128px thumbnail when the row has one, else Flickr's square.
@@ -1768,7 +1895,13 @@ function isgal_render_gallery( array $attributes ) {
 								onerror='this.onerror=null;this.removeAttribute("srcset");this.src="<?php echo esc_url( $row['thumb'] ); ?>";'
 								<?php endif; ?>
 								alt="<?php echo esc_attr( $alt ); ?>"
-								loading="<?php echo $slideshow && 1 === $position ? 'eager' : 'lazy'; ?>"
+								<?php if ( $isgal_dims ) : // Reserves the image's own shape before it loads; the crop ratios override it in CSS. ?>
+								width="<?php echo (int) $isgal_dims[0]; ?>" height="<?php echo (int) $isgal_dims[1]; ?>"
+								<?php endif; ?>
+								<?php if ( 'fade' === $reveal ) : ?>
+								onload="this.classList.add('is-loaded')"
+								<?php endif; ?>
+								loading="<?php echo $isgal_eager ? 'eager' : 'lazy'; ?>"
 								decoding="async"
 								property="contentUrl"
 							/>
@@ -1779,23 +1912,7 @@ function isgal_render_gallery( array $attributes ) {
 						<?php if ( '' !== $row['licurl'] ) : ?>
 							<span property="acquireLicensePage" hidden><?php echo esc_html( $row['licurl'] ); ?></span>
 						<?php endif; ?>
-						<?php
-						$isgal_lines = $a['displayCaption'] ? isgal_row_caption_lines( $row, $a, $title ) : array();
-						if ( 'timeline' === $layout && ! in_array( 'date', wp_list_pluck( $isgal_lines, 0 ), true ) ) {
-							// A timeline without dates on the items would be a grid with headings.
-							$isgal_when = isgal_row_display_date( $row, $a );
-							if ( '' !== $isgal_when['text'] ) {
-								$isgal_lines[] = array( 'date', $isgal_when['text'], $isgal_when['source'] );
-							}
-						}
-						if ( $isgal_lines ) :
-							?>
-							<figcaption class="isgal-caption">
-								<?php foreach ( $isgal_lines as $isgal_line ) : ?>
-									<span class="isgal-cap isgal-cap-<?php echo esc_attr( $isgal_line[0] ); ?>"<?php echo 'title' === $isgal_line[0] ? ' property="name"' : ''; ?><?php echo '' !== $isgal_line[2] ? ' title="' . esc_attr( $isgal_line[2] ) . '"' : ''; ?>><?php echo esc_html( $isgal_line[1] ); ?></span>
-								<?php endforeach; ?>
-							</figcaption>
-						<?php endif; ?>
+						<?php echo 'above' !== $caption_pos ? $isgal_caption : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?>
 					</figure>
 				<?php endforeach; ?>
 			</div>
@@ -1814,7 +1931,10 @@ function isgal_render_gallery( array $attributes ) {
 				<p class="isgal-footer"><?php echo esc_html( sprintf( /* translators: %s: rights statement */ __( 'Images %s', 'image-snippets-gallery' ), reset( $isgal_rights ) ) ); ?></p>
 			<?php endif; ?>
 			<?php echo isgal_jsonld( $rows, $a['gallery'], $use_filename, $a['jsonldProfile'], isgal_current_permalink() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-			<?php echo $lightbox ? isgal_lightbox_html() : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped within. ?>
+			<?php echo $lightbox ? isgal_lightbox_html( $flip ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped within. ?>
+			<?php if ( $backs ) : ?>
+				<script type="application/json" class="isgal-backs"><?php echo wp_json_encode( $backs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_SLASHES ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON with tags hex-escaped. ?></script>
+			<?php endif; ?>
 		<?php endif; ?>
 	</div>
 	<?php
@@ -1826,6 +1946,10 @@ function isgal_render_gallery( array $attributes ) {
 			'lightbox' => $lightbox,
 			'open'     => false,
 			'index'    => 0,
+			'canFlip'  => $flip,
+			'flipped'  => false,
+			'loading'  => false,
+			'backs'    => null,
 			'items'    => $items,
 			'facets'   => $facet_keys,
 			'active'   => (object) array_fill_keys( $facet_keys, array() ),

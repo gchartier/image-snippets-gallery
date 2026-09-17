@@ -1,6 +1,6 @@
 /**
- * Front-end behaviour: the lightbox, the facet filters, the slideshow and
- * "Load more".
+ * Front-end behaviour: the lightbox (and the flip to an image's metadata),
+ * the facet filters, the slideshow and "Load more".
  *
  * Everything either shows was rendered by the server into the block's context,
  * so opening an image or narrowing the gallery is a state change, not a
@@ -35,7 +35,7 @@ function matches( item, active ) {
 	return true;
 }
 
-// The selection lives in the URL too (?isgal_tag=fog&isgal_year=2012), so a
+// The selection lives in the URL too (?isgal_year=2012&isgal_creator=…), so a
 // filtered view can be shared. Replace, not push: the back button should leave
 // the page, not undo chips one by one.
 function writeUrl( active ) {
@@ -113,6 +113,20 @@ function settleSlide( ctx ) {
 	}
 }
 
+// Fetch an image the visitor is likely to ask for next, so the lightbox
+// arrows land on something already in the cache.
+function preload( item ) {
+	if ( ! item || ! item.src ) {
+		return;
+	}
+	const img = new window.Image();
+	img.sizes = '100vw';
+	if ( item.srcset ) {
+		img.srcset = item.srcset;
+	}
+	img.src = item.src;
+}
+
 const { state, actions } = store( 'imagesnippets/gallery', {
 	state: {
 		i18n: {
@@ -128,17 +142,20 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 		},
 		get hasDetails() {
 			const c = state.current;
-			return !! (
-				c.creator ||
-				c.date ||
-				c.rights ||
-				( c.tags && c.tags.length ) ||
-				c.page
-			);
+			return !! ( c.creator || c.date || c.rights || c.page );
 		},
 		get position() {
 			const ctx = getContext();
 			return positionOf( ctx, ctx.index );
+		},
+		// The back of the current image: its graph, grouped by subject.
+		get back() {
+			const ctx = getContext();
+			return ( ctx.backs && ctx.backs[ state.current.anchor ] ) || [];
+		},
+		get flipLabel() {
+			const i18n = state.flipI18n || {};
+			return getContext().flipped ? i18n.toFront : i18n.toBack;
 		},
 		// Slideshow.
 		get slidePosition() {
@@ -213,11 +230,13 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 			const figure = ref.closest( '.isgal-item' );
 			const i = ctx.items.findIndex( ( it ) => it.anchor === figure?.id );
 			ctx.index = i >= 0 ? i : 0;
+			ctx.flipped = false;
 			ctx.open = true;
 		},
 		close() {
 			const ctx = getContext();
 			ctx.open = false;
+			ctx.flipped = false;
 			// Leaving the lightbox lands the slideshow on the image just seen,
 			// and a paged gallery reveals up to it.
 			if ( ctx.slides ) {
@@ -244,7 +263,42 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 			const i = nextVisible( ctx, ctx.index, delta );
 			if ( i >= 0 ) {
 				ctx.index = i;
+				// Every image arrives face up.
+				ctx.flipped = false;
 			}
+		},
+		// Turn the image over to read its metadata, as on its ImageSnippets
+		// page. The backs ride in the page as inert JSON (several KB an image)
+		// and are parsed the first time anyone flips.
+		flip() {
+			const ctx = getContext();
+			if ( ! ctx.backs ) {
+				const { ref } = getElement();
+				const data = ref
+					.closest( '[data-wp-interactive]' )
+					?.querySelector( 'script.isgal-backs' );
+				if ( ! data ) {
+					return;
+				}
+				try {
+					ctx.backs = JSON.parse( data.textContent );
+				} catch ( e ) {
+					return;
+				}
+			}
+			ctx.flipped = ! ctx.flipped;
+		},
+		// The lightbox image finished (or failed): drop the spinner, and fetch
+		// the neighbours while the visitor looks at this one.
+		loaded() {
+			const ctx = getContext();
+			ctx.loading = false;
+			[ 1, -1 ].forEach( ( delta ) => {
+				const i = nextVisible( ctx, ctx.index, delta );
+				if ( i >= 0 && i !== ctx.index ) {
+					preload( ctx.items[ i ] );
+				}
+			} );
 		},
 		// Slideshow: the same stepping, over its own cursor.
 		slideNext() {
@@ -325,6 +379,8 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 				actions.next();
 			} else if ( 'ArrowLeft' === event.key ) {
 				actions.prev();
+			} else if ( 'f' === event.key && getContext().canFlip ) {
+				actions.flip();
 			}
 		},
 		backdrop( event ) {
@@ -401,8 +457,37 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 		syncItem() {
 			getElement().ref.hidden = state.itemHidden;
 		},
+		// The slide after the current one is fetched ahead of time, so moving
+		// on (by hand or by autoplay) does not land on an empty frame.
 		syncSlide() {
-			getElement().ref.hidden = state.slideHidden;
+			const ctx = getContext();
+			const { ref } = getElement();
+			ref.hidden = state.slideHidden;
+			if ( ctx.i === nextVisible( ctx, ctx.slide, 1 ) ) {
+				const img = ref.querySelector( 'img[loading="lazy"]' );
+				if ( img ) {
+					img.loading = 'eager';
+				}
+			}
+		},
+		// A new image in the lightbox: until it has loaded the frame shows a
+		// spinner rather than the previous photograph under the new caption.
+		// An image already in the cache is complete by the next frame and
+		// never shows one.
+		watchImage() {
+			const ctx = getContext();
+			if ( ! ctx.open || ! state.current.src ) {
+				return;
+			}
+			const { ref } = getElement();
+			ctx.loading = true;
+			window.requestAnimationFrame(
+				withScope( () => {
+					if ( ref.complete && ref.naturalWidth ) {
+						ctx.loading = false;
+					}
+				} )
+			);
 		},
 		syncMore() {
 			getElement().ref.hidden = ! state.hasMore;
