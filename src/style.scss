@@ -442,6 +442,8 @@
 		background: transparent;
 		color: #fff;
 
+		overscroll-behavior: contain;
+
 		&::backdrop {
 			background: rgba( 0, 0, 0, 0.92 );
 		}
@@ -454,12 +456,24 @@
 			position: relative;
 		}
 
+		// The image and what is said about it sit on one card, so they read as
+		// an object in front of the page rather than floating over it. The card
+		// is as wide as the image; the caption wraps to that width.
 		&__figure {
 			margin: 0;
+			justify-self: center;
+			box-sizing: border-box;
+			width: fit-content;
+			max-width: 100%;
+			min-width: 0;
+			padding: 1rem;
 			display: flex;
 			flex-direction: column;
 			align-items: center;
-			min-width: 0;
+			background: #1d1d1f;
+			border: 1px solid rgba( 255, 255, 255, 0.08 );
+			border-radius: 10px;
+			box-shadow: 0 24px 60px rgba( 0, 0, 0, 0.6 );
 		}
 
 		&__img {
@@ -475,8 +489,10 @@
 		}
 
 		&__caption {
-			width: 100%;
-			max-width: 60ch;
+			// Takes the card's width without being able to widen it.
+			box-sizing: border-box;
+			width: 0;
+			min-width: 100%;
 			margin-top: 0.75rem;
 			font-size: 0.9rem;
 			line-height: 1.4;
@@ -493,6 +509,17 @@
 			display: block;
 			opacity: 0.6;
 			font-size: 0.85em;
+		}
+
+		&__hosted {
+			margin: 0.6rem 0 0;
+			opacity: 0.7;
+			font-size: 0.85em;
+
+			a {
+				color: inherit;
+				text-decoration: underline;
+			}
 		}
 
 		&__details {
@@ -527,8 +554,12 @@
 
 		// The image can be turned over, as a print can, to read what is written
 		// on the back. Both faces share one box; the back scrolls inside it.
+		// The box is the image's own size, so the back is the same shape as the
+		// front, with a floor wide enough to read a line of metadata on.
 		.isgal-flip {
-			width: 100%;
+			width: fit-content;
+			max-width: 100%;
+			min-width: min( 100%, 22rem );
 			perspective: 1600px;
 		}
 
@@ -553,7 +584,7 @@
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			min-height: 50vh;
+			min-height: 14rem;
 		}
 
 		// Out of the tab order and the accessibility tree until it faces the
@@ -566,7 +597,9 @@
 			transition: visibility 0s 0.6s;
 			overflow: hidden;
 			border-radius: 4px;
-			background: #1b1b1b;
+			background: #101011;
+			// Anywhere that is not a link turns it back over.
+			cursor: pointer;
 		}
 
 		&.is-flipped .isgal-flip__back {
@@ -619,7 +652,7 @@
 		.isgal-flip__group dl {
 			margin: 0;
 			display: grid;
-			grid-template-columns: minmax( 8rem, 14rem ) 1fr;
+			grid-template-columns: minmax( 6rem, 35% ) 1fr;
 			column-gap: 1rem;
 			row-gap: 0.3rem;
 		}
@@ -917,4 +950,11 @@
 			}
 		}
 	}
+}
+
+// While a lightbox is open the page behind it holds still. The gutter keeps
+// the layout from jumping sideways when the scrollbar goes.
+html.isgal-lightbox-open {
+	overflow: hidden;
+	scrollbar-gutter: stable;
 }

@@ -1021,7 +1021,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 							/>
 							<ToggleControl
 								label={ __(
-									'Show creator, date, rights and a source link',
+									'Show creator, date, rights and the link to ImageSnippets',
 									'image-snippets-gallery'
 								) }
 								checked={ lightboxDetails }

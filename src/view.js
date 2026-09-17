@@ -142,7 +142,7 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 		},
 		get hasDetails() {
 			const c = state.current;
-			return !! ( c.creator || c.date || c.rights || c.page );
+			return !! ( c.creator || c.date || c.rights );
 		},
 		get position() {
 			const ctx = getContext();
@@ -287,6 +287,18 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 				}
 			}
 			ctx.flipped = ! ctx.flipped;
+		},
+		// A click anywhere on the back that is not a link, and is not the end of
+		// a text selection, turns the image face up again.
+		flipBack( event ) {
+			const view = event.target.ownerDocument.defaultView;
+			if (
+				event.target.closest( 'a' ) ||
+				String( view.getSelection() || '' ).length
+			) {
+				return;
+			}
+			getContext().flipped = false;
 		},
 		// The lightbox image finished (or failed): drop the spinner, and fetch
 		// the neighbours while the visitor looks at this one.
@@ -502,6 +514,11 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 			} else if ( ! ctx.open && ref.open ) {
 				ref.close();
 			}
+			// The page behind a modal still scrolls unless told not to.
+			document.documentElement.classList.toggle(
+				'isgal-lightbox-open',
+				!! ctx.open
+			);
 		},
 		// A search result or shared link that names an image (#isgal-…) opens
 		// it straight away when the gallery is set to lightbox; either way it

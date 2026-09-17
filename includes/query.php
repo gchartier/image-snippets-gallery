@@ -1079,7 +1079,7 @@ function isgal_lightbox_html( $flip = false ) {
 							<span class="isgal-lightbox__spinner" aria-hidden="true"></span>
 						</div>
 						<?php if ( $flip ) : // The back of the photograph: the image's whole graph over a ghost of the image, as ImageSnippets shows it. ?>
-						<div class="isgal-flip__back" data-wp-bind--aria-hidden="!context.flipped">
+						<div class="isgal-flip__back" data-wp-bind--aria-hidden="!context.flipped" data-wp-on--click="actions.flipBack">
 							<img class="isgal-flip__ghost" data-wp-bind--src="state.current.src" alt="" aria-hidden="true" decoding="async" />
 							<div class="isgal-flip__data" tabindex="0" role="group" aria-label="<?php esc_attr_e( 'Image metadata', 'image-snippets-gallery' ); ?>">
 								<template data-wp-each--group="state.back">
@@ -1114,8 +1114,25 @@ function isgal_lightbox_html( $flip = false ) {
 						<div data-wp-bind--hidden="!state.current.creator"><dt><?php esc_html_e( 'Creator', 'image-snippets-gallery' ); ?></dt><dd data-wp-text="state.current.creator"></dd></div>
 						<div data-wp-bind--hidden="!state.current.date"><dt><?php esc_html_e( 'Date', 'image-snippets-gallery' ); ?></dt><dd><span data-wp-text="state.current.date"></span> <small class="isgal-lightbox__source" data-wp-text="state.current.dateSource"></small></dd></div>
 						<div data-wp-bind--hidden="!state.current.rights"><dt><?php esc_html_e( 'Rights', 'image-snippets-gallery' ); ?></dt><dd data-wp-text="state.current.rights"></dd></div>
-						<div data-wp-bind--hidden="!state.current.page"><dt><?php esc_html_e( 'Source', 'image-snippets-gallery' ); ?></dt><dd><a data-wp-bind--href="state.current.page" target="_blank" rel="noopener"><?php esc_html_e( 'View on ImageSnippets', 'image-snippets-gallery' ); ?></a></dd></div>
 					</dl>
+					<p class="isgal-lightbox__hosted" data-wp-bind--hidden="!state.current.page">
+						<?php
+						echo wp_kses(
+							sprintf(
+								/* translators: %s: the word "ImageSnippets", linked to the image's page there */
+								__( 'Image metadata is hosted at %s', 'image-snippets-gallery' ),
+								'<a data-wp-bind--href="state.current.page" target="_blank" rel="noopener">ImageSnippets</a>'
+							),
+							array(
+								'a' => array(
+									'data-wp-bind--href' => array(),
+									'target'             => array(),
+									'rel'                => array(),
+								),
+							)
+						);
+						?>
+					</p>
 				</figcaption>
 			</figure>
 			<button type="button" class="isgal-lightbox__nav isgal-lightbox__next" data-wp-on--click="actions.next" data-wp-bind--hidden="!state.hasMany" aria-label="<?php esc_attr_e( 'Next image', 'image-snippets-gallery' ); ?>">&#x203A;</button>
