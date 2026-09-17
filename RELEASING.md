@@ -68,7 +68,7 @@ VERSION=X.Y.Z
 STAGE="$(mktemp -d)/image-snippets-gallery"
 mkdir -p "$STAGE"
 cp image-snippets-gallery.php uninstall.php readme.txt LICENSE README.md "$STAGE/"
-cp -r includes build "$STAGE/"
+cp -r includes build assets "$STAGE/"   # assets/ = the Arrange screen's script and stylesheet
 find "$STAGE" -name '.DS_Store' -delete
 
 python3 - "$STAGE" "$VERSION" <<'PY'
