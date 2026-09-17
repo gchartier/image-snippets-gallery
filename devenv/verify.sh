@@ -502,6 +502,29 @@ echo ( false !== strpos( $q, "lio:depicts" ) && false === strpos( $q, "lio:isIn"
 assert "its own pattern replaces the dataset one; four images mirrored; a plain gallery still asks for its dataset; pruning keeps the definition and drops its images" "1 4 1 1 0" "$SRC"
 assert "the real gallery is untouched" "6" "$(fixture status gallery | awk '/^mirrored/{print $2}')"
 
+head_ "Saved sources"
+
+wp isgal source rm '~verify-pelicans' >/dev/null 2>&1 || true
+assert "a pattern reaching for another server is refused" "isgal_source_keyword" "$(wp eval '$r = isgal_validate_source_pattern( "?image lio:depicts dbr:Brown_Pelican. } SERVICE <http://example.org/> { ?a ?b ?c" ); echo is_wp_error( $r ) ? $r->get_error_code() : "ok";' | tr -d '\r')"
+assert "a pattern that closes the plugin's braces is refused" "isgal_source_braces" "$(wp eval '$r = isgal_validate_source_pattern( "?image lio:depicts dbr:Brown_Pelican. } } { {" ); echo is_wp_error( $r ) ? $r->get_error_code() : "ok";' | tr -d '\r')"
+assert "a pattern that never names ?image is refused" "isgal_source_no_image" "$(wp eval '$r = isgal_validate_source_pattern( "?x lio:depicts dbr:Brown_Pelican." ); echo is_wp_error( $r ) ? $r->get_error_code() : "ok";' | tr -d '\r')"
+assert "a person's own words are not mistaken for keywords" "1" "$(wp eval 'echo true === isgal_validate_source_pattern( "?image dc:creator ?from; schema:copy \"DROP it\"." ) ? 1 : 0;')"
+SADD="$(wp eval 'add_filter( "isgal_source_max_images", function () { return 5; } ); $n = isgal_save_source( "Verify pelicans", "?image lio:depicts dbr:Brown_Pelican.", "" ); $r = isgal_refresh_gallery( isgal_default_endpoint(), $n ); echo $n, " ", is_wp_error( $r ) ? $r->get_error_message() : $r["images"];' | tr -d '\r')"
+assert "saving gives the name a block keeps, and fetches up to the ceiling" "~verify-pelicans 5" "$SADD"
+assert "a second source of the same name is refused" "isgal_source_exists" "$(wp eval '$r = isgal_save_source( "Verify pelicans", "?image lio:depicts dbr:Osprey.", "" ); echo is_wp_error( $r ) ? $r->get_error_code() : "saved";' | tr -d '\r')"
+if ! wp post list --post_type=page --name=verify-source --format=count | grep -q '^1$'; then
+    wp post create --post_type=page --post_status=publish --post_title='Verify source' --post_name=verify-source \
+        --post_content='<!-- wp:imagesnippets/gallery {"gallery":"~verify-pelicans","displayTitle":true} /-->' >/dev/null
+fi
+VSRC="$(fetch /verify-source/)"
+assert "the visitor sees its images under its label, with a share image" "5 1 1" "$(echo "$(grep -c '<figure class="isgal-item"' <<<"$VSRC") $(grep -c 'class="isgal-title">Verify pelicans<' <<<"$VSRC") $(grep -c '<meta property="og:image" content=' <<<"$VSRC")")"
+assert "the picker offers it, first" "~verify-pelicans" "$(wp eval 'wp_set_current_user( 1 ); $r = rest_do_request( new WP_REST_Request( "GET", "/imagesnippets/v1/galleries" ) ); $d = $r->get_data(); echo $d["galleries"][0]["value"];' | tr -d '\r')"
+SEDIT="$(wp eval '$t = isgal_gallery_term( isgal_default_endpoint(), "~verify-pelicans" ); $id = $t->term_id; isgal_save_source( "Verify pelicans", "?image lio:depicts dbr:Brown_Pelican. ?image dc:title ?t.", "~verify-pelicans" ); $u = isgal_gallery_term( isgal_default_endpoint(), "~verify-pelicans" ); echo ( $u->term_id === $id ? 1 : 0 ), " ", isgal_gallery_synced_at( $u );' | tr -d '\r')"
+assert "rewriting the pattern keeps the gallery and marks it to be fetched again" "1 0" "$SEDIT"
+wp post delete "$(wp post list --post_type=page --name=verify-source --field=ID)" --force >/dev/null
+assert "deleting it removes the term and the images only it held" "1 0" "$(wp isgal source rm '~verify-pelicans' | grep -c Deleted) $(wp eval 'echo isgal_gallery_term( isgal_default_endpoint(), "~verify-pelicans" ) ? 1 : 0;')"
+assert "the real gallery is still untouched" "6" "$(fixture status gallery | awk '/^mirrored/{print $2}')"
+
 head_ "WP-CLI"
 
 assert "wp isgal status lists the gallery" "mmgallery01" "$(wp isgal status --format=csv | awk -F, 'NR==2{print $1}' | tr -d '\r')"

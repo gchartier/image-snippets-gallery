@@ -1607,6 +1607,8 @@ function isgal_render_gallery( array $attributes ) {
 	$a = isgal_resolve_attributes( $attributes );
 
 	$endpoint = isgal_resolve_endpoint( $a );
+	// A saved source is shown by its label, not by the name the block keeps.
+	$gallery_label = isgal_gallery_label( $endpoint, $a['gallery'] );
 
 	$layout = in_array( $a['layout'], array( 'grid', 'masonry', 'justified', 'timeline', 'slideshow' ), true ) ? $a['layout'] : 'grid';
 	$cols   = max( 1, min( 8, (int) $a['columns'] ) );
@@ -1753,7 +1755,7 @@ function isgal_render_gallery( array $attributes ) {
 				),
 			)
 		);
-		$wrapper_attributes .= ' data-wp-init--motion="callbacks.initMotion" data-wp-watch--autoplay="callbacks.autoplay" data-wp-on--keydown="actions.slideKeydown" data-wp-on--mouseenter="actions.hold" data-wp-on--mouseleave="actions.release" data-wp-on--focusin="actions.hold" data-wp-on--focusout="actions.release" data-wp-on--touchstart="actions.touchStart" data-wp-on--touchend="actions.slideTouchEnd" role="region" aria-roledescription="carousel" aria-label="' . esc_attr( $a['gallery'] ) . '"';
+		$wrapper_attributes .= ' data-wp-init--motion="callbacks.initMotion" data-wp-watch--autoplay="callbacks.autoplay" data-wp-on--keydown="actions.slideKeydown" data-wp-on--mouseenter="actions.hold" data-wp-on--mouseleave="actions.release" data-wp-on--focusin="actions.hold" data-wp-on--focusout="actions.release" data-wp-on--touchstart="actions.touchStart" data-wp-on--touchend="actions.slideTouchEnd" role="region" aria-roledescription="carousel" aria-label="' . esc_attr( $gallery_label ) . '"';
 	}
 	if ( $facet_index ) {
 		$wrapper_attributes = str_replace( 'class="', 'class="isgal-has-facets ', $wrapper_attributes );
@@ -1769,11 +1771,11 @@ function isgal_render_gallery( array $attributes ) {
 			$isgal_level = (int) $a['titleLevel'];
 			$isgal_tag   = 'h' . ( $isgal_level >= 1 && $isgal_level <= 6 ? $isgal_level : 2 );
 			?>
-			<<?php echo $isgal_tag; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- h1..h6 only. ?> class="isgal-title"><?php echo esc_html( $a['gallery'] ); ?></<?php echo $isgal_tag; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+			<<?php echo $isgal_tag; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- h1..h6 only. ?> class="isgal-title"><?php echo esc_html( $gallery_label ); ?></<?php echo $isgal_tag; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 		<?php endif; ?>
 
 		<?php if ( empty( $rows ) ) : ?>
-			<p class="isgal-message"><?php echo esc_html( sprintf( /* translators: %s: gallery name */ __( '%s — no images available.', 'image-snippets-gallery' ), $a['gallery'] ) ); ?></p>
+			<p class="isgal-message"><?php echo esc_html( sprintf( /* translators: %s: gallery name */ __( '%s — no images available.', 'image-snippets-gallery' ), $gallery_label ) ); ?></p>
 		<?php else : ?>
 			<?php echo $facet_index ? isgal_facet_bar_html( $facet_index, count( $rows ) ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped within. ?>
 			<?php
@@ -1798,7 +1800,7 @@ function isgal_render_gallery( array $attributes ) {
 						array(
 							$alt,
 							$title,
-							sprintf( /* translators: 1: gallery name, 2: position */ __( '%1$s image %2$d', 'image-snippets-gallery' ), $a['gallery'], $position ),
+							sprintf( /* translators: 1: gallery name, 2: position */ __( '%1$s image %2$d', 'image-snippets-gallery' ), $gallery_label, $position ),
 						)
 					);
 					// Anchor for search results, which link here with #fragment.
@@ -1948,7 +1950,7 @@ function isgal_render_gallery( array $attributes ) {
 				?>
 				<p class="isgal-footer"><?php echo esc_html( sprintf( /* translators: %s: rights statement */ __( 'Images %s', 'image-snippets-gallery' ), reset( $isgal_rights ) ) ); ?></p>
 			<?php endif; ?>
-			<?php echo isgal_jsonld( $rows, $a['gallery'], $use_filename, $a['jsonldProfile'], isgal_current_permalink() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+			<?php echo isgal_jsonld( $rows, $gallery_label, $use_filename, $a['jsonldProfile'], isgal_current_permalink() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 			<?php echo $lightbox ? isgal_lightbox_html( $flip ) : ''; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped within. ?>
 			<?php if ( $backs ) : ?>
 				<script type="application/json" class="isgal-backs"><?php echo wp_json_encode( $backs, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_SLASHES ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON with tags hex-escaped. ?></script>

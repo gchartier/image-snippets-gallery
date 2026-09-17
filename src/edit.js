@@ -187,7 +187,8 @@ import './editor.scss';
 
 const IRI_SAFE = /[^\w@.\-]/g; // mirror the server-side sanitizer
 // Gallery names may carry an owner: "owner/gallery". Each part is IRI_SAFE.
-const GALLERY_SAFE = /[^\w@.\-/]/g;
+// "~" begins the name of a saved source (Tools → ImageSnippets → Sources).
+const GALLERY_SAFE = /[^\w@.\-/~]/g;
 
 const HEADING_ICONS = [
 	headingLevel1,
@@ -348,7 +349,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 					g.count,
 					'image-snippets-gallery'
 				),
-				g.value,
+				g.label ?? g.value,
 				g.count
 			),
 		} ) );

@@ -266,7 +266,21 @@ function isgal_rest_galleries( WP_REST_Request $request ) {
 		);
 	}
 
-	return rest_ensure_response( array( 'galleries' => $list ) );
+	// Saved sources first: there are few of them, and somebody here wrote them.
+	// They live on the site's default endpoint, so a block overriding it is not offered them.
+	$sources = array();
+	if ( isgal_default_endpoint() === $endpoint ) {
+		foreach ( isgal_list_sources() as $source ) {
+			$sources[] = array(
+				'value' => $source['name'],
+				/* translators: %s: the name of a saved source */
+				'label' => sprintf( __( '%s (saved source)', 'image-snippets-gallery' ), $source['label'] ),
+				'count' => $source['images'],
+			);
+		}
+	}
+
+	return rest_ensure_response( array( 'galleries' => array_merge( $sources, $list ) ) );
 }
 
 /**

@@ -117,6 +117,11 @@ add_action( 'init', 'isgal_register_mirror_types', 5 );
  */
 function isgal_gallery_term_slug( $endpoint, $gallery ) {
 	$slug = sanitize_title( $gallery );
+	// A saved source's "~" does not survive sanitize_title(); without this
+	// "~ospreys" and a dataset called "ospreys" would be one term.
+	if ( '' !== $slug && isgal_is_source_name( $gallery ) ) {
+		$slug = 'isgal-source-' . $slug;
+	}
 	if ( '' === $slug ) {
 		$slug = 'gallery-' . substr( md5( $gallery ), 0, 8 );
 	}
@@ -473,7 +478,15 @@ function isgal_iri_is_clean( $iri ) {
  * @return array|WP_Error  Rows, or WP_Error.
  */
 function isgal_sync_fetch_gallery( $endpoint, $gallery, $timeout = 20 ) {
-	$listing = isgal_sparql_json( $endpoint, isgal_build_sparql_list( isgal_source_fragment( $endpoint, $gallery ) ), $timeout );
+	$cap = 0;
+	if ( isgal_is_source_name( $gallery ) ) {
+		$source = isgal_gallery_source( $endpoint, $gallery );
+		if ( 'dataset' === $source['kind'] ) {
+			return new WP_Error( 'isgal_source_missing', __( 'This gallery is a saved source that no longer exists.', 'image-snippets-gallery' ) );
+		}
+		$cap = isgal_source_cap();
+	}
+	$listing = isgal_sparql_json( $endpoint, isgal_build_sparql_list( isgal_source_fragment( $endpoint, $gallery ), $cap ), $timeout );
 	if ( is_wp_error( $listing ) ) {
 		return $listing;
 	}

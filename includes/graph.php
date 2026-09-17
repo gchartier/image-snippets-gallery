@@ -238,7 +238,11 @@ function isgal_sparql_prefixes() {
 		. "PREFIX dcterms: <http://purl.org/dc/terms/>\n"
 		. "PREFIX lio: <https://w3id.org/lio/v1#>\n"
 		. "PREFIX schema: <http://schema.org/>\n"
-		. "PREFIX photoshop: <http://ns.adobe.com/photoshop/1.0/>\n";
+		. "PREFIX photoshop: <http://ns.adobe.com/photoshop/1.0/>\n"
+		. "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n"
+		. "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
+		. "PREFIX dbr: <http://dbpedia.org/resource/>\n"
+		. "PREFIX wd: <http://www.wikidata.org/entity/>\n";
 }
 
 /**
@@ -316,7 +320,8 @@ function isgal_build_sparql_datasets() {
  * so the queries built from it, and everything after the sync, cannot tell the
  * two apart.
  *
- * Only 'dataset' exists so far. Other kinds register through the filter.
+ * Kinds: 'dataset' (the default), 'sparql' (a saved source, sources.php).
+ * Any other kind answers through the filter.
  *
  * @param string $endpoint SPARQL endpoint URL.
  * @param string $gallery  Gallery name.
@@ -335,7 +340,13 @@ function isgal_source_fragment( $endpoint, $gallery ) {
 	 * @param string $gallery  Gallery name.
 	 * @param string $endpoint SPARQL endpoint URL.
 	 */
-	$fragment = 'dataset' === $source['kind'] ? '' : (string) apply_filters( 'isgal_source_fragment', '', $source, $gallery, $endpoint );
+	$fragment = '';
+	if ( 'sparql' === $source['kind'] ) {
+		// Checked again on the way out: what is stored is not trusted more than what is typed.
+		$fragment = isset( $source['where'] ) && true === isgal_validate_source_pattern( $source['where'] ) ? trim( (string) $source['where'] ) : '';
+	} elseif ( 'dataset' !== $source['kind'] ) {
+		$fragment = (string) apply_filters( 'isgal_source_fragment', '', $source, $gallery, $endpoint );
+	}
 
 	return '' !== trim( $fragment ) ? $fragment : isgal_sparql_membership( $gallery );
 }
@@ -365,13 +376,14 @@ function isgal_gallery_source( $endpoint, $gallery ) {
  * thumbnail condition, the ceiling — is always the plugin's.
  *
  * @param string $member SPARQL fragment binding ?image (isgal_source_fragment()).
+ * @param int    $cap    Ceiling on images listed; 0 for the gallery default.
  * @return string
  */
-function isgal_build_sparql_list( $member ) {
-	$cap = max( 1, (int) apply_filters( 'isgal_sync_max_images', ISGAL_SYNC_MAX_IMAGES ) );
+function isgal_build_sparql_list( $member, $cap = 0 ) {
+	$cap = $cap > 0 ? (int) $cap : max( 1, (int) apply_filters( 'isgal_sync_max_images', ISGAL_SYNC_MAX_IMAGES ) );
 
 	return isgal_sparql_prefixes()
-		. "SELECT ?page ?image (SAMPLE(?d) AS ?date_) (SAMPLE(?t) AS ?title_) WHERE {\n"
+		. "SELECT ?page ?image (SAMPLE(?d) AS ?date_) (SAMPLE(?t) AS ?title_) (SAMPLE(?thumb) AS ?thumb_) WHERE {\n"
 		. "  GRAPH ?page {\n"
 		. "    {$member}\n"
 		. "    ?image schema:thumbnail ?thumb.\n"

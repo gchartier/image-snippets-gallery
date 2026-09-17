@@ -87,6 +87,78 @@ class ISGAL_CLI_Command {
 	}
 
 	/**
+	 * Saved sources: galleries made of a query instead of a dataset.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <verb>
+	 * : list, add, test or rm.
+	 *
+	 * [<name>]
+	 * : For add, the label ("Ospreys"). For rm, the gallery name ("~ospreys").
+	 *
+	 * [--where=<pattern>]
+	 * : For add and test, the SPARQL pattern binding ?image.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp isgal source list
+	 *     wp isgal source test --where='?image lio:depicts dbr:Osprey.'
+	 *     wp isgal source add Ospreys --where='?image lio:depicts dbr:Osprey.'
+	 *     wp isgal source rm '~ospreys'
+	 *
+	 * @param array $args       Positional args.
+	 * @param array $assoc_args Flags.
+	 */
+	public function source( $args, $assoc_args ) {
+		$verb  = isset( $args[0] ) ? $args[0] : 'list';
+		$where = isset( $assoc_args['where'] ) ? (string) $assoc_args['where'] : '';
+
+		if ( 'list' === $verb ) {
+			$rows = array();
+			foreach ( isgal_list_sources() as $source ) {
+				$rows[] = array(
+					'name'   => $source['name'],
+					'label'  => $source['label'],
+					'images' => $source['images'],
+					'where'  => $source['where'],
+				);
+			}
+			WP_CLI\Utils\format_items( 'table', $rows, array( 'name', 'label', 'images', 'where' ) );
+			return;
+		}
+
+		if ( 'test' === $verb ) {
+			$result = isgal_test_source( $where );
+			if ( is_wp_error( $result ) ) {
+				WP_CLI::error( $result->get_error_message() );
+			}
+			WP_CLI::success( sprintf( '%d images in %ss%s', $result['count'], $result['seconds'], $result['capped'] ? ' (at the ceiling)' : '' ) );
+			return;
+		}
+
+		if ( 'add' === $verb ) {
+			$name = isgal_save_source( isset( $args[1] ) ? $args[1] : '', $where );
+			if ( is_wp_error( $name ) ) {
+				WP_CLI::error( $name->get_error_message() );
+			}
+			WP_CLI::log( sprintf( 'Saved as %s', $name ) );
+			$this->report( $name, isgal_refresh_gallery( isgal_default_endpoint(), $name ) );
+			return;
+		}
+
+		if ( 'rm' === $verb ) {
+			if ( ! isgal_delete_source( isset( $args[1] ) ? $args[1] : '' ) ) {
+				WP_CLI::error( 'No such source.' );
+			}
+			WP_CLI::success( 'Deleted.' );
+			return;
+		}
+
+		WP_CLI::error( 'Unknown verb. Use list, add, test or rm.' );
+	}
+
+	/**
 	 * Show what the mirror holds and when each gallery last synced.
 	 *
 	 * ## OPTIONS

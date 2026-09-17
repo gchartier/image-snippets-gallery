@@ -66,7 +66,9 @@ function isgal_handle_admin_actions() {
 	}
 
 	$action = sanitize_key( wp_unslash( $_POST['isgal_action'] ) );
-	check_admin_referer( 'isgal_admin_' . $action );
+	// The source form has two buttons, so it carries a nonce for each under its own field.
+	$nonce_field = in_array( $action, array( 'test_source', 'save_source' ), true ) ? '_wpnonce_' . substr( $action, 0, 4 ) : '_wpnonce';
+	check_admin_referer( 'isgal_admin_' . $action, $nonce_field );
 
 	if ( 'refresh_all' === $action ) {
 		$results = isgal_refresh_all_galleries();
@@ -166,6 +168,49 @@ function isgal_handle_admin_actions() {
 			),
 			'success'
 		);
+	}
+
+	if ( in_array( $action, array( 'save_source', 'test_source', 'delete_source' ), true ) ) {
+		if ( ! current_user_can( isgal_sources_cap() ) ) {
+			return;
+		}
+		$name = isset( $_POST['isgal_source_name'] ) ? sanitize_text_field( wp_unslash( $_POST['isgal_source_name'] ) ) : '';
+
+		if ( 'delete_source' === $action ) {
+			if ( isgal_delete_source( $name ) ) {
+				add_settings_error( 'isgal', 'isgal_source', __( 'Source deleted, with the images stored for it. A block still showing it will say it no longer exists.', 'image-snippets-gallery' ), 'success' );
+			}
+			return;
+		}
+
+		$label = isset( $_POST['isgal_source_label'] ) ? sanitize_text_field( wp_unslash( $_POST['isgal_source_label'] ) ) : '';
+		// A query, not prose: kept as typed (checked by isgal_validate_source_pattern(), escaped wherever it is shown).
+		$where = isset( $_POST['isgal_source_where'] ) ? trim( (string) wp_unslash( $_POST['isgal_source_where'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+
+		// Either way the form comes back as it was left.
+		$GLOBALS['isgal_source_form'] = array(
+			'name'  => $name,
+			'label' => $label,
+			'where' => $where,
+		);
+
+		if ( 'test_source' === $action ) {
+			$GLOBALS['isgal_source_form']['test'] = isgal_test_source( $where );
+			return;
+		}
+
+		$saved = isgal_save_source( $label, $where, $name );
+		if ( is_wp_error( $saved ) ) {
+			add_settings_error( 'isgal', 'isgal_source', $saved->get_error_message(), 'error' );
+			return;
+		}
+		$result = isgal_refresh_gallery( isgal_default_endpoint(), $saved );
+		unset( $GLOBALS['isgal_source_form'] );
+		if ( is_wp_error( $result ) ) {
+			add_settings_error( 'isgal', 'isgal_source', sprintf( /* translators: 1: source label, 2: error message */ __( 'Saved %1$s, but it could not be fetched: %2$s', 'image-snippets-gallery' ), $label, $result->get_error_message() ), 'warning' );
+		} else {
+			add_settings_error( 'isgal', 'isgal_source', sprintf( /* translators: 1: source label, 2: number of images, 3: the name to choose in a block */ __( 'Saved %1$s: %2$d images. Choose it in a gallery block as %3$s.', 'image-snippets-gallery' ), $label, $result['images'], $saved ), 'success' );
+		}
 	}
 
 	if ( 'save_defaults' === $action ) {
@@ -456,6 +501,8 @@ function isgal_render_admin_page() {
 			</table>
 		<?php endif; ?>
 
+		<?php isgal_render_sources_section(); ?>
+
 		<?php if ( current_user_can( 'manage_options' ) ) : ?>
 		<h2><?php esc_html_e( 'Defaults', 'image-snippets-gallery' ); ?></h2>
 		<p><?php esc_html_e( 'Every gallery block uses these unless it sets its own values under Advanced in the block settings.', 'image-snippets-gallery' ); ?></p>
@@ -512,6 +559,140 @@ function isgal_render_admin_page() {
 			</p>
 		<?php endif; ?>
 	</div>
+	<?php
+}
+
+/**
+ * The Sources section of the Tools screen: saved sources, and the form that
+ * writes one. Shown to people who may write them.
+ *
+ * @return void
+ */
+function isgal_render_sources_section() {
+	if ( ! current_user_can( isgal_sources_cap() ) ) {
+		return;
+	}
+
+	$sources = isgal_list_sources();
+	$form    = isset( $GLOBALS['isgal_source_form'] ) && is_array( $GLOBALS['isgal_source_form'] ) ? $GLOBALS['isgal_source_form'] : array();
+	if ( ! $form && isset( $_GET['isgal_source'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only: which source to show in the form.
+		$editing = isgal_get_source( sanitize_text_field( wp_unslash( $_GET['isgal_source'] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( $editing ) {
+			$form = array(
+				'name'  => $editing['name'],
+				'label' => $editing['label'],
+				'where' => $editing['where'],
+			);
+		}
+	}
+	$form = wp_parse_args(
+		$form,
+		array(
+			'name'  => '',
+			'label' => '',
+			'where' => '',
+			'test'  => null,
+		)
+	);
+	$page = admin_url( 'tools.php?page=isgal-galleries' );
+	?>
+	<h2 id="isgal-sources"><?php esc_html_e( 'Sources', 'image-snippets-gallery' ); ?></h2>
+	<p><?php esc_html_e( 'A gallery is usually one ImageSnippets dataset. A source is a gallery made of a query instead: every image that depicts an osprey, say, whoever published it. Save one here and it can be chosen in a gallery block like any other gallery.', 'image-snippets-gallery' ); ?></p>
+
+	<?php if ( $sources ) : ?>
+		<table class="widefat striped" style="max-width:60em;">
+			<thead>
+				<tr>
+					<th><?php esc_html_e( 'Source', 'image-snippets-gallery' ); ?></th>
+					<th><?php esc_html_e( 'In a block', 'image-snippets-gallery' ); ?></th>
+					<th><?php esc_html_e( 'Images stored', 'image-snippets-gallery' ); ?></th>
+					<th><?php esc_html_e( 'Last fetched', 'image-snippets-gallery' ); ?></th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody>
+			<?php foreach ( $sources as $source ) : ?>
+				<tr>
+					<td><strong><?php echo esc_html( $source['label'] ); ?></strong></td>
+					<td><code><?php echo esc_html( $source['name'] ); ?></code></td>
+					<td><?php echo esc_html( (string) $source['images'] ); ?></td>
+					<td><?php echo $source['synced'] ? esc_html( sprintf( /* translators: %s: human time difference */ __( '%s ago', 'image-snippets-gallery' ), human_time_diff( $source['synced'] ) ) ) : esc_html__( 'Not yet', 'image-snippets-gallery' ); ?></td>
+					<td>
+						<a class="button" href="<?php echo esc_url( add_query_arg( 'isgal_source', rawurlencode( $source['name'] ), $page ) . '#isgal-sources' ); ?>"><?php esc_html_e( 'Edit', 'image-snippets-gallery' ); ?></a>
+						<?php isgal_action_button( 'sync_one', __( 'Refresh', 'image-snippets-gallery' ), 'button', array( 'isgal_gallery' => $source['name'] ) ); ?>
+						<?php isgal_action_button( 'delete_source', __( 'Delete', 'image-snippets-gallery' ), 'button button-link-delete', array( 'isgal_source_name' => $source['name'] ) ); ?>
+					</td>
+				</tr>
+			<?php endforeach; ?>
+			</tbody>
+		</table>
+	<?php endif; ?>
+
+	<h3><?php echo '' !== $form['name'] ? esc_html( sprintf( /* translators: %s: source label */ __( 'Edit %s', 'image-snippets-gallery' ), $form['label'] ) ) : esc_html__( 'New source', 'image-snippets-gallery' ); ?></h3>
+	<form method="post" action="<?php echo esc_url( $page . '#isgal-sources' ); ?>" style="max-width:60em;">
+		<input type="hidden" name="isgal_source_name" value="<?php echo esc_attr( $form['name'] ); ?>">
+		<p>
+			<label for="isgal-source-label"><strong><?php esc_html_e( 'Name', 'image-snippets-gallery' ); ?></strong></label><br>
+			<input type="text" id="isgal-source-label" name="isgal_source_label" class="regular-text" value="<?php echo esc_attr( $form['label'] ); ?>" placeholder="<?php esc_attr_e( 'Ospreys', 'image-snippets-gallery' ); ?>">
+		</p>
+		<p>
+			<label for="isgal-source-where"><strong><?php esc_html_e( 'Which images belong', 'image-snippets-gallery' ); ?></strong></label><br>
+			<textarea id="isgal-source-where" name="isgal_source_where" rows="6" class="large-text code" spellcheck="false" placeholder="?image lio:depicts dbr:Osprey."><?php echo esc_textarea( $form['where'] ); ?></textarea>
+			<span class="description">
+				<?php
+				echo wp_kses(
+					sprintf(
+						/* translators: 1: ?image, 2: list of prefixes, 3: the ceiling on images */
+						__( 'A SPARQL pattern that uses %1$s for the images it chooses, matched inside each image&#8217;s own graph. Only the pattern: the plugin writes the rest of the query and fetches at most %3$d images. Prefixes available: %2$s. Anything else as a full IRI in angle brackets.', 'image-snippets-gallery' ),
+						'<code>?image</code>',
+						'<code>lio: schema: dc: dcterms: photoshop: rdf: rdfs: dbr: wd:</code>',
+						isgal_source_cap()
+					),
+					array( 'code' => array() )
+				);
+				?>
+			</span>
+		</p>
+		<p>
+			<?php // One form, two buttons, one nonce each: the action is whichever was pressed. ?>
+			<?php wp_nonce_field( 'isgal_admin_test_source', '_wpnonce_test', false ); ?>
+			<?php wp_nonce_field( 'isgal_admin_save_source', '_wpnonce_save', false ); ?>
+			<button type="submit" name="isgal_action" value="test_source" class="button"><?php esc_html_e( 'Test', 'image-snippets-gallery' ); ?></button>
+			<button type="submit" name="isgal_action" value="save_source" class="button button-primary"><?php esc_html_e( 'Save and fetch', 'image-snippets-gallery' ); ?></button>
+			<?php if ( '' !== $form['name'] ) : ?>
+				<a href="<?php echo esc_url( $page . '#isgal-sources' ); ?>"><?php esc_html_e( 'Cancel', 'image-snippets-gallery' ); ?></a>
+			<?php endif; ?>
+		</p>
+	</form>
+
+	<?php if ( is_wp_error( $form['test'] ) ) : ?>
+		<div class="notice notice-error inline"><p><?php echo esc_html( $form['test']->get_error_message() ); ?></p></div>
+	<?php elseif ( is_array( $form['test'] ) ) : ?>
+		<div class="notice <?php echo $form['test']['count'] ? 'notice-success' : 'notice-warning'; ?> inline">
+			<p>
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: 1: number of images, 2: seconds */
+						_n( '%1$d image, in %2$s seconds.', '%1$d images, in %2$s seconds.', $form['test']['count'], 'image-snippets-gallery' ),
+						$form['test']['count'],
+						number_format_i18n( $form['test']['seconds'], 2 )
+					)
+				);
+				if ( $form['test']['capped'] ) {
+					echo ' ' . esc_html__( 'That is the ceiling: there may be more, and which ones are fetched is up to ImageSnippets. A narrower pattern gives a steadier gallery.', 'image-snippets-gallery' );
+				}
+				?>
+			</p>
+			<?php if ( $form['test']['thumbs'] ) : ?>
+				<p>
+					<?php foreach ( $form['test']['thumbs'] as $thumb ) : ?>
+						<img src="<?php echo esc_url( $thumb ); ?>" alt="" loading="lazy" style="height:64px;width:auto;margin:0 4px 4px 0;vertical-align:top;">
+					<?php endforeach; ?>
+				</p>
+			<?php endif; ?>
+		</div>
+	<?php endif; ?>
 	<?php
 }
 

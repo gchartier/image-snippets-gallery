@@ -43,6 +43,7 @@ require_once __DIR__ . '/includes/cache-purge.php';
 require_once __DIR__ . '/includes/index.php';
 require_once __DIR__ . '/includes/graph.php';
 require_once __DIR__ . '/includes/mirror.php';
+require_once __DIR__ . '/includes/sources.php';
 require_once __DIR__ . '/includes/query.php';
 require_once __DIR__ . '/includes/search.php';
 require_once __DIR__ . '/includes/opengraph.php';
