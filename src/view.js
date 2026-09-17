@@ -299,6 +299,12 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 				return;
 			}
 			getContext().flipped = false;
+			// The back is about to be hidden; hand focus to the button rather
+			// than let it drop out of the dialog.
+			event.currentTarget
+				.closest( 'dialog' )
+				?.querySelector( '.isgal-lightbox__flip' )
+				?.focus( { preventScroll: true } );
 		},
 		// The lightbox image finished (or failed): drop the spinner, and fetch
 		// the neighbours while the visitor looks at this one.
@@ -386,12 +392,24 @@ const { state, actions } = store( 'imagesnippets/gallery', {
 			writeUrl( ctx.active );
 			settleSlide( ctx );
 		},
+		// Heard on the document, not the dialog: focus does not always stay
+		// inside it (the element holding it can turn away or be hidden, and
+		// focus falls back to the page), and the arrows must work regardless.
 		keydown( event ) {
+			const ctx = getContext();
+			if (
+				! ctx.open ||
+				event.altKey ||
+				event.ctrlKey ||
+				event.metaKey
+			) {
+				return;
+			}
 			if ( 'ArrowRight' === event.key ) {
 				actions.next();
 			} else if ( 'ArrowLeft' === event.key ) {
 				actions.prev();
-			} else if ( 'f' === event.key && getContext().canFlip ) {
+			} else if ( 'f' === event.key && ctx.canFlip ) {
 				actions.flip();
 			}
 		},

@@ -263,6 +263,7 @@ NOFLIP="$(wp eval 'echo isgal_render_gallery( array( "gallery" => "mmgallery01",
 assert "the flip can be turned off, and then costs nothing" "0" "$(grep -c 'isgal-backs\|isgal-flip__back' <<<"$NOFLIP")"
 assert "the lightbox says where the metadata is hosted, with ImageSnippets a link to the image's page" "1" "$(tr -d '\n\t' <<<"$LBHTML" | grep -c 'Image metadata is hosted at <a data-wp-bind--href="state.current.page"[^>]*>ImageSnippets</a>')"
 assert "the back turns over again on a click" "1" "$(grep -c 'isgal-flip__back"[^>]*data-wp-on--click="actions.flipBack"' <<<"$LBHTML")"
+assert "lightbox keys are heard on the document, so they work wherever focus is" "1" "$(grep -c 'data-wp-on-document--keydown="actions.keydown"' <<<"$LBHTML")"
 assert "one dialog per gallery" "1" "$(grep -c '<dialog class="isgal-lightbox"' <<<"$LBHTML")"
 assert "links still point at ImageSnippets for crawlers" "6" "$(grep -o '<a href="https://imagesnippets.com/[^"]*"[^>]*data-wp-on--click="actions.open"' <<<"$LBHTML" | wc -l)"
 assert "the view module is enqueued on the page" "1" "$(fetch | grep -c 'build/view.js')"

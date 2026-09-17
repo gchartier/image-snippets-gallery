@@ -444,6 +444,17 @@
 
 		overscroll-behavior: contain;
 
+		// A click on the image lands focus on the dialog itself, and themes
+		// that outline everything focused (Twenty Twenty-Five does) then draw
+		// a ring round the whole lightbox. Focus on the dialog says nothing.
+		&:focus {
+			outline: none;
+		}
+
+		.isgal-flip__data:focus:not( :focus-visible ) {
+			outline: none;
+		}
+
 		&::backdrop {
 			background: rgba( 0, 0, 0, 0.92 );
 		}

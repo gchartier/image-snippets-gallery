@@ -1067,7 +1067,7 @@ function isgal_lightbox_item( array $row, array $a, $title, $alt, $source ) {
 function isgal_lightbox_html( $flip = false ) {
 	ob_start();
 	?>
-	<dialog class="isgal-lightbox" data-wp-watch="callbacks.syncDialog" data-wp-class--is-flipped="context.flipped" data-wp-class--is-loading="context.loading" data-wp-on--close="actions.close" data-wp-on--click="actions.backdrop" data-wp-on--keydown="actions.keydown" data-wp-on--touchstart="actions.touchStart" data-wp-on--touchend="actions.touchEnd" aria-label="<?php esc_attr_e( 'Image viewer', 'image-snippets-gallery' ); ?>">
+	<dialog class="isgal-lightbox" data-wp-watch="callbacks.syncDialog" data-wp-class--is-flipped="context.flipped" data-wp-class--is-loading="context.loading" data-wp-on--close="actions.close" data-wp-on--click="actions.backdrop" data-wp-on-document--keydown="actions.keydown" data-wp-on--touchstart="actions.touchStart" data-wp-on--touchend="actions.touchEnd" aria-label="<?php esc_attr_e( 'Image viewer', 'image-snippets-gallery' ); ?>">
 		<div class="isgal-lightbox__frame">
 			<button type="button" class="isgal-lightbox__close" data-wp-on--click="actions.close" aria-label="<?php esc_attr_e( 'Close', 'image-snippets-gallery' ); ?>">&#x2715;</button>
 			<button type="button" class="isgal-lightbox__nav isgal-lightbox__prev" data-wp-on--click="actions.prev" data-wp-bind--hidden="!state.hasMany" aria-label="<?php esc_attr_e( 'Previous image', 'image-snippets-gallery' ); ?>">&#x2039;</button>

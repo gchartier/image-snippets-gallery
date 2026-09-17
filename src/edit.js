@@ -549,10 +549,7 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 								value: 'manual-asc',
 							},
 							{
-								label: __(
-									'Random',
-									'image-snippets-gallery'
-								),
+								label: __( 'Random', 'image-snippets-gallery' ),
 								value: 'random-asc',
 							},
 						] }
